@@ -99,6 +99,15 @@ module.exports = React.createClass({
             postClass += " post-comment";
         }
 
+        var loading;
+        if (post.did_fail) {
+            postClass += " post-fail";
+            loading = <a className="post-retry pull-right" href="#" onClick={this.props.retryPost}>Retry</a>;
+        } else if (post.is_loading) {
+            postClass += " post-waiting";
+            loading = <img className="post-loading-gif pull-right" src="/static/images/load.gif"/>;
+        }
+
         var postFiles = [];
         var images = [];
         if (filenames) {
@@ -143,7 +152,7 @@ module.exports = React.createClass({
         return (
             <div className="post-body">
                 { comment }
-                <p key={post.id+"_message"} className={postClass}><span>{inner}</span></p>
+                <p key={post.id+"_message"} className={postClass}>{loading}<span>{inner}</span></p>
                 { filenames && filenames.length > 0 ?
                     <div className="post-image__columns">
                         { postFiles }

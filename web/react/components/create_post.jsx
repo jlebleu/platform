@@ -67,11 +67,16 @@ module.exports = React.createClass({
         } else {
             post.channel_id = this.state.channel_id;
             post.filenames = this.state.previews;
+            var time = utils.getTimestamp();
+            post.pending_post_id = user_id + ":"+ time;
+            post.root_id = "";
+            post.user_id = user_id;
+            post.create_at = time;
 
-            client.createPost(post, ChannelStore.getCurrent(),
+            var channel = ChannelStore.getCurrent();
+
+            client.createPost(post, channel,
                 function(data) {
-                    PostStore.storeDraft(data.channel_id, data.user_id, null);
-                    this.setState({ messageText: '', submitting: false, post_error: null, previews: [], server_error: null, limit_error: null });
                     this.resizePostHolder();
                     AsyncClient.getPosts(true);
 
@@ -80,15 +85,22 @@ module.exports = React.createClass({
                     member.msg_count = channel.total_msg_count;
                     member.last_viewed_at = (new Date).getTime();
                     ChannelStore.setChannelMember(member);
-
                 }.bind(this),
                 function(err) {
                     var state = {}
-                    state.server_error = err.message;
+                    //state.server_error = err.message;
                     state.submitting = false;
                     this.setState(state);
+
+                    post.did_fail = true;
+                    PostStore.updatePendingPost(post);
                 }.bind(this)
             );
+
+            post.is_loading = true;
+            PostStore.storePendingPost(post);
+            PostStore.storeDraft(channel.id, user_id, null);
+            this.setState({ messageText: '', submitting: false, post_error: null, previews: [], server_error: null, limit_error: null });
         }
 
         $(".post-list-holder-by-time").perfectScrollbar('update');

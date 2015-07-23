@@ -299,6 +299,8 @@ module.exports.getPosts = function(force, id) {
                         post_list: data
                     });
 
+                    PostStore.removeNonFailedPendingPosts(channelId);
+
                     module.exports.getProfiles();
                 },
                 function(err) {

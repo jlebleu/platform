@@ -101,8 +101,78 @@ var PostStore = assign({}, EventEmitter.prototype, {
     else
       return null;
   },
-  storePosts: function(channelId, posts) {
-    this._storePosts(channelId, posts);
+  storePendingPost: function(post) {
+    var post_list = this.getPendingPosts(post.channel_id);
+    if (!post_list) {
+      post_list = {posts: {}, order: []};
+    }
+
+    post_list.posts[post.pending_post_id] = post;
+    post_list.order.unshift(post.pending_post_id);
+    this._storePendingPosts(post.channel_id, post_list);
+    this.emitChange();
+  },
+  _storePendingPosts: function(channelId, posts) {
+    BrowserStore.setItem("pending_posts_" + channelId, posts);
+  },
+  getPendingPosts: function(channelId) {
+    return BrowserStore.getItem("pending_posts_" + channelId);
+  },
+  removePendingPost: function(channelId, pending_post_id) {
+    this._removePendingPost(channelId, pending_post_id);
+    this.emitChange();
+  },
+  _removePendingPost: function(channelId, pending_post_id) {
+    var post_list = this.getPendingPosts(channelId);
+    if (!post_list) return;
+
+    if (pending_post_id in post_list.posts) delete post_list.posts[pending_post_id];
+    var index = post_list.order.indexOf(pending_post_id);
+    if (index >= 0) post_list.order.splice(index, 1);
+
+    this._storePendingPosts(channelId, post_list);
+  },
+  clearPendingPosts: function(channelId) {
+    BrowserStore.removeItem("pending_posts_" + channelId)
+  },
+  removeNonFailedPendingPosts: function(channelId) {
+    var post_list = this.getPendingPosts(channelId);
+    if (!post_list) return;
+
+    var posts = post_list.posts;
+
+    for (var id in posts) {
+        if (!posts[id].did_fail) this._removePendingPost(channelId, id);
+    }
+  },
+  updatePendingPost: function(post) {
+    var post_list = this.getPendingPosts(post.channel_id);
+    if (!post_list) {
+      post_list = {posts: {}, order: []};
+    }
+
+    if (post_list.order.indexOf(post.pending_post_id) === -1) return;
+
+    post_list.posts[post.pending_post_id] = post;
+    this._storePendingPosts(post.channel_id, post_list);
+    this.emitChange();
+  },
+  storePosts: function(channelId, new_list) {
+    var old_list = this.getPosts(channelId);
+
+    if (old_list) {
+        for (var i = 0; i < old_list.order.length; i++) {
+            var p = old_list.posts[old_list.order[i]];
+            if (p.did_fail) {
+                new_list.posts[p.pending_post_id] = p;
+                if (new_list.order.indexOf(p.pending_post_id) === -1) {
+                    new_list.order.push(p.pending_post_id);
+                }
+            }
+        }
+    }
+
+    this._storePosts(channelId, new_list);
     this.emitChange();
   },
   _storePosts: function(channelId, posts) {
@@ -165,8 +235,7 @@ PostStore.dispatchToken = AppDispatcher.register(function(payload) {
 
   switch(action.type) {
     case ActionTypes.RECIEVED_POSTS:
-      PostStore._storePosts(action.id, action.post_list);
-      PostStore.emitChange();
+      PostStore.storePosts(action.id, action.post_list);
       break;
     case ActionTypes.RECIEVED_SEARCH:
       PostStore.storeSearchResults(action.results, action.is_mention_search);
