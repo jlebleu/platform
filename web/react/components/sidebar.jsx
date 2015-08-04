@@ -50,6 +50,7 @@ function getStateFromStores() {
             channel.teammate_username = teammate.username;
 
             channel.status = UserStore.getStatus(teammate.id);
+            channel.phoneStatus = UserStore.getPhoneStatus(teammate.id);
 
             var channelMember = members[channel.id];
             var msg_count = channel.total_msg_count - channelMember.msg_count;
@@ -112,6 +113,7 @@ module.exports = React.createClass({
         ChannelStore.addChangeListener(this._onChange);
         UserStore.addChangeListener(this._onChange);
         UserStore.addStatusesChangeListener(this._onChange);
+        UserStore.addPhoneStatusesChangeListener(this._onChange);
         SocketStore.addChangeListener(this._onSocketChange);
         $(".nav-pills__container").perfectScrollbar();
 
@@ -124,6 +126,7 @@ module.exports = React.createClass({
         ChannelStore.removeChangeListener(this._onChange);
         UserStore.removeChangeListener(this._onChange);
         UserStore.removeStatusesChangeListener(this._onChange);
+        UserStore.removePhoneStatusesChangeListener(this._onChange);
         SocketStore.removeChangeListener(this._onSocketChange);
     },
     _onChange: function() {
@@ -262,7 +265,6 @@ module.exports = React.createClass({
             if (channel.type != 'P') {
                 return "";
             }
-
             var channelMember = members[channel.id];
             var active = channel.id === self.state.active_id ? "active" : "";
 
@@ -296,6 +298,15 @@ module.exports = React.createClass({
             } else {
                 statusIcon = Constants.OFFLINE_ICON_SVG;
             }
+            console.log('------------' + channel.phoneStatus);
+            var phoneStatusIcon = Constants.PHONE_OFFLINE_SVG;
+            if (channel.phoneStatus === "0") {
+            	phoneStatusIcon = Constants.PHONE_AVAIL_SVG;
+            } else if (channel.phoneStatus === "8") {
+            	phoneStatusIcon = Constants.PHONE_RINGING_SVG;
+            } else if (channel.phoneStatus === "1") {
+            	phoneStatusIcon = Constants.PHONE_BUSY_SVG;
+            }
 
             if (!channel.fake) {
                 var active = channel.id === self.state.active_id ? "active" : "";
@@ -307,7 +318,7 @@ module.exports = React.createClass({
                 }
 
                 return (
-                    <li key={channel.name} className={active}><a className={"sidebar-channel " + titleClass} href="#" onClick={function(e){e.preventDefault(); utils.switchChannel(channel, channel.teammate_username);}}><span className="status" dangerouslySetInnerHTML={{__html: statusIcon}} /> {badge}{channel.display_name}</a></li>
+                    <li key={channel.name} className={active}><a className={"sidebar-channel " + titleClass} href="#" onClick={function(e){e.preventDefault(); utils.switchChannel(channel, channel.teammate_username);}}><span className="status" dangerouslySetInnerHTML={{__html: statusIcon}} /><span className="phonestatus" dangerouslySetInnerHTML={{__html: phoneStatusIcon}} /> {badge}{channel.display_name}</a></li>
                 );
             } else {
                 return (

@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+    "encoding/json"
 )
 
 func InitUser(r *mux.Router) {
@@ -46,6 +47,8 @@ func InitUser(r *mux.Router) {
 	sr.Handle("/revoke_session", ApiUserRequired(revokeSession)).Methods("POST")
 
 	sr.Handle("/newimage", ApiUserRequired(uploadProfileImage)).Methods("POST")
+	l4g.Debug("Initializing user api updatePhonestatus")
+	sr.Handle("/{teamname:[A-Za-z0-9]+}/update_phone_status", ApiAppHandler(updatePhoneStatus)).Methods("POST")
 
 	sr.Handle("/me", ApiAppHandler(getMe)).Methods("GET")
 	sr.Handle("/status", ApiUserRequiredActivity(getStatuses, false)).Methods("GET")
@@ -56,6 +59,59 @@ func InitUser(r *mux.Router) {
 	sr.Handle("/{id:[A-Za-z0-9]+}/image", ApiUserRequired(getProfileImage)).Methods("GET")
 }
 
+type PhoneState struct {
+	Username         string    `json:"username"`
+	Status           int       `json:"status"`
+}
+
+func PhoneStateFromJson(data io.Reader) *PhoneState {
+	decoder := json.NewDecoder(data)
+	var phoneState PhoneState
+	err := decoder.Decode(&phoneState)
+	if err == nil {
+		return &phoneState
+	} else {
+		return nil
+	}
+}
+
+func updatePhoneStatus(c *Context, w http.ResponseWriter, r *http.Request) {
+	var team *model.Team
+	params := mux.Vars(r)
+	teamName := params["teamname"]
+	
+	l4g.Debug("updatePhonestatus team %v",teamName)
+	
+	if result := <-Srv.Store.Team().GetByName(teamName); result.Err != nil {
+		c.Err = result.Err
+		l4g.Error("udpate phone status : team %v not found",teamName)
+		return
+	} else {
+		team = result.Data.(*model.Team)
+	}
+
+	phoneState := PhoneStateFromJson(r.Body)
+
+	l4g.Debug("updatePhonestatus phone state %v",phoneState.Username)
+	
+	username := phoneState.Username
+	status := strconv.Itoa(phoneState.Status)
+	
+	l4g.Debug("username=%v",username)
+	l4g.Debug("status=%v",status)
+	
+	if result := <-Srv.Store.User().GetByUsername(team.Id,username); result.Err != nil {
+		c.Err = result.Err
+		return
+	} else {
+		user := result.Data.(*model.User)
+		l4g.Debug("found : %v",user)
+		message := model.NewMessage(team.Id, "", user.Id, model.ACTION_USER_PHONE_STATUS)
+		message.Add("status",status)
+		PublishAndForget(message)
+	}	
+	
+}
 func createUser(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	user := model.UserFromJson(r.Body)

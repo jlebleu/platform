@@ -15,6 +15,7 @@ var CHANGE_EVENT_SESSIONS = 'change_sessions';
 var CHANGE_EVENT_AUDITS = 'change_audits';
 var CHANGE_EVENT_TEAMS = 'change_teams';
 var CHANGE_EVENT_STATUSES = 'change_statuses';
+var CHANGE_EVENT_PHONE_STATUSES = 'change_phone_statuses';
 
 var UserStore = assign({}, EventEmitter.prototype, {
 
@@ -64,6 +65,16 @@ var UserStore = assign({}, EventEmitter.prototype, {
   },
   removeStatusesChangeListener: function(callback) {
     this.removeListener(CHANGE_EVENT_STATUSES, callback);
+  },
+  emitPhoneStatusesChange: function() {
+	console.log('----------- emitPhoneStatusesChange');
+	this.emit(CHANGE_EVENT_PHONE_STATUSES);
+  },
+  addPhoneStatusesChangeListener: function(callback) {
+	    this.on(CHANGE_EVENT_PHONE_STATUSES, callback);
+   },
+  removePhoneStatusesChangeListener: function(callback) {
+	    this.removeListener(CHANGE_EVENT_PHONE_STATUSES, callback);
   },
   setCurrentId: function(id) {
      this._current_id = id;
@@ -217,7 +228,21 @@ var UserStore = assign({}, EventEmitter.prototype, {
   },
   getStatus: function(id) {
     return this.getStatuses()[id];
-  }
+  },
+  _setPhoneStatus: function(user_id, phoneStatus) {
+	  var phoneStatuses = this.getPhoneStatuses();
+	  phoneStatuses[user_id] = phoneStatus;
+	  this.setPhoneStatuses(phoneStatuses);
+  },
+  setPhoneStatuses: function(phoneStatuses) {
+	  BrowserStore.setItem("phonestatuses", phoneStatuses);
+  },
+  getPhoneStatuses: function() {
+	  return BrowserStore.getItem("phonestatuses", {});
+  },
+  getPhoneStatus: function(id) {
+	    return this.getPhoneStatuses()[id];
+  },
 });
 
 UserStore.dispatchToken = AppDispatcher.register(function(payload) {
@@ -254,6 +279,12 @@ UserStore.dispatchToken = AppDispatcher.register(function(payload) {
       UserStore.emitStatusesChange();
       break;
 
+    case ActionTypes.RECIEVED_MSG:
+    	if (action.msg.action === 'user_phone_status') {
+    		console.log('**************' + action.msg.user_id + '  ' + action.msg.props.status);
+    	    UserStore._setPhoneStatus(action.msg.user_id, action.msg.props.status);
+    	    //UserStore.emitPhoneStatusesChange();
+    	}
     default:
   }
 });
