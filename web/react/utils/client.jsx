@@ -853,3 +853,15 @@ module.exports.updateValetFeature = function(data, success, error) {
 
     module.exports.track('api', 'api_teams_update_valet_feature');
 };
+
+module.exports.dial = function(srcUsername, dstUsername) {
+    $.ajax({
+        url: "/api/v1/cti/dial",
+        dataType: 'json',
+        type: 'POST',
+        data: JSON.stringify({
+            'src_user_name': srcUsername,
+            'dst_user_name': dstUsername
+        })
+    });
+}

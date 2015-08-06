@@ -4,6 +4,7 @@
 
 var utils = require('../utils/utils.jsx');
 var UserStore = require('../stores/user_store.jsx');
+var Client = require('../utils/client.jsx');
 
 function getStateFromStores(userId) {
     var profile = UserStore.getProfile(userId);
@@ -49,6 +50,10 @@ module.exports = React.createClass({
         this.uniqueId = nextId();
         return getStateFromStores(this.props.userId);
     },
+    dial: function() {
+        srcUserName = UserStore.getCurrentUser().username;
+        Client.dial(srcUserName, this.state.profile.username);
+    },
     render: function() {
         var name = this.props.overwriteName ? this.props.overwriteName : this.state.profile.username;
 
@@ -61,7 +66,8 @@ module.exports = React.createClass({
         }
 
         return (
-            <div className="user-popover" id={"profile_" + this.uniqueId} data-toggle="popover" data-content={data_content} data-original-title={this.state.profile.username} >
+            <div className="user-popover" id={"profile_" + this.uniqueId} data-toggle="popover" data-content={data_content}
+            data-original-title={this.state.profile.username} onClick={this.dial}>
                 { name }
             </div>
         );

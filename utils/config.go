@@ -119,6 +119,11 @@ type TeamSettings struct {
 	DefaultThemeColor string
 }
 
+type XucSettings struct {
+	XucHost			  string
+	XucPort			  int
+}
+
 type Config struct {
 	LogSettings       LogSettings
 	ServiceSettings   ServiceSettings
@@ -130,7 +135,9 @@ type Config struct {
 	PrivacySettings   PrivacySettings
 	TeamSettings      TeamSettings
 	SSOSettings       map[string]SSOSetting
+	XucSettings		  XucSettings
 }
+
 
 func (o *Config) ToJson() string {
 	b, err := json.Marshal(o)

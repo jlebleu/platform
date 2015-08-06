@@ -94,5 +94,9 @@
         "ReportProblemLink": "/static/help/configure_links.html",
         "TourLink": "/static/help/configure_links.html",
         "DefaultThemeColor": "#2389D7"
+    },
+    "XucSettings": {
+        "XucHost": "192.168.51.14",
+        "XucPort": 9000
     }
 }
