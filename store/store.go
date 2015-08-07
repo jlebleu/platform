@@ -62,6 +62,8 @@ type ChannelStore interface {
 	UpdateLastViewedAt(channelId string, userId string) StoreChannel
 	IncrementMentionCount(channelId string, userId string) StoreChannel
 	UpdateNotifyLevel(channelId string, userId string, notifyLevel string) StoreChannel
+
+	GetDirectChannel(userId1 string, userId2 string) StoreChannel
 }
 
 type PostStore interface {

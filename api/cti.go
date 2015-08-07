@@ -8,6 +8,8 @@ import (
     "net/http"
     "github.com/mattermost/platform/utils"
     "bytes"
+    "encoding/json"
+    "io"
 )
 
 func InitCti(r *mux.Router) {
@@ -35,4 +37,30 @@ func dial(c *Context, w http.ResponseWriter, r *http.Request) {
     }
 
     defer resp.Body.Close()
+}
+
+func getLastCall(userName string) *model.CallDetail {
+    url := fmt.Sprintf("http://%s:%d/xuc/api/1.0/historyByUsername/mattermost/%s?size=1",
+        utils.Cfg.XucSettings.XucHost, utils.Cfg.XucSettings.XucPort, userName)
+    resp, err := http.Get(url)
+
+    var detail *model.CallDetail
+    if err != nil {
+        l4g.Error("Error when getting history", err)
+    } else {
+        detail = CallDetailFromJson(resp.Body)
+    }
+    resp.Body.Close()
+    return detail
+}
+
+func CallDetailFromJson(data io.Reader) *model.CallDetail {
+    decoder := json.NewDecoder(data)
+    var callDetails []model.CallDetail
+    err := decoder.Decode(&callDetails)
+    if err == nil && len(callDetails) > 0 {
+        return &callDetails[0]
+    } else {
+        return nil
+    }
 }

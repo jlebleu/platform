@@ -97,9 +97,6 @@ func updatePhoneStatus(c *Context, w http.ResponseWriter, r *http.Request) {
 	username := phoneState.Username
 	status := strconv.Itoa(phoneState.Status)
 	
-	l4g.Debug("username=%v",username)
-	l4g.Debug("status=%v",status)
-	
 	if result := <-Srv.Store.User().GetByUsername(team.Id,username); result.Err != nil {
 		c.Err = result.Err
 		return
@@ -109,9 +106,51 @@ func updatePhoneStatus(c *Context, w http.ResponseWriter, r *http.Request) {
 		message := model.NewMessage(team.Id, "", user.Id, model.ACTION_USER_PHONE_STATUS)
 		message.Add("status",status)
 		PublishAndForget(message)
-	}	
-	
+		if status == "0" {
+			c.Err = getAndPublishLastCall(user)
+		}
+	}
 }
+
+func getAndPublishLastCall(user *model.User) *model.AppError {
+	lastCall := getLastCall(user.Username)
+	if lastCall == nil {
+		return model.NewAppError("user.publisLastCall", fmt.Sprintf("Last call is null for user %s", user.Username), "")
+	}
+	l4g.Debug("Retrieved last call %v", lastCall)
+	if lastCall.DstUsername == "" || lastCall.SrcUsername == "" || lastCall.SrcUsername != user.Username {
+		return nil
+	} else {
+		return publishLastCall(lastCall, user)
+	}
+}
+
+func publishLastCall(lastCall *model.CallDetail, user *model.User) *model.AppError {
+	if result2 := <-Srv.Store.User().GetByUsername(user.TeamId, lastCall.DstUsername); result2.Err != nil {
+		return result2.Err
+	} else {
+		dstUser := result2.Data.(*model.User)
+		if result3 := <-Srv.Store.Channel().GetDirectChannel(user.Id, dstUser.Id); result3.Err != nil {
+			return result3.Err
+		} else {
+			channel := result3.Data.(*model.Channel)
+			l4g.Debug("Retrieved channel %v", channel)
+			post := &model.Post{
+				UserId: user.Id,
+				ChannelId: channel.Id,
+				Message: fmt.Sprintf("@%s a appelé @%s", lastCall.SrcUsername, lastCall.DstUsername)}
+			if res := <-Srv.Store.Post().Save(post); res.Err != nil {
+				return res.Err
+			} else {
+				l4g.Debug("Created post with message %v on channelid %v", post.Message, post.ChannelId)
+				rpost := res.Data.(*model.Post)
+				fireAndForgetNotifications(rpost, user.TeamId, "")
+				return nil
+			}
+		}
+	}
+}
+
 func createUser(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	user := model.UserFromJson(r.Body)

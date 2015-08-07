@@ -633,3 +633,31 @@ func (s SqlChannelStore) UpdateNotifyLevel(channelId, userId, notifyLevel string
 
 	return storeChannel
 }
+
+func (s SqlChannelStore) GetDirectChannel(userId1 string, userId2 string) StoreChannel {
+	storeChannel := make(StoreChannel)
+
+	go func() {
+		result := StoreResult{}
+
+		var channels []model.Channel
+		_, err := s.GetReplica().Select(&channels, `SELECT * FROM Channels WHERE (Name = CONCAT(:UserId1, '__', :UserId2) OR
+		Name = CONCAT(:UserId2, '__', :UserId1)) AND DeleteAt = 0`, map[string]interface{}{"UserId1": userId1, "UserId2": userId2})
+
+		if err != nil {
+			result.Err = model.NewAppError("SqlChannelStore.GetDirectChannel", "We couldn't get the channel",
+			"userId1="+userId1+", userId2="+userId2+", err="+err.Error())
+		} else {
+			if len(channels) == 0 {
+				result.Err = model.NewAppError("SqlChannelStore.GetDirectChannel", "No channel was found", "userId1="+userId1+", userId2="+userId2)
+			} else {
+				result.Data = &channels[0]
+			}
+		}
+
+		storeChannel <- result
+		close(storeChannel)
+	}()
+
+	return storeChannel
+}
