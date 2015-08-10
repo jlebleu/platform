@@ -527,3 +527,34 @@ func TestChannelStoreIncrementMentionCount(t *testing.T) {
 		t.Fatal("failed to update")
 	}
 }
+
+func TestChannelStoreGetDirectChannel(t *testing.T) {
+	Setup()
+
+	userId1 := model.NewId()
+	userId2 := model.NewId()
+
+	o2 := model.Channel{}
+	o2.TeamId = model.NewId()
+	o2.DisplayName = "Channel2"
+	o2.Name = "a" + model.NewId() + "b"
+	o2.Type = model.CHANNEL_OPEN
+	Must(store.Channel().Save(&o2))
+
+	o1 := model.Channel{}
+	o1.TeamId = model.NewId()
+	o1.DisplayName = "Channel1"
+	o1.Name = userId2 + "__" + userId1
+	o1.Type = model.CHANNEL_OPEN
+	Must(store.Channel().Save(&o1))
+
+	result := <-store.Channel().GetDirectChannel(userId1, userId2)
+	if result.Err != nil {
+		t.Fatal("Got error " + result.Err.DetailedError)
+	}
+
+	channel := result.Data.(*model.Channel)
+	if channel.Id != o1.Id {
+		t.Fatal("wrong channel returned: " + channel.Id + " instead of " + o1.Id)
+	}
+}
