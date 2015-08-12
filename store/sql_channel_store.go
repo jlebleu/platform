@@ -641,8 +641,10 @@ func (s SqlChannelStore) GetDirectChannel(userId1 string, userId2 string) StoreC
 		result := StoreResult{}
 
 		var channels []model.Channel
-		_, err := s.GetReplica().Select(&channels, `SELECT * FROM Channels WHERE (Name = CONCAT(:UserId1, '__', :UserId2) OR
-		Name = CONCAT(:UserId2, '__', :UserId1)) AND DeleteAt = 0`, map[string]interface{}{"UserId1": userId1, "UserId2": userId2})
+		c1 := userId1 + "__" + userId2
+		c2 := userId2 + "__" + userId1
+		_, err := s.GetReplica().Select(&channels, `SELECT * FROM Channels WHERE (Name = :c1 OR Name = :c2) AND DeleteAt = 0`,
+			map[string]interface{}{"c1": c1, "c2": c2})
 
 		if err != nil {
 			result.Err = model.NewAppError("SqlChannelStore.GetDirectChannel", "We couldn't get the channel",
