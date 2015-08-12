@@ -16,10 +16,31 @@ func InitCti(r *mux.Router) {
     l4g.Debug("Initializing channel cti routes")
 
     sr := r.PathPrefix("/cti").Subrouter()
+    sr.Handle("/dialByUsername", ApiUserRequired(dialByUsername)).Methods("POST")
     sr.Handle("/dial", ApiUserRequired(dial)).Methods("POST")
 }
 
 func dial(c *Context, w http.ResponseWriter, r *http.Request) {
+    data := model.MapFromJson(r.Body)
+    userName := data["user_name"]
+    number := data["number"]
+
+    result := make(map[string]string)
+    result["number"] = number
+    json := model.MapToJson(result)
+    jsonB := []byte(json)
+    url := fmt.Sprintf("http://%s:%d/xuc/api/1.0/dial/mattermost/%s/", utils.Cfg.XucSettings.XucHost, utils.Cfg.XucSettings.XucPort, userName)
+
+    resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonB))
+
+    if err != nil {
+        l4g.Error("Error when dialing", err)
+    }
+
+    defer resp.Body.Close()
+}
+
+func dialByUsername(c *Context, w http.ResponseWriter, r *http.Request) {
     data := model.MapFromJson(r.Body)
     srcUserName := data["src_user_name"]
     dstUserName := data["dst_user_name"]

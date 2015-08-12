@@ -10,7 +10,7 @@ var AsyncClient = require('../utils/async_client.jsx');
 var Client = require('../utils/client.jsx');
 var utils = require('../utils/utils.jsx');
 var MessageWrapper = require('./message_wrapper.jsx');
-
+var Dialer = require('./dialer.jsx');
 var AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
 var Constants = require('../utils/constants.jsx');
 var ActionTypes = Constants.ActionTypes;
@@ -220,6 +220,7 @@ module.exports = React.createClass({
                             <div data-toggle='popover' data-content={popoverContent} className='description'>{description}</div>
                         </div>
                     </th>
+                    <th className="dialer__container"><Dialer /></th>
                     <th><PopoverListMembers members={this.state.users} channelId={channel.id} /></th>
                     <th className='search-bar__container'><NavbarSearchBox /></th>
                     <th>

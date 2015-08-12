@@ -490,6 +490,46 @@
             }
         }
     }
+    .dialer__container {
+        padding: 0;
+        height: 45px;
+        background: $primary-color;
+        color: #fff;
+        &.focused {
+            .sidebar__collapse {
+                @include translateX(-45px);
+            }
+            .dialer__form {
+                @include translateX(-45px);
+                padding-left: 55px;
+                padding-right: 24px;
+            }
+            .search__clear {
+                @include translateX(0px);
+            }
+        }
+        .dialer__form {
+            border: none;
+            @include translateX(0px);
+            padding: 7px 20px 0 49px;
+            height: 45px;
+            position: relative;
+            @include single-transition(all, 0.2s, linear);
+            .form-control {
+                border: none;
+                padding: 0 10px 0 31px;
+                background: rgba(black, 0.2);
+                @include border-radius(3px);
+                color: #fff;
+            }
+            input[type=text] {
+                @include input-placeholder {
+                    color: #fff;
+                    color: rgba(#fff, 0.5);
+                }
+            }
+        }
+    }
     .sidebar--menu {
         @include single-transition(transform, 0.5s, ease);
         @include translate3d(290px, 0, 0);

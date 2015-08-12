@@ -52,7 +52,7 @@ module.exports = React.createClass({
     },
     dial: function() {
         srcUserName = UserStore.getCurrentUser().username;
-        Client.dial(srcUserName, this.state.profile.username);
+        Client.dialByUsername(srcUserName, this.state.profile.username);
     },
     render: function() {
         var name = this.props.overwriteName ? this.props.overwriteName : this.state.profile.username;

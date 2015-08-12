@@ -854,14 +854,26 @@ module.exports.updateValetFeature = function(data, success, error) {
     module.exports.track('api', 'api_teams_update_valet_feature');
 };
 
-module.exports.dial = function(srcUsername, dstUsername) {
+module.exports.dialByUsername = function(srcUsername, dstUsername) {
     $.ajax({
-        url: "/api/v1/cti/dial",
+        url: "/api/v1/cti/dialByUsername",
         dataType: 'json',
         type: 'POST',
         data: JSON.stringify({
             'src_user_name': srcUsername,
             'dst_user_name': dstUsername
+        })
+    });
+}
+
+module.exports.dial = function(userName, number) {
+    $.ajax({
+        url: "/api/v1/cti/dial",
+        dataType: 'json',
+        type: 'POST',
+        data: JSON.stringify({
+            'user_name': userName,
+            'number': number
         })
     });
 }
