@@ -3,14 +3,14 @@
 }
 
 .dialer__form {
-	.dialer__container & {
-		margin: 0;
-		border: 1px solid #DDD;
-		@include border-radius(2px);
-		width: 150px;
-	}
+	margin: 0;
+	border: 1px solid #DDD;
+	@include border-radius(2px);
+	width: 150px;
+	overflow: hidden;
 	.dialer {
-		height: 40px;
+		width: 130px;
+		height: 30px;
 		padding-right: 30px;
 		box-shadow: none;
 		.dialer__container & {
@@ -27,5 +27,15 @@
 			right: 7px;
 			top: 8px;
 		}
+	}
+	.dialer_box {
+		float: left;
+		border-right: 1px solid #DDD;
+	}
+	.dialer_button {
+		float: right;
+		margin-top: 7px;
+		margin-right: 1px;
+		margin-left: 1px;
 	}
 }
