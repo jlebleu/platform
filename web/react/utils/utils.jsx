@@ -124,8 +124,10 @@ module.exports.notifyMe = function(title, body, channel) {
 }
 
 module.exports.ding = function() {
-  var audio = new Audio('/static/images/ding.mp3');
-  audio.play();
+    if (!module.exports.isBrowserFirefox()) {
+        var audio = new Audio('/static/images/ding.mp3');
+        audio.play();
+    }
 }
 
 module.exports.getUrlParameter = function(sParam) {
@@ -188,6 +190,10 @@ module.exports.displayDateTime = function(ticks) {
 
   return "1 minute ago";
 
+}
+
+module.exports.displayCommentDateTime = function(ticks) {
+    return module.exports.displayDate(ticks) + ' ' + module.exports.displayTime(ticks);
 }
 
 // returns Unix timestamp in milliseconds
@@ -855,6 +861,20 @@ module.exports.changeColor =function(col, amt) {
     return (usePound?"#":"") + String("000000" + (g | (b << 8) | (r << 16)).toString(16)).slice(-6);
 };
 
+module.exports.changeOpacity = function(oldColor, opacity) {
+
+    var col = oldColor;
+    if (col[0] === '#') {
+        col = col.slice(1);
+    }
+
+    var r = parseInt(col.substring(0, 2), 16);
+    var g = parseInt(col.substring(2, 4), 16);
+    var b = parseInt(col.substring(4, 6), 16);
+
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + opacity + ')';
+};
+
 module.exports.getFullName = function(user) {
     if (user.first_name && user.last_name) {
         return user.first_name + " " + user.last_name;
@@ -945,3 +965,7 @@ module.exports.generateId = function() {
 
     return id;
 };
+
+module.exports.isBrowserFirefox = function() {
+    return navigator && navigator.userAgent && navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
+}

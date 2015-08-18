@@ -130,6 +130,7 @@ module.exports = React.createClass({
         UserStore.addChangeListener(this.onChange);
         UserStore.addStatusesChangeListener(this.onChange);
         UserStore.addPhoneStatusesChangeListener(this.onChange);
+        TeamStore.addChangeListener(this.onChange);
         SocketStore.addChangeListener(this.onSocketChange);
         $('.nav-pills__container').perfectScrollbar();
 
@@ -149,6 +150,7 @@ module.exports = React.createClass({
         UserStore.removeChangeListener(this.onChange);
         UserStore.removeStatusesChangeListener(this.onChange);
         UserStore.removePhoneStatusesChangeListener(this.onChange);
+        TeamStore.removeChangeListener(this.onChange);
         SocketStore.removeChangeListener(this.onSocketChange);
     },
     onChange: function() {
@@ -363,15 +365,16 @@ module.exports = React.createClass({
             }
             // set up click handler to switch channels (or create a new channel for non-existant ones)
             var clickHandler = null;
-            var href;
+            var href = '#';
+            var teamURL = TeamStore.getCurrentTeamUrl();
             if (!channel.fake) {
                 clickHandler = function(e) {
                     e.preventDefault();
                     utils.switchChannel(channel);
                 };
-                href = '#';
-            } else {
-                href = TeamStore.getCurrentTeamUrl() + '/channels/' + channel.name;
+            }
+            if (channel.fake && teamURL){
+                href = teamURL + '/channels/' + channel.name;
             }
 
             return (
@@ -379,8 +382,8 @@ module.exports = React.createClass({
                     <a className={'sidebar-channel ' + titleClass} href={href} onClick={clickHandler}>
                         {status}
                         {phoneStatus}
-                        {badge}
                         {channel.display_name}
+                        {badge}
                     </a>
                 </li>
             );

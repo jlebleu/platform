@@ -101,6 +101,7 @@ type SessionStore interface {
 	GetSessions(userId string) StoreChannel
 	Remove(sessionIdOrAlt string) StoreChannel
 	UpdateLastActivityAt(sessionId string, time int64) StoreChannel
+	UpdateRoles(userId string, roles string) StoreChannel
 }
 
 type AuditStore interface {

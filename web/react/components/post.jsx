@@ -7,16 +7,14 @@ var PostInfo = require('./post_info.jsx');
 var AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
 var Constants = require('../utils/constants.jsx');
 var UserStore = require('../stores/user_store.jsx');
+var PostStore = require('../stores/post_store.jsx');
+var ChannelStore = require('../stores/channel_store.jsx');
+var client = require('../utils/client.jsx');
+var AsyncClient = require('../utils/async_client.jsx');
 var ActionTypes = Constants.ActionTypes;
 
 module.exports = React.createClass({
     displayName: "Post",
-    componentDidMount: function() {
-        $('.modal').on('show.bs.modal', function () {
-            $('.modal-body').css('overflow-y', 'auto');
-            $('.modal-body').css('max-height', $(window).height() * 0.7);
-        });
-    },
     handleCommentClick: function(e) {
         e.preventDefault();
 
@@ -38,6 +36,36 @@ module.exports = React.createClass({
         this.refs.info.forceUpdate();
         this.refs.header.forceUpdate();
     },
+    retryPost: function(e) {
+        e.preventDefault();
+
+        var post = this.props.post;
+        client.createPost(post, post.channel_id,
+            function(data) {
+                AsyncClient.getPosts(true);
+
+                var channel = ChannelStore.get(post.channel_id);
+                var member = ChannelStore.getMember(post.channel_id);
+                member.msg_count = channel.total_msg_count;
+                member.last_viewed_at = (new Date).getTime();
+                ChannelStore.setChannelMember(member);
+
+                AppDispatcher.handleServerAction({
+                    type: ActionTypes.RECIEVED_POST,
+                    post: data
+                });
+            }.bind(this),
+            function(err) {
+                post.state = Constants.POST_FAILED;
+                PostStore.updatePendingPost(post);
+                this.forceUpdate();
+            }.bind(this)
+        );
+
+        post.state = Constants.POST_LOADING;
+        PostStore.updatePendingPost(post);
+        this.forceUpdate();
+    },
     getInitialState: function() {
         return { };
     },
@@ -46,9 +74,9 @@ module.exports = React.createClass({
         var parentPost = this.props.parentPost;
         var posts = this.props.posts;
 
-        var type = "Post"
-        if (post.root_id.length > 0) {
-            type = "Comment"
+        var type = 'Post';
+        if (post.root_id && post.root_id.length > 0) {
+            type = 'Comment';
         }
 
         var commentCount = 0;
@@ -85,7 +113,7 @@ module.exports = React.createClass({
                     : null }
                     <div className="post__content">
                         <PostHeader ref="header" post={post} sameRoot={this.props.sameRoot} commentCount={commentCount} handleCommentClick={this.handleCommentClick} isLastComment={this.props.isLastComment} />
-                        <PostBody post={post} sameRoot={this.props.sameRoot} parentPost={parentPost} posts={posts} handleCommentClick={this.handleCommentClick} />
+                        <PostBody post={post} sameRoot={this.props.sameRoot} parentPost={parentPost} posts={posts} handleCommentClick={this.handleCommentClick} retryPost={this.retryPost} />
                         <PostInfo ref="info" post={post} sameRoot={this.props.sameRoot} commentCount={commentCount} handleCommentClick={this.handleCommentClick} allowReply="true" />
                     </div>
                 </div>

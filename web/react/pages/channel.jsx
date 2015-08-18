@@ -34,6 +34,7 @@ var ChannelInfoModal = require('../components/channel_info_modal.jsx');
 var AccessHistoryModal = require('../components/access_history_modal.jsx');
 var ActivityLogModal = require('../components/activity_log_modal.jsx');
 var RemovedFromChannelModal = require('../components/removed_from_channel_modal.jsx')
+var FileUploadOverlay = require('../components/file_upload_overlay.jsx');
 
 var AsyncClient = require('../utils/async_client.jsx');
 
@@ -54,14 +55,15 @@ global.window.setup_channel_page = function(team_name, team_type, team_id, chann
         id: team_id
     });
 
-    React.render(
-        <ErrorBar/>,
-        document.getElementById('error_bar')
-    );
-
+    // ChannelLoader must be rendered first
     React.render(
         <ChannelLoader/>,
         document.getElementById('channel_loader')
+    );
+
+    React.render(
+        <ErrorBar/>,
+        document.getElementById('error_bar')
     );
 
     React.render(
@@ -222,6 +224,12 @@ global.window.setup_channel_page = function(team_name, team_type, team_id, chann
     React.render(
         <RemovedFromChannelModal />,
         document.getElementById('removed_from_channel_modal')
+    );
+
+    React.render(
+        <FileUploadOverlay
+            overlayType='center' />,
+        document.getElementById('file_upload_overlay')
     );
 
 };

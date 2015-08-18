@@ -9,6 +9,7 @@ ZeroClipboardMixin.ZeroClipboard.config({
 });
 
 module.exports = React.createClass({
+    displayName: 'GetLinkModal',
     zeroclipboardElementsSelector: '[data-copy-btn]',
     mixins: [ZeroClipboardMixin],
     componentDidMount: function() {
@@ -34,7 +35,7 @@ module.exports = React.createClass({
         var copyLinkConfirm = null;
 
         if (this.state.copiedLink) {
-            copyLinkConfirm = <p className='copy-link-confirm'>Link copied to clipboard.</p>;
+            copyLinkConfirm = <p className='alert alert-success copy-link-confirm'><i className="fa fa-check"></i> Link copied to clipboard.</p>;
         }
 
         if (currentUser != null) {
@@ -47,7 +48,10 @@ module.exports = React.createClass({
                           <h4 className='modal-title' id='myModalLabel'>{this.state.title} Link</h4>
                         </div>
                         <div className='modal-body'>
-                          <p>{'The link below is used for open ' + strings.TeamPlural + ' or if you allowed your ' + strings.Team + ' members to sign up using their ' + strings.Company + ' email addresses.'}
+                          <p>
+                              Send {strings.Team + 'mates'} the link below for them to sign-up to this {strings.Team} site.
+                              <br /><br />
+                              Be careful not to share this link publicly, since anyone with the link can join your {strings.Team}.
                           </p>
                           <textarea className='form-control no-resize' readOnly='true' value={this.state.value}></textarea>
                         </div>
