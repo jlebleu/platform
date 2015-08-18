@@ -732,20 +732,19 @@ module.exports.isValidUsername = function (name) {
     return error;
 }
 
-module.exports.switchChannel = function(channel, teammate_name) {
+function switchChannel(channel, teammateName) {
     AppDispatcher.handleViewAction({
       type: ActionTypes.CLICK_CHANNEL,
       name: channel.name,
       id: channel.id
     });
 
-    var teamURL = window.location.href.split('/channels')[0];
-    history.replaceState('data', '', teamURL + '/channels/' + channel.name);
+    updateAddressBar(channel.name);
 
-    if (channel.type === 'D' && teammate_name) {
-        document.title = teammate_name + " " + document.title.substring(document.title.lastIndexOf("-"));
+    if (channel.type === 'D' && teammateName) {
+        updateTabTitle(teammateName);
     } else {
-        document.title = channel.display_name + " " + document.title.substring(document.title.lastIndexOf("-"));
+        updateTabTitle(channel.display_name);
     }
 
     AsyncClient.getChannels(true, true, true);
@@ -759,6 +758,18 @@ module.exports.switchChannel = function(channel, teammate_name) {
 
     return false;
 }
+module.exports.switchChannel = switchChannel;
+
+function updateTabTitle(name) {
+    document.title = name + ' ' + document.title.substring(document.title.lastIndexOf('-'));
+}
+module.exports.updateTabTitle = updateTabTitle;
+
+function updateAddressBar(channelName) {
+    var teamURL = window.location.href.split('/channels')[0];
+    history.replaceState('data', '', teamURL + '/channels/' + channelName);
+}
+module.exports.updateAddressBar = updateAddressBar;
 
 module.exports.isMobile = function() {
   return screen.width <= 768;
@@ -912,4 +923,25 @@ module.exports.getFileUrl = function(filename) {
 module.exports.getFileName = function(path) {
     var split = path.split('/');
     return split[split.length - 1];
+};
+
+// Generates a RFC-4122 version 4 compliant globally unique identifier.
+module.exports.generateId = function() {
+    // implementation taken from http://stackoverflow.com/a/2117523
+    var id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';
+
+    id = id.replace(/[xy]/g, function(c) {
+        var r = Math.floor(Math.random() * 16);
+
+        var v;
+        if (c === 'x') {
+            v = r;
+        } else {
+            v = r & 0x3 | 0x8;
+        }
+
+        return v.toString(16);
+    });
+
+    return id;
 };

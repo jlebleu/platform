@@ -15,6 +15,8 @@ import (
 	"github.com/nfnt/resize"
 	_ "golang.org/x/image/bmp"
 	"image"
+	"image/color"
+	"image/draw"
 	_ "image/gif"
 	"image/jpeg"
 	"io"
@@ -69,7 +71,9 @@ func uploadFile(c *Context, w http.ResponseWriter, r *http.Request) {
 	files := m.File["files"]
 
 	resStruct := &model.FileUploadResponse{
-		Filenames: []string{}}
+		Filenames: []string{},
+		ClientIds: []string{},
+	}
 
 	imageNameList := []string{}
 	imageDataList := [][]byte{}
@@ -111,6 +115,10 @@ func uploadFile(c *Context, w http.ResponseWriter, r *http.Request) {
 		resStruct.Filenames = append(resStruct.Filenames, fileUrl)
 	}
 
+	for _, clientId := range props["client_ids"] {
+		resStruct.ClientIds = append(resStruct.ClientIds, clientId)
+	}
+
 	fireAndForgetHandleImages(imageNameList, imageDataList, c.Session.TeamId, channelId, c.Session.UserId)
 
 	w.Write([]byte(resStruct.ToJson()))
@@ -137,6 +145,12 @@ func fireAndForgetHandleImages(filenames []string, fileData [][]byte, teamId, ch
 					l4g.Error("Unable to decode image config channelId=%v userId=%v filename=%v err=%v", channelId, userId, filename, err)
 					return
 				}
+
+				// Remove transparency due to JPEG's lack of support of it
+				temp := image.NewRGBA(img.Bounds())
+				draw.Draw(temp, temp.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+				draw.Draw(temp, temp.Bounds(), img, img.Bounds().Min, draw.Over)
+				img = temp
 
 				// Create thumbnail
 				go func() {

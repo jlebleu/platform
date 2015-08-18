@@ -40,6 +40,7 @@ func InitApi() {
 	InitWebSocket(r)
 	InitFile(r)
 	InitCommand(r)
+	InitConfig(r)
 	InitCti(r)
 
 	templatesDir := utils.FindDir("api/templates")

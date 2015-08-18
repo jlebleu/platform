@@ -69,6 +69,12 @@ travis:
 	mkdir -p $(DIST_PATH)/api
 	cp -RL api/templates $(DIST_PATH)/api
 
+	cp APACHE-2.0.txt $(DIST_PATH)
+	cp GNU-AGPL-3.0.txt $(DIST_PATH)
+	cp LICENSE.txt $(DIST_PATH)
+	cp NOTICE.txt $(DIST_PATH)
+	cp README.md $(DIST_PATH)
+
 	mv $(DIST_PATH)/web/static/js/bundle.min.js $(DIST_PATH)/web/static/js/bundle-$(BUILD_NUMBER).min.js
 
 	@sed -i'.bak' 's|react-with-addons-0.13.1.js|react-with-addons-0.13.1.min.js|g' $(DIST_PATH)/web/templates/head.html
@@ -93,14 +99,6 @@ install:
 	elif [ $(shell docker ps | grep -ci mattermost-mysql) -eq 0 ]; then \
 		echo restarting mattermost-mysql; \
 		docker start mattermost-mysql > /dev/null; \
-	fi
-
-	@if [ $(shell docker ps -a | grep -ci mattermost-redis) -eq 0 ]; then \
-		echo starting mattermost-redis; \
-		docker run --name mattermost-redis -p 6379:6379 -d redis > /dev/null; \
-	elif [ $(shell docker ps | grep -ci mattermost-redis) -eq 0 ]; then \
-		echo restarting mattermost-redis; \
-		docker start mattermost-redis > /dev/null; \
 	fi
 
 	@cd web/react/ && npm install
@@ -151,12 +149,6 @@ clean:
 		echo stopping mattermost-mysql; \
 		docker stop mattermost-mysql > /dev/null; \
 		docker rm -v mattermost-mysql > /dev/null; \
-	fi
-
-	@if [ $(shell docker ps -a | grep -ci mattermost-redis) -eq 1 ]; then \
-		echo stopping mattermost-redis; \
-		docker stop mattermost-redis > /dev/null; \
-		docker rm -v mattermost-redis > /dev/null; \
 	fi
 
 	rm -rf web/react/node_modules
@@ -210,12 +202,6 @@ cleandb:
 		docker stop mattermost-mysql > /dev/null; \
 		docker rm -v mattermost-mysql > /dev/null; \
 	fi
-
-	@if [ $(shell docker ps -a | grep -ci mattermost-redis) -eq 1 ]; then \
-		docker stop mattermost-redis > /dev/null; \
-		docker rm -v mattermost-redis > /dev/null; \
-	fi
-
 dist: install
 
 	@$(GO) build $(GOFLAGS) -i -a ./...
@@ -242,6 +228,12 @@ dist: install
 	mkdir -p $(DIST_PATH)/api
 	cp -RL api/templates $(DIST_PATH)/api
 
+	cp APACHE-2.0.txt $(DIST_PATH)
+	cp GNU-AGPL-3.0.txt $(DIST_PATH)
+	cp LICENSE.txt $(DIST_PATH)
+	cp NOTICE.txt $(DIST_PATH)
+	cp README.md $(DIST_PATH)
+
 	mv $(DIST_PATH)/web/static/js/bundle.min.js $(DIST_PATH)/web/static/js/bundle-$(BUILD_NUMBER).min.js
 
 	@sed -i'.bak' 's|react-with-addons-0.13.1.js|react-with-addons-0.13.1.min.js|g' $(DIST_PATH)/web/templates/head.html
@@ -253,10 +245,8 @@ dist: install
 
 	tar -C dist -czf $(DIST_PATH).tar.gz mattermost
 
-docker-build: stop dist
-	cp $(DIST_PATH).tar.gz docker/dev
-	cd docker/dev && docker build -t ${DOCKERNAME} .
-	rm docker/dev/mattermost.tar.gz
+docker-build: stop
+	docker build -t ${DOCKERNAME} -f docker/local/Dockerfile .
 
 docker-run: docker-build
 	docker run --name ${DOCKER_CONTAINER_NAME} -d --publish 8065:80 ${DOCKERNAME}

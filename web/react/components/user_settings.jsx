@@ -5,8 +5,6 @@ var UserStore = require('../stores/user_store.jsx');
 var SettingItemMin = require('./setting_item_min.jsx');
 var SettingItemMax = require('./setting_item_max.jsx');
 var SettingPicture = require('./setting_picture.jsx');
-var AccessHistoryModal = require('./access_history_modal.jsx');
-var ActivityLogModal = require('./activity_log_modal.jsx');
 var client = require('../utils/client.jsx');
 var AsyncClient = require('../utils/async_client.jsx');
 var utils = require('../utils/utils.jsx');
@@ -463,22 +461,22 @@ var SecurityTab = React.createClass({
         e.preventDefault();
 
         var user = this.props.user;
-        var currentPassword = this.state.current_password;
-        var newPassword = this.state.new_password;
-        var confirmPassword = this.state.confirm_password;
+        var currentPassword = this.state.currentPassword;
+        var newPassword = this.state.newPassword;
+        var confirmPassword = this.state.confirmPassword;
 
         if (currentPassword === '') {
-            this.setState({password_error: 'Please enter your current password', server_error: ''});
+            this.setState({passwordError: 'Please enter your current password', serverError: ''});
             return;
         }
 
         if (newPassword.length < 5) {
-            this.setState({password_error: 'New passwords must be at least 5 characters', server_error: ''});
+            this.setState({passwordError: 'New passwords must be at least 5 characters', serverError: ''});
             return;
         }
 
         if (newPassword !== confirmPassword) {
-            this.setState({password_error: 'The new passwords you entered do not match', server_error: ''});
+            this.setState({passwordError: 'The new passwords you entered do not match', serverError: ''});
             return;
         }
 
@@ -488,43 +486,43 @@ var SecurityTab = React.createClass({
         data.new_password = newPassword;
 
         client.updatePassword(data,
-            function(data) {
-                this.props.updateSection("");
+            function() {
+                this.props.updateSection('');
                 AsyncClient.getMe();
-                this.setState({current_password: '', new_password: '', confirm_password: ''});
+                this.setState({currentPassword: '', newPassword: '', confirmPassword: ''});
             }.bind(this),
             function(err) {
                 var state = this.getInitialState();
                 if (err.message) {
-                    state.server_error = err.message;
+                    state.serverError = err.message;
                 } else {
-                    state.server_error = err;
+                    state.serverError = err;
                 }
-                state.password_error = '';
+                state.passwordError = '';
                 this.setState(state);
             }.bind(this)
         );
     },
     updateCurrentPassword: function(e) {
-        this.setState({ current_password: e.target.value });
+        this.setState({currentPassword: e.target.value});
     },
     updateNewPassword: function(e) {
-        this.setState({ new_password: e.target.value });
+        this.setState({newPassword: e.target.value});
     },
     updateConfirmPassword: function(e) {
-        this.setState({ confirm_password: e.target.value });
+        this.setState({confirmPassword: e.target.value});
     },
     handleHistoryOpen: function() {
-        $("#user_settings1").modal('hide');
+        $('#user_settings1').modal('hide');
     },
     handleDevicesOpen: function() {
-        $("#user_settings1").modal('hide');
+        $('#user_settings1').modal('hide');
     },
     handleClose: function() {
-        $(this.getDOMNode()).find(".form-control").each(function() {
-            this.value = "";
+        $(this.getDOMNode()).find('.form-control').each(function() {
+            this.value = '';
         });
-        this.setState({current_password: '', new_password: '', confirm_password: '', server_error: null, password_error: null});
+        this.setState({currentPassword: '', newPassword: '', confirmPassword: '', serverError: null, passwordError: null});
         this.props.updateTab('general');
     },
     componentDidMount: function() {
@@ -535,40 +533,41 @@ var SecurityTab = React.createClass({
         this.props.updateSection('');
     },
     getInitialState: function() {
-        return { current_password: '', new_password: '', confirm_password: '' };
+        return {currentPassword: '', newPassword: '', confirmPassword: ''};
     },
     render: function() {
-        var server_error = this.state.server_error ? this.state.server_error : null;
-        var password_error = this.state.password_error ? this.state.password_error : null;
+        var serverError = this.state.serverError ? this.state.serverError : null;
+        var passwordError = this.state.passwordError ? this.state.passwordError : null;
 
+        var updateSectionStatus;
         var passwordSection;
         var self = this;
         if (this.props.activeSection === 'password') {
             var inputs = [];
             var submit = null;
 
-            if (this.props.user.auth_service === "") {
+            if (this.props.user.auth_service === '') {
                 inputs.push(
-                    <div className="form-group">
-                        <label className="col-sm-5 control-label">Current Password</label>
-                        <div className="col-sm-7">
-                            <input className="form-control" type="password" onChange={this.updateCurrentPassword} value={this.state.current_password}/>
+                    <div className='form-group'>
+                        <label className='col-sm-5 control-label'>Current Password</label>
+                        <div className='col-sm-7'>
+                            <input className='form-control' type='password' onChange={this.updateCurrentPassword} value={this.state.currentPassword}/>
                         </div>
                     </div>
                 );
                 inputs.push(
-                    <div className="form-group">
-                        <label className="col-sm-5 control-label">New Password</label>
-                        <div className="col-sm-7">
-                            <input className="form-control" type="password" onChange={this.updateNewPassword} value={this.state.new_password}/>
+                    <div className='form-group'>
+                        <label className='col-sm-5 control-label'>New Password</label>
+                        <div className='col-sm-7'>
+                            <input className='form-control' type='password' onChange={this.updateNewPassword} value={this.state.newPassword}/>
                         </div>
                     </div>
                 );
                 inputs.push(
-                    <div className="form-group">
-                        <label className="col-sm-5 control-label">Retype New Password</label>
-                        <div className="col-sm-7">
-                            <input className="form-control" type="password" onChange={this.updateConfirmPassword} value={this.state.confirm_password}/>
+                    <div className='form-group'>
+                        <label className='col-sm-5 control-label'>Retype New Password</label>
+                        <div className='col-sm-7'>
+                            <input className='form-control' type='password' onChange={this.updateConfirmPassword} value={this.state.confirmPassword}/>
                         </div>
                     </div>
                 );
@@ -576,58 +575,68 @@ var SecurityTab = React.createClass({
                 submit = this.submitPassword;
             } else {
                 inputs.push(
-                    <div className="form-group">
-                        <label className="col-sm-12">Log in occurs through GitLab. Please see your GitLab account settings page to update your password.</label>
+                    <div className='form-group'>
+                        <label className='col-sm-12'>Log in occurs through GitLab. Please see your GitLab account settings page to update your password.</label>
                     </div>
                 );
             }
 
+            updateSectionStatus = function(e) {
+                self.props.updateSection('');
+                self.setState({currentPassword: '', newPassword: '', confirmPassword: '', serverError: null, passwordError: null});
+                e.preventDefault();
+            };
+
             passwordSection = (
                 <SettingItemMax
-                    title="Password"
+                    title='Password'
                     inputs={inputs}
                     submit={submit}
-                    server_error={server_error}
-                    client_error={password_error}
-                    updateSection={function(e){self.props.updateSection("");e.preventDefault();}}
+                    server_error={serverError}
+                    client_error={passwordError}
+                    updateSection={updateSectionStatus}
                 />
             );
         } else {
             var describe;
-            if (this.props.user.auth_service === "") {
+            if (this.props.user.auth_service === '') {
                 var d = new Date(this.props.user.last_password_update);
-                var hour = d.getHours() % 12 ? String(d.getHours() % 12) : "12";
-                var min = d.getMinutes() < 10 ? "0" + d.getMinutes() : String(d.getMinutes());
-                var timeOfDay = d.getHours() >= 12 ? " pm" : " am";
-                describe = "Last updated " + Constants.MONTHS[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() + " at " + hour + ":" + min + timeOfDay;
+                var hour = d.getHours() % 12 ? String(d.getHours() % 12) : '12';
+                var min = d.getMinutes() < 10 ? '0' + d.getMinutes() : String(d.getMinutes());
+                var timeOfDay = d.getHours() >= 12 ? ' pm' : ' am';
+                describe = 'Last updated ' + Constants.MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear() + ' at ' + hour + ':' + min + timeOfDay;
             } else {
-                describe = "Log in done through GitLab"
+                describe = 'Log in done through GitLab';
             }
+
+            updateSectionStatus = function() {
+                self.props.updateSection('password');
+            };
 
             passwordSection = (
                 <SettingItemMin
-                    title="Password"
+                    title='Password'
                     describe={describe}
-                    updateSection={function(){self.props.updateSection("password");}}
+                    updateSection={updateSectionStatus}
                 />
             );
         }
 
         return (
             <div>
-                <div className="modal-header">
-                    <button type="button" className="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                    <h4 className="modal-title" ref="title"><i className="modal-back"></i>Security Settings</h4>
+                <div className='modal-header'>
+                    <button type='button' className='close' data-dismiss='modal' aria-label='Close'><span aria-hidden='true'>&times;</span></button>
+                    <h4 className='modal-title' ref='title'><i className='modal-back'></i>Security Settings</h4>
                 </div>
-                <div className="user-settings">
-                    <h3 className="tab-header">Security Settings</h3>
-                    <div className="divider-dark first"/>
-                    { passwordSection }
-                    <div className="divider-dark"/>
+                <div className='user-settings'>
+                    <h3 className='tab-header'>Security Settings</h3>
+                    <div className='divider-dark first'/>
+                    {passwordSection}
+                    <div className='divider-dark'/>
                     <br></br>
-                    <a data-toggle="modal" className="security-links theme" data-target="#access-history" href="#" onClick={this.handleHistoryOpen}><i className="fa fa-clock-o"></i>View Access History</a>
-                    <b>   </b>
-                    <a data-toggle="modal" className="security-links theme" data-target="#activity-log" href="#" onClick={this.handleDevicesOpen}><i className="fa fa-globe"></i>View and Logout of Active Sessions</a>
+                    <a data-toggle='modal' className='security-links theme' data-target='#access-history' href='#' onClick={this.handleHistoryOpen}><i className='fa fa-clock-o'></i>View Access History</a>
+                    <b> </b>
+                    <a data-toggle='modal' className='security-links theme' data-target='#activity-log' href='#' onClick={this.handleDevicesOpen}><i className='fa fa-globe'></i>View and Logout of Active Sessions</a>
                 </div>
             </div>
         );
@@ -642,17 +651,17 @@ var GeneralTab = React.createClass({
         var user = this.props.user;
         var username = this.state.username.trim();
 
-        var username_error = utils.isValidUsername(username);
-        if (username_error === 'Cannot use a reserved word as a username.') {
-            this.setState({client_error: 'This username is reserved, please choose a new one.' });
+        var usernameError = utils.isValidUsername(username);
+        if (usernameError === 'Cannot use a reserved word as a username.') {
+            this.setState({clientError: 'This username is reserved, please choose a new one.'});
             return;
-        } else if (username_error) {
-            this.setState({client_error: "Username must begin with a letter, and contain between 3 to 15 lowercase characters made up of numbers, letters, and the symbols '.', '-' and '_'." });
+        } else if (usernameError) {
+            this.setState({clientError: "Username must begin with a letter, and contain between 3 to 15 lowercase characters made up of numbers, letters, and the symbols '.', '-' and '_'."});
             return;
         }
 
         if (user.username === username) {
-            this.setState({client_error: 'You must submit a new username'});
+            this.setState({clientError: 'You must submit a new username'});
             return;
         }
 
@@ -667,7 +676,7 @@ var GeneralTab = React.createClass({
         var nickname = this.state.nickname.trim();
 
         if (user.nickname === nickname) {
-            this.setState({client_error: 'You must submit a new nickname'})
+            this.setState({clientError: 'You must submit a new nickname'});
             return;
         }
 
@@ -679,11 +688,11 @@ var GeneralTab = React.createClass({
         e.preventDefault();
 
         var user = UserStore.getCurrentUser();
-        var firstName = this.state.first_name.trim();
-        var lastName = this.state.last_name.trim();
+        var firstName = this.state.firstName.trim();
+        var lastName = this.state.lastName.trim();
 
         if (user.first_name === firstName && user.last_name === lastName) {
-            this.setState({client_error: 'You must submit a new first or last name'})
+            this.setState({clientError: 'You must submit a new first or last name'});
             return;
         }
 
@@ -703,7 +712,7 @@ var GeneralTab = React.createClass({
         }
 
         if (email === '' || !utils.isEmail(email)) {
-            this.setState({ email_error: 'Please enter a valid email address' });
+            this.setState({emailError: 'Please enter a valid email address'});
             return;
         }
 
@@ -718,11 +727,11 @@ var GeneralTab = React.createClass({
                 AsyncClient.getMe();
             }.bind(this),
             function(err) {
-                state = this.getInitialState();
+                var state = this.getInitialState();
                 if (err.message) {
-                    state.server_error = err.message;
+                    state.serverError = err.message;
                 } else {
-                    state.server_error = err;
+                    state.serverError = err;
                 }
                 this.setState(state);
             }.bind(this)
@@ -742,12 +751,13 @@ var GeneralTab = React.createClass({
         var picture = this.state.picture;
 
         if (picture.type !== 'image/jpeg' && picture.type !== 'image/png') {
-            this.setState({client_error: 'Only JPG or PNG images may be used for profile pictures'});
+            this.setState({clientError: 'Only JPG or PNG images may be used for profile pictures'});
             return;
         }
 
         var formData = new FormData();
         formData.append('image', picture, picture.name);
+        this.setState({loadingPicture: true});
 
         client.uploadProfileImage(formData,
             function() {
@@ -756,8 +766,8 @@ var GeneralTab = React.createClass({
                 window.location.reload();
             }.bind(this),
             function(err) {
-                state = this.getInitialState();
-                state.server_error = err;
+                var state = this.getInitialState();
+                state.serverError = err;
                 this.setState(state);
             }.bind(this)
         );
@@ -766,10 +776,10 @@ var GeneralTab = React.createClass({
         this.setState({username: e.target.value});
     },
     updateFirstName: function(e) {
-        this.setState({first_name: e.target.value});
+        this.setState({firstName: e.target.value});
     },
     updateLastName: function(e) {
-        this.setState({last_name: e.target.value});
+        this.setState({lastName: e.target.value});
     },
     updateNickname: function(e) {
         this.setState({nickname: e.target.value});
@@ -779,17 +789,16 @@ var GeneralTab = React.createClass({
     },
     updatePicture: function(e) {
         if (e.target.files && e.target.files[0]) {
-            this.setState({ picture: e.target.files[0] });
+            this.setState({picture: e.target.files[0]});
 
             this.submitActive = true;
-            this.setState({client_error: null});
-
+            this.setState({clientError: null});
         } else {
             this.setState({picture: null});
         }
     },
     updateSection: function(section) {
-        this.setState({client_error:''});
+        this.setState({clientError: ''});
         this.submitActive = false;
         this.props.updateSection(section);
     },
@@ -798,7 +807,7 @@ var GeneralTab = React.createClass({
             this.value = '';
         });
 
-        this.setState(assign({}, this.getInitialState(), {client_error: null, server_error: null, email_error: null}));
+        this.setState(assign({}, this.getInitialState(), {clientError: null, serverError: null, emailError: null}));
         this.props.updateSection('');
     },
     componentDidMount: function() {
@@ -810,15 +819,24 @@ var GeneralTab = React.createClass({
     getInitialState: function() {
         var user = this.props.user;
 
-        return { username: user.username, first_name: user.first_name, last_name: user.last_name, nickname: user.nickname,
-                 email: user.email, picture: null };
+        return {username: user.username, firstName: user.first_name, lastName: user.last_name, nickname: user.nickname,
+                 email: user.email, picture: null, loadingPicture: false};
     },
     render: function() {
         var user = this.props.user;
 
-        var client_error = this.state.client_error ? this.state.client_error : null;
-        var server_error = this.state.server_error ? this.state.server_error : null;
-        var email_error = this.state.email_error ? this.state.email_error : null;
+        var clientError = null;
+        if (this.state.clientError) {
+            clientError = this.state.clientError;
+        }
+        var serverError = null;
+        if (this.state.serverError) {
+            serverError = this.state.serverError;
+        }
+        var emailError = null;
+        if (this.state.emailError) {
+            emailError = this.state.emailError;
+        }
 
         var nameSection;
         var self = this;
@@ -829,7 +847,7 @@ var GeneralTab = React.createClass({
                 <div className='form-group'>
                     <label className='col-sm-5 control-label'>First Name</label>
                     <div className='col-sm-7'>
-                        <input className='form-control' type='text' onChange={this.updateFirstName} value={this.state.first_name}/>
+                        <input className='form-control' type='text' onChange={this.updateFirstName} value={this.state.firstName}/>
                     </div>
                 </div>
             );
@@ -838,7 +856,7 @@ var GeneralTab = React.createClass({
                 <div className='form-group'>
                     <label className='col-sm-5 control-label'>Last Name</label>
                     <div className='col-sm-7'>
-                        <input className='form-control' type='text' onChange={this.updateLastName} value={this.state.last_name}/>
+                        <input className='form-control' type='text' onChange={this.updateLastName} value={this.state.lastName}/>
                     </div>
                 </div>
             );
@@ -848,8 +866,8 @@ var GeneralTab = React.createClass({
                     title='Full Name'
                     inputs={inputs}
                     submit={this.submitName}
-                    server_error={server_error}
-                    client_error={client_error}
+                    server_error={serverError}
+                    client_error={clientError}
                     updateSection={function(e) {
                         self.updateSection('');
                         e.preventDefault();
@@ -857,20 +875,20 @@ var GeneralTab = React.createClass({
                 />
             );
         } else {
-            var full_name = '';
+            var fullName = '';
 
             if (user.first_name && user.last_name) {
-                full_name = user.first_name + ' ' + user.last_name;
+                fullName = user.first_name + ' ' + user.last_name;
             } else if (user.first_name) {
-                full_name = user.first_name;
+                fullName = user.first_name;
             } else if (user.last_name) {
-                full_name = user.last_name;
+                fullName = user.last_name;
             }
 
             nameSection = (
                 <SettingItemMin
                     title='Full Name'
-                    describe={full_name}
+                    describe={fullName}
                     updateSection={function() {
                         self.updateSection('name');
                     }}
@@ -880,7 +898,6 @@ var GeneralTab = React.createClass({
 
         var nicknameSection;
         if (this.props.activeSection === 'nickname') {
-
             inputs.push(
                 <div className='form-group'>
                     <label className='col-sm-5 control-label'>{utils.isMobile() ? '' : 'Nickname'}</label>
@@ -895,8 +912,8 @@ var GeneralTab = React.createClass({
                     title='Nickname'
                     inputs={inputs}
                     submit={this.submitNickname}
-                    server_error={server_error}
-                    client_error={client_error}
+                    server_error={serverError}
+                    client_error={clientError}
                     updateSection={function(e) {
                         self.updateSection('');
                         e.preventDefault();
@@ -919,7 +936,7 @@ var GeneralTab = React.createClass({
         if (this.props.activeSection === 'username') {
             inputs.push(
                 <div className='form-group'>
-                    <label className='col-sm-5 control-label'>{utils.isMobile() ? '': 'Username'}</label>
+                    <label className='col-sm-5 control-label'>{utils.isMobile() ? '' : 'Username'}</label>
                     <div className='col-sm-7'>
                         <input className='form-control' type='text' onChange={this.updateUsername} value={this.state.username}/>
                     </div>
@@ -931,8 +948,8 @@ var GeneralTab = React.createClass({
                     title='Username'
                     inputs={inputs}
                     submit={this.submitUsername}
-                    server_error={server_error}
-                    client_error={client_error}
+                    server_error={serverError}
+                    client_error={clientError}
                     updateSection={function(e) {
                         self.updateSection('');
                         e.preventDefault();
@@ -966,8 +983,8 @@ var GeneralTab = React.createClass({
                     title='Email'
                     inputs={inputs}
                     submit={this.submitEmail}
-                    server_error={server_error}
-                    client_error={email_error}
+                    server_error={serverError}
+                    client_error={emailError}
                     updateSection={function(e) {
                         self.updateSection('');
                         e.preventDefault();
@@ -993,8 +1010,8 @@ var GeneralTab = React.createClass({
                     title='Profile Picture'
                     submit={this.submitPicture}
                     src={'/api/v1/users/' + user.id + '/image?time=' + user.last_picture_update}
-                    server_error={server_error}
-                    client_error={client_error}
+                    server_error={serverError}
+                    client_error={clientError}
                     updateSection={function(e) {
                         self.updateSection('');
                         e.preventDefault();
@@ -1002,6 +1019,7 @@ var GeneralTab = React.createClass({
                     picture={this.state.picture}
                     pictureChange={this.updatePicture}
                     submitActive={this.submitActive}
+                    loadingPicture={this.state.loadingPicture}
                 />
             );
         } else {

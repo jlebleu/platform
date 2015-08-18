@@ -279,32 +279,24 @@ module.exports.getAudits = function(userId, success, error) {
     });
 };
 
-module.exports.getMeSynchronous = function(success, error) {
-
-    var current_user = null;
+module.exports.getMe = function(success, error) {
 
     $.ajax({
-        async: false,
         url: "/api/v1/users/me",
         dataType: 'json',
         contentType: 'application/json',
         type: 'GET',
-        success: function(data, textStatus, xhr) {
-            current_user = data;
-            if (success) success(data, textStatus, xhr);
-        },
+        success: success,
         error: function(xhr, status, err) {
             var ieChecker = window.navigator.userAgent; // This and the condition below is used to check specifically for browsers IE10 & 11 to suppress a 200 'OK' error from appearing on login
             if (xhr.status != 200 || !(ieChecker.indexOf("Trident/7.0") > 0 || ieChecker.indexOf("Trident/6.0") > 0)) {
                 if (error) {
-                    e = handleError("getMeSynchronous", xhr, status, err);
+                    e = handleError("getMe", xhr, status, err);
                     error(e);
                 };
             };
         }
     });
-
-    return current_user;
 };
 
 module.exports.inviteMembers = function(data, success, error) {
@@ -548,18 +540,34 @@ module.exports.updateLastViewedAt = function(channelId, success, error) {
     });
 };
 
-module.exports.getChannels = function(success, error) {
+function getChannels(success, error) {
     $.ajax({
-        url: "/api/v1/channels/",
+        url: '/api/v1/channels/',
         dataType: 'json',
         type: 'GET',
         success: success,
         ifModified: true,
         error: function(xhr, status, err) {
-            e = handleError("getChannels", xhr, status, err);
+            var e = handleError('getChannels', xhr, status, err);
             error(e);
         }
     });
+}
+module.exports.getChannels = getChannels;
+
+module.exports.getChannel = function(id, success, error) {
+    $.ajax({
+        url: "/api/v1/channels/" + id + "/",
+        dataType: 'json',
+        type: 'GET',
+        success: success,
+        error: function(xhr, status, err) {
+            e = handleError("getChannel", xhr, status, err);
+            error(e);
+        }
+    });
+
+    module.exports.track('api', 'api_channel_get');
 };
 
 module.exports.getMoreChannels = function(success, error) {
@@ -575,6 +583,21 @@ module.exports.getMoreChannels = function(success, error) {
         }
     });
 };
+
+function getChannelCounts(success, error) {
+    $.ajax({
+        url: '/api/v1/channels/counts',
+        dataType: 'json',
+        type: 'GET',
+        success: success,
+        ifModified: true,
+        error: function(xhr, status, err) {
+            var e = handleError('getChannelCounts', xhr, status, err);
+            error(e);
+        }
+    });
+}
+module.exports.getChannelCounts = getChannelCounts;
 
 module.exports.getChannelExtraInfo = function(id, success, error) {
     $.ajax({
@@ -762,7 +785,7 @@ module.exports.getProfiles = function(success, error) {
 };
 
 module.exports.uploadFile = function(formData, success, error) {
-    $.ajax({
+    var request = $.ajax({
         url: "/api/v1/files/upload",
         type: 'POST',
         data: formData,
@@ -771,12 +794,16 @@ module.exports.uploadFile = function(formData, success, error) {
         processData: false,
         success: success,
         error: function(xhr, status, err) {
-            e = handleError("uploadFile", xhr, status, err);
-            error(e);
+            if (err !== 'abort') {
+                e = handleError("uploadFile", xhr, status, err);
+                error(e);
+            }
         }
     });
 
     module.exports.track('api', 'api_files_upload');
+
+    return request;
 };
 
 module.exports.getPublicLink = function(data, success, error) {
@@ -877,3 +904,17 @@ module.exports.dial = function(userName, number) {
         })
     });
 }
+function getConfig(success, error) {
+    $.ajax({
+        url: '/api/v1/config/get_all',
+        dataType: 'json',
+        type: 'GET',
+        ifModified: true,
+        success: success,
+        error: function(xhr, status, err) {
+            var e = handleError('getConfig', xhr, status, err);
+            error(e);
+        }
+    });
+};
+module.exports.getConfig = getConfig;
