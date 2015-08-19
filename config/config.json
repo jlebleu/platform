@@ -74,6 +74,7 @@
         "SMTPPassword": "",
         "SMTPServer": "",
 		"UseTLS": false,
+		"UseStartTLS": false,
         "FeedbackEmail": "",
         "FeedbackName": "",
         "ApplePushServer": "",
