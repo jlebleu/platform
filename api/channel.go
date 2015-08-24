@@ -58,6 +58,8 @@ func createChannel(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	channel.CreatorId = c.Session.UserId
+
 	if sc, err := CreateChannel(c, channel, true); err != nil {
 		c.Err = err
 		return
@@ -397,7 +399,7 @@ func JoinChannel(c *Context, channelId string, role string) {
 	}
 }
 
-func JoinDefaultChannels(c *Context, user *model.User, channelRole string) *model.AppError {
+func JoinDefaultChannels(user *model.User, channelRole string) *model.AppError {
 	// We don't call JoinChannel here since c.Session is not populated on user creation
 
 	var err *model.AppError = nil

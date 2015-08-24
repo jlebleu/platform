@@ -23,12 +23,31 @@ function getStateFromStores() {
     }
 
     var postList = PostStore.getCurrentPosts();
+    var deletedPosts = PostStore.getUnseenDeletedPosts(channel.id);
+
+    if (deletedPosts && Object.keys(deletedPosts).length > 0) {
+        for (var pid in deletedPosts) {
+            postList.posts[pid] = deletedPosts[pid];
+            postList.order.unshift(pid);
+        }
+
+        postList.order.sort(function postSort(a, b) {
+            if (postList.posts[a].create_at > postList.posts[b].create_at) {
+                return -1;
+            }
+            if (postList.posts[a].create_at < postList.posts[b].create_at) {
+                return 1;
+            }
+            return 0;
+        });
+    }
+
     var pendingPostList = PostStore.getPendingPosts(channel.id);
 
     if (pendingPostList) {
         postList.order = pendingPostList.order.concat(postList.order);
-        for (var pid in pendingPostList.posts) {
-            postList.posts[pid] = pendingPostList.posts[pid];
+        for (var ppid in pendingPostList.posts) {
+            postList.posts[ppid] = pendingPostList.posts[ppid];
         }
     }
 
@@ -56,6 +75,7 @@ module.exports = React.createClass({
             utils.changeCss('.mention-link', 'color: ' + user.props.theme + ';');
             utils.changeCss('@media(max-width: 768px){.search-bar__container', 'background: ' + user.props.theme + ';}');
             utils.changeCss('.search-item-container:hover', 'background: ' + utils.changeOpacity(user.props.theme, 0.05) + ';');
+            utils.changeCss('.nav-pills__unread-indicator', 'background: ' + utils.changeOpacity(user.props.theme, 0.05) + ';');
         }
 
         if (user.props.theme !== '#000000' && user.props.theme !== '#585858') {
@@ -88,7 +108,6 @@ module.exports = React.createClass({
             $('.modal-body').css('max-height', $(window).height() * 0.7);
         });
 
-        // Timeout exists for the DOM to fully render before making changes
         var self = this;
         $(window).resize(function resize() {
             $(postHolder).perfectScrollbar('update');
@@ -185,6 +204,7 @@ module.exports = React.createClass({
                 }
             }
             if (this.state.channel.id !== newState.channel.id) {
+                PostStore.clearUnseenDeletedPosts(this.state.channel.id);
                 this.scrolledToNew = false;
             }
             this.setState(newState);
@@ -220,23 +240,19 @@ module.exports = React.createClass({
                 activeRootPostId = activeRoot.id;
             }
 
-            if (this.state.channel.id === msg.channel_id) {
-                postList = this.state.postList;
-                if (!(msg.props.post_id in this.state.postList.posts)) {
-                    return;
-                }
+            post = JSON.parse(msg.props.post);
+            postList = this.state.postList;
 
-                delete postList.posts[msg.props.post_id];
-                var index = postList.order.indexOf(msg.props.post_id);
+            PostStore.storeUnseenDeletedPost(post);
+
+            if (postList.posts[post.id]) {
+                delete postList.posts[post.id];
+                var index = postList.order.indexOf(post.id);
                 if (index > -1) {
                     postList.order.splice(index, 1);
                 }
 
-                this.setState({postList: postList});
-
                 PostStore.storePosts(msg.channel_id, postList);
-            } else {
-                AsyncClient.getPosts(true, msg.channel_id);
             }
 
             if (activeRootPostId === msg.props.post_id && UserStore.getCurrentId() !== msg.user_id) {
@@ -318,7 +334,7 @@ module.exports = React.createClass({
         var lastViewed = Number.MAX_VALUE;
 
         if (ChannelStore.getCurrentMember() != null) {
-            lastViewed = ChannelStore.getCurrentMember().lastViewed_at;
+            lastViewed = ChannelStore.getCurrentMember().last_viewed_at;
         }
 
         if (this.state.postList != null) {
@@ -362,8 +378,8 @@ module.exports = React.createClass({
                                 <strong><UserProfile userId={teammate.id} /></strong>
                             </div>
                             <p className='channel-intro-text'>
-                                {'This is the start of your private message history with ' + teammateName + '.'}<br/>
-                                {'Private messages and files shared here are not shown to people outside this area.'}
+                                This is the start of your private message history with <strong>{teammateName}</strong>.<br/>
+                                Private messages and files shared here are not shown to people outside this area.
                             </p>
                             <a className='intro-links' href='#' style={userStyle} data-toggle='modal' data-target='#edit_channel' data-desc={channel.description} data-title={channel.display_name} data-channelid={channel.id}><i className='fa fa-pencil'></i>Set a description</a>
                         </div>
@@ -377,13 +393,22 @@ module.exports = React.createClass({
                 }
             } else if (channel.type === 'P' || channel.type === 'O') {
                 var uiName = channel.display_name;
-                var members = ChannelStore.getCurrentExtraInfo().members;
                 var creatorName = '';
 
-                for (var i = 0; i < members.length; i++) {
-                    if (members[i].roles.indexOf('admin') > -1) {
-                        creatorName = members[i].username;
-                        break;
+                if (channel.creator_id.length > 0) {
+                    var creator = UserStore.getProfile(channel.creator_id);
+                    if (creator) {
+                        creatorName = creator.username;
+                    }
+                }
+
+                if (creatorName === '') {
+                    var members = ChannelStore.getCurrentExtraInfo().members;
+                    for (var i = 0; i < members.length; i++) {
+                        if (members[i].roles.indexOf('admin') > -1) {
+                            creatorName = members[i].username;
+                            break;
+                        }
                     }
                 }
 
@@ -392,9 +417,9 @@ module.exports = React.createClass({
                         <div className='channel-intro'>
                             <h4 className='channel-intro__title'>Beginning of {uiName}</h4>
                             <p className='channel-intro__content'>
-                                Welcome to {uiName}!
+                                Welcome to <strong>{uiName}</strong>!
                                 <br/><br/>
-                                {'This is the first channel ' + strings.Team + 'mates see when they'}
+                                This is the first channel {strings.Team}mates see when they
                                 <br/>
                                 sign up - use it for posting updates everyone needs to know.
                                 <br/><br/>
@@ -410,7 +435,7 @@ module.exports = React.createClass({
                         <div className='channel-intro'>
                             <h4 className='channel-intro__title'>Beginning of {uiName}</h4>
                             <p className='channel-intro__content'>
-                                {'This is the start of ' + uiName + ', a channel for non-work-related conversations.'}
+                                This is the start of <strong>{uiName}</strong>, a channel for non-work-related conversations.
                                 <br/>
                             </p>
                             <a className='intro-links' href='#' style={userStyle} data-toggle='modal' data-target='#edit_channel' data-desc={channel.description} data-title={uiName} data-channelid={channel.id}><i className='fa fa-pencil'></i>Set a description</a>
@@ -429,7 +454,7 @@ module.exports = React.createClass({
 
                     var createMessage;
                     if (creatorName !== '') {
-                        createMessage = 'This is the start of the ' + uiName + ' ' + uiType + ', created by ' + creatorName + ' on ' + utils.displayDate(channel.create_at) + '.';
+                        createMessage = (<span>This is the start of the <strong>{uiName}</strong> {uiType}, created by <strong>{creatorName}</strong> on <strong>{utils.displayDate(channel.create_at)}</strong></span>);
                     } else {
                         createMessage = 'This is the start of the ' + uiName + ' ' + uiType + ', created on ' + utils.displayDate(channel.create_at) + '.';
                     }

@@ -79,18 +79,26 @@ Local Machine Setup (Docker)
 3. When docker is done fetching the image, open http://localhost:8065/ in your browser.
 
 ### Additional Notes ###
-- If you want to work with the latest bits in the repository (i.e. not a stable release) you can run the cmd:  
-`docker run --name mattermost-dev -d --publish 8065:80 mattermost/platform:dev`
+- If you want to work with the latest master from the repository (i.e. not a stable release) you can run the cmd:  
 
-- You can update to the latest bits by running:  
-`docker pull mattermost/platform:dev`
+	``` bash
+    docker run --name mattermost-dev -d --publish 8065:80 mattermost/platform:dev
+    ```
+
+- Instructions on how to update your docker image are found below. 
 
 - If you wish to remove mattermost-dev use:   
-	`docker stop mattermost-dev`
-	`docker rm -v mattermost-dev`
+
+	``` bash
+	docker stop mattermost-dev
+	docker rm -v mattermost-dev
+    ```
 
 - If you wish to gain access to a shell on the container use:  
-	`docker exec -ti mattermost-dev /bin/bash`
+
+	``` bash
+	docker exec -ti mattermost-dev /bin/bash
+    ```
 
 AWS Elastic Beanstalk Setup (Docker)
 ------------------------------------
@@ -123,6 +131,74 @@ There are a few configuration settings you might want to adjust when setting up 
 * *ServiceSettings*:*UseLocalStorage* - If this is set to true, then your Mattermost server will store uploaded files in the storage directory specified by *StorageDirectory*. *StorageDirectory* must be set if *UseLocalStorage* is set to true.  
 * *ServiceSettings*:*StorageDirectory* - The file path where files will be stored locally if *UseLocalStorage* is set to true. The operating system user that is running the Mattermost application must have read and write privileges to this directory.  
 * *AWSSettings*:*S3*\* - If *UseLocalStorage* is set to false, and the S3 settings are configured here, then Mattermost will store files in the provided S3 bucket.
+
+Email Setup (Optional)
+----------------------
+
+1. Setup an email sending service. If you already have credentials for a SMTP server you can skip this step.
+	1. [Setup Amazon Simple Email Service](https://console.aws.amazon.com/ses)
+	2. From the `SMTP Settings` menu click `Create My SMTP Credentials`
+	3. Copy the `Server Name`, `Port`, `SMTP Username`, and `SMTP Password`
+	4. From the `Domains` menu setup and verify a new domain. It it also a good practice to enable `Generate DKIM Settings` for this domain.
+	5. Choose an email address like `feedback@example.com` for Mattermost to send emails from.
+	6. Test sending an email from `feedback@example.com` by clicking the `Send a Test Email` button and verify everything appears to be working correctly.
+2. Modify the Mattermost configuration file config.json or config_docker.json with the SMTP information.
+	1. If you're running Mattermost on Amazon Beanstalk you can shell into the instance with the following commands
+	2. `ssh ec2-user@[domain for the docker instance]`
+	3. `sudo gpasswd -a ec2-user docker`
+	4. Retrieve the name of the container with `sudo docker ps`
+	5. `sudo docker exec -ti container_name /bin/bash`
+2. Edit the config file `vi /config_docker.json` with the settings you captured from the step above. See an example below and notice `ByPassEmail` has been set to `false`
+
+``` bash
+"EmailSettings": { 
+	"ByPassEmail" : false, 
+	"SMTPUsername": "AKIADTOVBGERKLCBV", 
+	"SMTPPassword": "jcuS8PuvcpGhpgHhlcpT1Mx42pnqMxQY", 
+	"SMTPServer": "email-smtp.us-east-1.amazonaws.com:465", 
+	"UseTLS": true, 
+	"FeedbackEmail": "feedback@example.com", 
+	"FeedbackName": "Feedback", 
+	"ApplePushServer": "", 
+	"ApplePushCertPublic": "", 
+	"ApplePushCertPrivate": ""
+}
+```
+
+3. Restart Mattermost
+	1. Find the process id with `ps -A` and look for the process named `platform`
+	2. Kill the process `kill pid`
+	3. The service should restart automatically. Verify the Mattermost service is running with `ps -A`
+	4. Current logged in users will not be affected, but upon logging out or session expiration users will be required to verify their email address.
+
+Upgrading Mattermost
+---------------------
+
+### Docker ###
+To upgrade your docker image to the latest release (NOTE: this will destroy all data in the docker container):
+
+1. Stop your docker container by running: 
+
+    ``` bash
+    docker stop mattermost-dev
+    ```
+2. Delete your docker container by running:
+
+    ``` bash
+    docker rm mattermost-dev
+    ```
+3. Update your docker image by running:
+
+    ``` bash
+    docker pull mattermost/platform
+    ```
+4. Start your docker container by running:
+
+    ``` bash
+    docker run --name mattermost-dev -d --publish 8065:80 mattermost/platform
+    ```
+
+To upgrade to the latest master from the repository replace `mattermost/platform` with `mattermost/platform:dev` in the above instructions.
 
 Contributing
 ------------
