@@ -153,7 +153,7 @@ func publishLastCall(lastCall *model.CallDetail, user *model.User) *model.AppErr
 }
 
 func createUser(c *Context, w http.ResponseWriter, r *http.Request) {
-	if !utils.Cfg.ServiceSettings.AllowEmailSignUp {
+	if utils.Cfg.ServiceSettings.DisableEmailSignUp {
 		c.Err = model.NewAppError("signupTeam", "User sign-up with email is disabled.", "")
 		c.Err.StatusCode = http.StatusNotImplemented
 		return
