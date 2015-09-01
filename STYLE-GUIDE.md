@@ -22,8 +22,8 @@ The following is an abridged version of the [Airbnb Javascript Style Guide](http
 
 ### Whitespace
 
-- Indentation is four spaces
-- Use a space before the leading brace
+- Indentation is four spaces.
+- Use a space before the leading brace.
 - Use one space between the comma and the next argument in a bracketed list. No other space.
 - Use whitespace to make code more readable.
 - Do not use more than one newline to separate code blocks. 
@@ -49,7 +49,7 @@ function myFunction ( parm1, parm2 ){
 
 ### Semicolons
 
-- You must use them always
+- You must use them always.
 
 ```javascript
 // Correct
@@ -85,14 +85,14 @@ var my_variable = 4;
 
 ```javascript
 // Correct
-if (somthing) {
+if (something) {
     stuff...;
 } else if (otherthing) {
     stuff...;
 }
 
 // Incorrect
-if (somthing)
+if (something)
 {
     stuff...;
 }
@@ -102,8 +102,8 @@ else
 }
 
 // Incorrect
-if (somthing) stuff...;
-if (somthing)
+if (something) stuff...;
+if (something)
     stuff...;
 
 ```

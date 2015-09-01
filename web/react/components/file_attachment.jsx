@@ -2,6 +2,7 @@
 // See License.txt for license information.
 
 var utils = require('../utils/utils.jsx');
+var Client = require('../utils/client.jsx');
 var Constants = require('../utils/constants.jsx');
 
 module.exports = React.createClass({
@@ -9,7 +10,7 @@ module.exports = React.createClass({
     canSetState: false,
     propTypes: {
         // a list of file pathes displayed by the parent FileAttachmentList
-        filenames: React.PropTypes.arrayOf(React.PropTypes.string).isRequired,
+        filename: React.PropTypes.string.isRequired,
         // the index of this attachment preview in the parent FileAttachmentList
         index: React.PropTypes.number.isRequired,
         // the identifier of the modal dialog used to preview files
@@ -21,9 +22,17 @@ module.exports = React.createClass({
         return {fileSize: -1};
     },
     componentDidMount: function() {
+        this.loadFiles();
+    },
+    componentDidUpdate: function(prevProps) {
+        if (this.props.filename !== prevProps.filename) {
+            this.loadFiles();
+        }
+    },
+    loadFiles: function() {
         this.canSetState = true;
 
-        var filename = this.props.filenames[this.props.index];
+        var filename = this.props.filename;
 
         if (filename) {
             var fileInfo = utils.splitFileLocation(filename);
@@ -70,6 +79,10 @@ module.exports = React.createClass({
         this.canSetState = false;
     },
     shouldComponentUpdate: function(nextProps, nextState) {
+        if (!utils.areStatesEqual(nextProps, this.props)) {
+            return true;
+        }
+
         // the only time this object should update is when it receives an updated file size which we can usually handle without re-rendering
         if (nextState.fileSize != this.state.fileSize) {
             if (this.refs.fileSize) {
@@ -86,8 +99,7 @@ module.exports = React.createClass({
         }
     },
     render: function() {
-        var filenames = this.props.filenames;
-        var filename = filenames[this.props.index];
+        var filename = this.props.filename;
 
         var fileInfo = utils.splitFileLocation(filename);
         var type = utils.getFileType(fileInfo.ext);
@@ -103,12 +115,16 @@ module.exports = React.createClass({
         if (this.state.fileSize < 0) {
             var self = this;
 
-            // asynchronously request the size of the file so that we can display it next to the thumbnail
-            utils.getFileSize(utils.getFileUrl(filename), function(fileSize) {
-                if (self.canSetState) {
-                    self.setState({fileSize: fileSize});
+            Client.getFileInfo(
+                filename,
+                function(data) {
+                    if (self.canSetState) {
+                        self.setState({fileSize: parseInt(data["size"], 10)});
+                    }
+                },
+                function(err) {
                 }
-            });
+            );
         } else {
             fileSizeString = utils.fileSizeToString(this.state.fileSize);
         }

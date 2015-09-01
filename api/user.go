@@ -153,6 +153,11 @@ func publishLastCall(lastCall *model.CallDetail, user *model.User) *model.AppErr
 }
 
 func createUser(c *Context, w http.ResponseWriter, r *http.Request) {
+	if !utils.Cfg.ServiceSettings.AllowEmailSignUp {
+		c.Err = model.NewAppError("signupTeam", "User sign-up with email is disabled.", "")
+		c.Err.StatusCode = http.StatusNotImplemented
+		return
+	}
 
 	user := model.UserFromJson(r.Body)
 
@@ -276,7 +281,7 @@ func CreateUser(c *Context, team *model.Team, user *model.User) *model.User {
 
 	if result := <-Srv.Store.User().Save(user); result.Err != nil {
 		c.Err = result.Err
-		l4g.Error("Filae err=%v", result.Err)
+		l4g.Error("Couldn't save the user err=%v", result.Err)
 		return nil
 	} else {
 		ruser := result.Data.(*model.User)
@@ -1520,4 +1525,19 @@ func AuthorizeOAuthUser(service, code, state, redirectUri string) (io.ReadCloser
 		}
 	}
 
+}
+
+func IsUsernameTaken(name string, teamId string) bool {
+
+	if !model.IsValidUsername(name) {
+		return false
+	}
+
+	if result := <-Srv.Store.User().GetByUsername(teamId, name); result.Err != nil {
+		return false
+	} else {
+		return true
+	}
+
+	return false
 }

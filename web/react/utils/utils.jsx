@@ -175,7 +175,7 @@ module.exports.displayTime = function(ticks) {
         hours = '12';
     }
     if (minutes <= 9) {
-        minutes = 0 + minutes;
+        minutes = '0' + minutes;
     }
     return hours + ':' + minutes + ' ' + ampm;
 };
@@ -260,10 +260,40 @@ module.exports.escapeRegExp = function(string) {
     return string.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, '\\$1');
 };
 
+function handleYoutubeTime(link) {
+    var timeRegex = /[\\?&]t=([0-9hms]+)/;
+
+    var time = link.trim().match(timeRegex);
+    if (!time || !time[1]) {
+        return '';
+    }
+
+    var hours = time[1].match(/([0-9]+)h/);
+    var minutes = time[1].match(/([0-9]+)m/);
+    var seconds = time[1].match(/([0-9]+)s/);
+
+    var ticks = 0;
+
+    if (hours && hours[1]) {
+        ticks += parseInt(hours[1], 10) * 3600;
+    }
+
+    if (minutes && minutes[1]) {
+        ticks += parseInt(minutes[1], 10) * 60;
+    }
+
+    if (seconds && seconds[1]) {
+        ticks += parseInt(seconds[1], 10);
+    }
+
+    return '&start=' + ticks.toString();
+}
+
 function getYoutubeEmbed(link) {
     var regex = /.*(?:youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|watch\?(?:[a-zA-Z-_]+=[a-zA-Z0-9-_]+&)+v=)([^#\&\?]*).*/;
 
     var youtubeId = link.trim().match(regex)[1];
+    var time = handleYoutubeTime(link);
 
     function onClick(e) {
         var div = $(e.target).closest('.video-thumbnail__container')[0];
@@ -271,7 +301,8 @@ function getYoutubeEmbed(link) {
         iframe.setAttribute('src',
                             'https://www.youtube.com/embed/' +
                             div.id +
-                            '?autoplay=1&autohide=1&border=0&wmode=opaque&fs=1&enablejsapi=1');
+                            '?autoplay=1&autohide=1&border=0&wmode=opaque&fs=1&enablejsapi=1' +
+                            time);
         iframe.setAttribute('width', '480px');
         iframe.setAttribute('height', '360px');
         iframe.setAttribute('type', 'text/html');
@@ -286,10 +317,10 @@ function getYoutubeEmbed(link) {
             return;
         }
         var metadata = data.items[0].snippet;
+        $('.video-type.' + youtubeId).html("Youtube - ")
         $('.video-uploader.' + youtubeId).html(metadata.channelTitle);
         $('.video-title.' + youtubeId).find('a').html(metadata.title);
         $('.post-list-holder-by-time').scrollTop($('.post-list-holder-by-time')[0].scrollHeight);
-        $('.post-list-holder-by-time').perfectScrollbar('update');
     }
 
     if (config.GoogleDeveloperKey) {
@@ -304,9 +335,11 @@ function getYoutubeEmbed(link) {
 
     return (
         <div className='post-comment'>
-            <h4 className='video-type'>YouTube</h4>
+            <h4>
+                <span className={'video-type ' + youtubeId}>YouTube</span>
+                <span className={'video-title ' + youtubeId}><a href={link}></a></span>
+            </h4>
             <h4 className={'video-uploader ' + youtubeId}></h4>
-            <h4 className={'video-title ' + youtubeId}><a href={link}></a></h4>
             <div className='video-div embed-responsive-item' id={youtubeId} onClick={onClick}>
                 <div className='embed-responsive embed-responsive-4by3 video-div__placeholder'>
                     <div id={youtubeId} className='video-thumbnail__container'>
@@ -457,9 +490,21 @@ module.exports.textToJsx = function(text, options) {
             var mentionRegex = /^(?:@)([a-z0-9_]+)$/gi; // looks loop invariant but a weird JS bug needs it to be redefined here
             var explicitMention = mentionRegex.exec(trimWord);
 
-            if ((trimWord.toLowerCase().indexOf(searchTerm) > -1 || word.toLowerCase().indexOf(searchTerm) > -1) && searchTerm != '') {
-
-                highlightSearchClass = ' search-highlight';
+            if (searchTerm !== '') {
+                let searchWords = searchTerm.split(' ');
+                for (let idx in searchWords) {
+                    let searchWord = searchWords[idx];
+                    if (searchWord === word.toLowerCase() || searchWord === trimWord.toLowerCase()) {
+                        highlightSearchClass = ' search-highlight';
+                        break;
+                    } else if (searchWord.charAt(searchWord.length - 1) === '*') {
+                        let searchWordPrefix = searchWord.slice(0,-1);
+                        if (trimWord.toLowerCase().indexOf(searchWordPrefix) > -1 || word.toLowerCase().indexOf(searchWordPrefix) > -1) {
+                            highlightSearchClass = ' search-highlight';
+                            break;
+                        }
+                    }
+                }
             }
 
             if (explicitMention &&
@@ -602,23 +647,6 @@ module.exports.splitFileLocation = function(fileLocation) {
     var filename = filePath.split('/')[filePath.split('/').length - 1];
 
     return {ext: ext, name: filename, path: filePath};
-};
-
-// Asynchronously gets the size of a file by requesting its headers. If successful, it calls the
-// provided callback with the file size in bytes as the argument.
-module.exports.getFileSize = function(url, callback) {
-    var request = new XMLHttpRequest();
-
-    request.open('HEAD', url, true);
-    request.onreadystatechange = function onReadyStateChange() {
-        if (request.readyState === 4 && request.status === 200) {
-            if (callback) {
-                callback(parseInt(request.getResponseHeader('content-length'), 10));
-            }
-        }
-    };
-
-    request.send();
 };
 
 module.exports.toTitleCase = function(str) {
@@ -782,7 +810,7 @@ function switchChannel(channel, teammateName) {
 
     AsyncClient.getChannels(true, true, true);
     AsyncClient.getChannelExtraInfo(true);
-    AsyncClient.getPosts(true, channel.id, Constants.POST_CHUNK_SIZE);
+    AsyncClient.getPosts(channel.id);
 
     $('.inner__wrap').removeClass('move--right');
     $('.sidebar--left').removeClass('move--right');
@@ -1002,6 +1030,21 @@ module.exports.generateId = function() {
 
 module.exports.isBrowserFirefox = function() {
     return navigator && navigator.userAgent && navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
+};
+
+// Checks if browser is IE10 or IE11
+module.exports.isBrowserIE = function() {
+    if (window.navigator && window.navigator.userAgent) {
+        var ua = window.navigator.userAgent;
+
+        return ua.indexOf('Trident/7.0') > 0 || ua.indexOf('Trident/6.0') > 0;
+    }
+
+    return false;
+};
+
+module.exports.isBrowserEdge = function() {
+    return window.naviagtor && navigator.userAgent && navigator.userAgent.toLowerCase().indexOf('edge') > -1;
 };
 
 // Used to get the id of the other user from a DM channel

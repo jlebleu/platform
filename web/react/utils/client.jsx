@@ -70,6 +70,21 @@ module.exports.createTeamFromSignup = function(teamSignup, success, error) {
     });
 };
 
+module.exports.createTeamWithSSO = function(team, service, success, error) {
+    $.ajax({
+        url: '/api/v1/teams/create_with_sso/' + service,
+        dataType: 'json',
+        contentType: 'application/json',
+        type: 'POST',
+        data: JSON.stringify(team),
+        success: success,
+        error: function onError(xhr, status, err) {
+            var e = handleError('createTeamWithSSO', xhr, status, err);
+            error(e);
+        }
+    });
+};
+
 module.exports.createUser = function(user, data, emailHash, success, error) {
     $.ajax({
         url: '/api/v1/users/create?d=' + encodeURIComponent(data) + '&h=' + encodeURIComponent(emailHash),
@@ -252,6 +267,7 @@ module.exports.revokeSession = function(altId, success, error) {
 
 module.exports.getSessions = function(userId, success, error) {
     $.ajax({
+        cache: false,
         url: '/api/v1/users/' + userId + '/sessions',
         dataType: 'json',
         contentType: 'application/json',
@@ -282,6 +298,7 @@ module.exports.getMeSynchronous = function(success, error) {
     var currentUser = null;
     $.ajax({
         async: false,
+        cache: false,
         url: '/api/v1/users/me',
         dataType: 'json',
         contentType: 'application/json',
@@ -293,12 +310,9 @@ module.exports.getMeSynchronous = function(success, error) {
             }
         },
         error: function onError(xhr, status, err) {
-            var ieChecker = window.navigator.userAgent; // This and the condition below is used to check specifically for browsers IE10 & 11 to suppress a 200 'OK' error from appearing on login
-            if (xhr.status !== 200 || !(ieChecker.indexOf('Trident/7.0') > 0 || ieChecker.indexOf('Trident/6.0') > 0)) {
-                if (error) {
-                    var e = handleError('getMeSynchronous', xhr, status, err);
-                    error(e);
-                }
+            if (error) {
+                var e = handleError('getMeSynchronous', xhr, status, err);
+                error(e);
             }
         }
     });
@@ -566,6 +580,7 @@ module.exports.updateLastViewedAt = function(channelId, success, error) {
 
 function getChannels(success, error) {
     $.ajax({
+        cache: false,
         url: '/api/v1/channels/',
         dataType: 'json',
         type: 'GET',
@@ -581,6 +596,7 @@ module.exports.getChannels = getChannels;
 
 module.exports.getChannel = function(id, success, error) {
     $.ajax({
+        cache: false,
         url: '/api/v1/channels/' + id + '/',
         dataType: 'json',
         type: 'GET',
@@ -610,6 +626,7 @@ module.exports.getMoreChannels = function(success, error) {
 
 function getChannelCounts(success, error) {
     $.ajax({
+        cache: false,
         url: '/api/v1/channels/counts',
         dataType: 'json',
         type: 'GET',
@@ -651,9 +668,25 @@ module.exports.executeCommand = function(channelId, command, suggest, success, e
     });
 };
 
-module.exports.getPosts = function(channelId, offset, limit, success, error, complete) {
+module.exports.getPostsPage = function(channelId, offset, limit, success, error, complete) {
     $.ajax({
+        cache: false,
         url: '/api/v1/channels/' + channelId + '/posts/' + offset + '/' + limit,
+        dataType: 'json',
+        type: 'GET',
+        ifModified: true,
+        success: success,
+        error: function onError(xhr, status, err) {
+            var e = handleError('getPosts', xhr, status, err);
+            error(e);
+        },
+        complete: complete
+    });
+};
+
+module.exports.getPosts = function(channelId, since, success, error, complete) {
+    $.ajax({
+        url: '/api/v1/channels/' + channelId + '/posts/' + since,
         dataType: 'json',
         type: 'GET',
         ifModified: true,
@@ -668,6 +701,7 @@ module.exports.getPosts = function(channelId, offset, limit, success, error, com
 
 module.exports.getPost = function(channelId, postId, success, error) {
     $.ajax({
+        cache: false,
         url: '/api/v1/channels/' + channelId + '/post/' + postId,
         dataType: 'json',
         type: 'GET',
@@ -791,6 +825,7 @@ module.exports.removeChannelMember = function(id, data, success, error) {
 
 module.exports.getProfiles = function(success, error) {
     $.ajax({
+        cache: false,
         url: '/api/v1/users/profiles',
         dataType: 'json',
         contentType: 'application/json',
@@ -824,6 +859,20 @@ module.exports.uploadFile = function(formData, success, error) {
     module.exports.track('api', 'api_files_upload');
 
     return request;
+};
+
+module.exports.getFileInfo = function(filename, success, error) {
+    $.ajax({
+        url: '/api/v1/files/get_info' + filename,
+        dataType: 'json',
+        contentType: 'application/json',
+        type: 'GET',
+        success: success,
+        error: function onError(xhr, status, err) {
+            var e = handleError('getFileInfo', xhr, status, err);
+            error(e);
+        }
+    });
 };
 
 module.exports.getPublicLink = function(data, success, error) {

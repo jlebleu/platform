@@ -3,6 +3,8 @@
 
 var Client = require('../utils/client.jsx');
 var AsyncClient = require('../utils/async_client.jsx');
+var Constants = require('../utils/constants.jsx');
+var utils = require('../utils/utils.jsx');
 var Textbox = require('./textbox.jsx');
 var BrowserStore = require('../stores/browser_store.jsx');
 
@@ -25,7 +27,7 @@ module.exports = React.createClass({
 
         Client.updatePost(updatedPost,
             function(data) {
-                AsyncClient.getPosts(true, this.state.channel_id);
+                AsyncClient.getPosts(this.state.channel_id);
                 window.scrollTo(0, 0);
             }.bind(this),
             function(err) {
@@ -34,9 +36,10 @@ module.exports = React.createClass({
         );
 
         $("#edit_post").modal('hide');
+        $(this.state.refocusId).focus();
     },
-    handleEditInput: function(editText) {
-        this.setState({ editText: editText });
+    handleEditInput: function(editMessage) {
+        this.setState({editText: editMessage});
     },
     handleEditKeyPress: function(e) {
         if (e.which == 13 && !e.shiftKey && !e.altKey) {
@@ -52,12 +55,12 @@ module.exports = React.createClass({
         var self = this;
 
         $(this.refs.modal.getDOMNode()).on('hidden.bs.modal', function(e) {
-            self.setState({ editText: "", title: "", channel_id: "", post_id: "", comments: 0 });
+            self.setState({editText: "", title: "", channel_id: "", post_id: "", comments: 0, refocusId: "", error: ''});
         });
 
         $(this.refs.modal.getDOMNode()).on('show.bs.modal', function(e) {
             var button = e.relatedTarget;
-            self.setState({ editText: $(button).attr('data-message'), title: $(button).attr('data-title'), channel_id: $(button).attr('data-channelid'), post_id: $(button).attr('data-postid'), comments: $(button).attr('data-comments') });
+            self.setState({ editText: $(button).attr('data-message'), title: $(button).attr('data-title'), channel_id: $(button).attr('data-channelid'), post_id: $(button).attr('data-postid'), comments: $(button).attr('data-comments'), refocusId: $(button).attr('data-refoucsid') });
         });
 
         $(this.refs.modal.getDOMNode()).on('shown.bs.modal', function(e) {
@@ -65,10 +68,10 @@ module.exports = React.createClass({
         });
     },
     getInitialState: function() {
-        return { editText: "", title: "", post_id: "", channel_id: "", comments: 0 };
+        return { editText: "", title: "", post_id: "", channel_id: "", comments: 0, refocusId: "" };
     },
     render: function() {
-        var error = this.state.error ? <div className='form-group has-error'><label className='control-label'>{ this.state.error }</label></div> : null;
+        var error = this.state.error ? <div className='form-group has-error'><br /><label className='control-label'>{ this.state.error }</label></div> : <div className='form-group'><br /></div>;
 
         return (
             <div className="modal fade edit-modal" ref="modal" id="edit_post" role="dialog" tabIndex="-1" aria-hidden="true">

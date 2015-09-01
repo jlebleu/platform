@@ -162,16 +162,35 @@ module.exports = React.createClass({
            );
         }
 
-        if (authServices.indexOf(Constants.GOOGLE_SERVICE) >= 0) {
-            signupMessage.push(
-                    <a className='btn btn-custom-login google' href={'/' + this.props.teamName + '/signup/google' + window.location.search}>
-                        <span className='icon' />
-                        <span>with Google</span>
-                    </a>
-           );
+        var emailSignup;
+        if (authServices.indexOf(Constants.EMAIL_SERVICE) !== -1) {
+            emailSignup = (
+                <div>
+                    <div className='inner__content'>
+                        {email}
+                        {yourEmailIs}
+                        <div className='margin--extra'>
+                            <h5><strong>Choose your username</strong></h5>
+                            <div className={nameDivStyle}>
+                                <input type='text' ref='name' className='form-control' placeholder='' maxLength='128' />
+                                {nameError}
+                                <p className='form__hint'>Username must begin with a letter, and contain between 3 to 15 lowercase characters made up of numbers, letters, and the symbols '.', '-' and '_'</p>
+                            </div>
+                        </div>
+                        <div className='margin--extra'>
+                            <h5><strong>Choose your password</strong></h5>
+                            <div className={passwordDivStyle}>
+                            <input type='password' ref='password' className='form-control' placeholder='' maxLength='128' />
+                            {passwordError}
+                        </div>
+                        </div>
+                    </div>
+                    <p className='margin--extra'><button type='submit' onClick={this.handleSubmit} className='btn-primary btn'>Create Account</button></p>
+                </div>
+            );
         }
 
-        if (signupMessage.length > 0) {
+        if (signupMessage.length > 0 && emailSignup) {
             signupMessage = (
                 <div>
                     {signupMessage}
@@ -196,26 +215,7 @@ module.exports = React.createClass({
                     <h2 className='signup-team__subdomain'>on {config.SiteName}</h2>
                     <h4 className='color--light'>Let's create your account</h4>
                     {signupMessage}
-                    <div className='inner__content'>
-                        {email}
-                        {yourEmailIs}
-                        <div className='margin--extra'>
-                            <h5><strong>Choose your username</strong></h5>
-                            <div className={nameDivStyle}>
-                                <input type='text' ref='name' className='form-control' placeholder='' maxLength='128' />
-                                {nameError}
-                                <p className='form__hint'>Username must begin with a letter, and contain between 3 to 15 lowercase characters made up of numbers, letters, and the symbols '.', '-' and '_'</p>
-                            </div>
-                        </div>
-                        <div className='margin--extra'>
-                            <h5><strong>Choose your password</strong></h5>
-                            <div className={passwordDivStyle}>
-                            <input type='password' ref='password' className='form-control' placeholder='' maxLength='128' />
-                            {passwordError}
-                        </div>
-                        </div>
-                    </div>
-                    <p className='margin--extra'><button type='submit' onClick={this.handleSubmit} className='btn-primary btn'>Create Account</button></p>
+                    {emailSignup}
                     {serverError}
                     {termsDisclaimer}
                 </form>
