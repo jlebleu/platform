@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y \
 ENV GOLANG_VERSION 1.4.2
 
 RUN curl -sSL https://golang.org/dl/go$GOLANG_VERSION.src.tar.gz \
-		| tar -v -C /usr/src -xz
+        | tar -v -C /usr/src -xz
 
 RUN cd /usr/src/go/src && ./make.bash --no-clean 2>&1
 
@@ -41,16 +41,3 @@ ADD . /go/src/github.com/mattermost/platform
 
 # Insert postfix config
 ADD ./docker/main.cf /etc/postfix/
-
-RUN go get github.com/tools/godep
-RUN cd /go/src/github.com/mattermost/platform;godep go install 
-RUN cd /go/src/github.com/mattermost/platform/web/react; npm install
-
-RUN chmod +x /go/src/github.com/mattermost/platform/docker/mattermost-entry.sh
-ENTRYPOINT /go/src/github.com/mattermost/platform/docker/mattermost-entry.sh
-
-# Create default storage directory
-RUN mkdir /mattermost/
-
-# Ports
-EXPOSE 80
