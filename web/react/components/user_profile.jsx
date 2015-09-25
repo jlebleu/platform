@@ -74,7 +74,7 @@ export default class UserProfile extends React.Component {
                 data-toggle='popover'
                 data-content={dataContent}
                 data-original-title={this.state.profile.username}
-                onClick={this.dial}>
+                onClick={this.dial}
             >
                 {name}
             </div>
