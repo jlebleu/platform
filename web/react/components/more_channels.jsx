@@ -6,6 +6,7 @@ var client = require('../utils/client.jsx');
 var asyncClient = require('../utils/async_client.jsx');
 var ChannelStore = require('../stores/channel_store.jsx');
 var LoadingScreen = require('./loading_screen.jsx');
+var NewChannelFlow = require('./new_channel_flow.jsx');
 
 function getStateFromStores() {
     return {
@@ -25,16 +26,17 @@ export default class MoreChannels extends React.Component {
         var initState = getStateFromStores();
         initState.channelType = '';
         initState.joiningChannel = -1;
+        initState.showNewChannelModal = false;
         this.state = initState;
     }
     componentDidMount() {
         ChannelStore.addMoreChangeListener(this.onListenerChange);
-        $(this.refs.modal.getDOMNode()).on('shown.bs.modal', function shown() {
+        $(React.findDOMNode(this.refs.modal)).on('shown.bs.modal', function shown() {
             asyncClient.getMoreChannels(true);
         });
 
         var self = this;
-        $(this.refs.modal.getDOMNode()).on('show.bs.modal', function show(e) {
+        $(React.findDOMNode(this.refs.modal)).on('show.bs.modal', function show(e) {
             var button = e.relatedTarget;
             self.setState({channelType: $(button).attr('data-channeltype')});
         });
@@ -52,7 +54,7 @@ export default class MoreChannels extends React.Component {
         this.setState({joiningChannel: channelIndex});
         client.joinChannel(channel.id,
             function joinSuccess() {
-                $(this.refs.modal.getDOMNode()).modal('hide');
+                $(React.findDOMNode(this.refs.modal)).modal('hide');
                 asyncClient.getChannel(channel.id);
                 utils.switchChannel(channel);
                 this.setState({joiningChannel: -1});
@@ -65,7 +67,8 @@ export default class MoreChannels extends React.Component {
         );
     }
     handleNewChannel() {
-        $(this.refs.modal.getDOMNode()).modal('hide');
+        $(React.findDOMNode(this.refs.modal)).modal('hide');
+        this.setState({showNewChannelModal: true});
     }
     render() {
         var serverError;
@@ -86,15 +89,21 @@ export default class MoreChannels extends React.Component {
                                 {channels.map(function cMap(channel, index) {
                                     var joinButton;
                                     if (self.state.joiningChannel === index) {
-                                        joinButton = (<img
-                                                        className='join-channel-loading-gif'
-                                                        src='/static/images/load.gif'
-                                                    />);
+                                        joinButton = (
+                                            <img
+                                                className='join-channel-loading-gif'
+                                                src='/static/images/load.gif'
+                                            />
+                                            );
                                     } else {
-                                        joinButton = (<button
-                                                        onClick={self.handleJoin.bind(self, channel, index)}
-                                                        className='btn btn-primary'>Join
-                                                    </button>);
+                                        joinButton = (
+                                            <button
+                                                onClick={self.handleJoin.bind(self, channel, index)}
+                                                className='btn btn-primary'
+                                            >
+                                                Join
+                                            </button>
+                                            );
                                     }
 
                                     return (
@@ -142,18 +151,22 @@ export default class MoreChannels extends React.Component {
                                 className='close'
                                 data-dismiss='modal'
                             >
-                                <span aria-hidden='true'>&times;</span>
-                                <span className='sr-only'>Close</span>
+                                <span aria-hidden='true'>{'×'}</span>
+                                <span className='sr-only'>{'Close'}</span>
                             </button>
-                            <h4 className='modal-title'>More Channels</h4>
+                            <h4 className='modal-title'>{'More Channels'}</h4>
                             <button
-                                data-toggle='modal'
-                                data-target='#new_channel'
-                                data-channeltype={this.state.channelType}
                                 type='button'
                                 className='btn btn-primary channel-create-btn'
-                                onClick={this.handleNewChannel}>Create New Channel
+                                onClick={this.handleNewChannel}
+                            >
+                                {'Create New Channel'}
                             </button>
+                            <NewChannelFlow
+                                show={this.state.showNewChannelModal}
+                                channelType={this.state.channelType}
+                                onModalDismissed={() => this.setState({showNewChannelModal: false})}
+                            />
                         </div>
                         <div className='modal-body'>
                             {moreChannels}
@@ -165,7 +178,7 @@ export default class MoreChannels extends React.Component {
                                 className='btn btn-default'
                                 data-dismiss='modal'
                             >
-                                Close
+                                {'Close'}
                             </button>
                         </div>
                     </div>

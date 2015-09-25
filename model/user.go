@@ -13,9 +13,8 @@ import (
 )
 
 const (
-	ROLE_ADMIN           = "admin"
+	ROLE_TEAM_ADMIN      = "admin"
 	ROLE_SYSTEM_ADMIN    = "system_admin"
-	ROLE_SYSTEM_SUPPORT  = "system_support"
 	USER_AWAY_TIMEOUT    = 5 * 60 * 1000 // 5 minutes
 	USER_OFFLINE_TIMEOUT = 1 * 60 * 1000 // 1 minute
 	USER_OFFLINE         = "offline"
@@ -272,6 +271,62 @@ func (u *User) GetDisplayName() string {
 	}
 }
 
+func IsValidRoles(userRoles string) bool {
+
+	roles := strings.Split(userRoles, " ")
+
+	for _, r := range roles {
+		if !isValidRole(r) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func isValidRole(role string) bool {
+	if role == "" {
+		return true
+	}
+
+	if role == ROLE_TEAM_ADMIN {
+		return true
+	}
+
+	if role == ROLE_SYSTEM_ADMIN {
+		return true
+	}
+
+	return false
+}
+
+func (u *User) IsInRole(inRole string) bool {
+	return IsInRole(u.Roles, inRole)
+}
+
+func IsInRole(userRoles string, inRole string) bool {
+	roles := strings.Split(userRoles, " ")
+
+	for _, r := range roles {
+		if r == inRole {
+			return true
+		}
+
+	}
+
+	return false
+}
+
+func (u *User) PreExport() {
+	u.Password = ""
+	u.AuthData = ""
+	u.LastActivityAt = 0
+	u.LastPingAt = 0
+	u.LastPasswordUpdate = 0
+	u.LastPictureUpdate = 0
+	u.FailedAttempts = 0
+}
+
 // UserFromJson will decode the input and return a User
 func UserFromJson(data io.Reader) *User {
 	decoder := json.NewDecoder(data)
@@ -323,11 +378,6 @@ func ComparePassword(hash string, password string) bool {
 
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
-}
-
-func IsUsernameValid(username string) bool {
-
-	return true
 }
 
 var validUsernameChars = regexp.MustCompile(`^[a-z0-9\.\-_]+$`)

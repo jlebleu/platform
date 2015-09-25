@@ -21,9 +21,9 @@ export default class ChooseAuthPage extends React.Component {
                                 this.props.updatePage('service', Constants.GITLAB_SERVICE);
                             }.bind(this)
                         }
-                        >
+                    >
                         <span className='icon' />
-                        <span>Create new {strings.Team} with GitLab Account</span>
+                        <span>Create new team with GitLab Account</span>
                     </a>
             );
         }
@@ -39,9 +39,9 @@ export default class ChooseAuthPage extends React.Component {
                                 this.props.updatePage('email', '');
                             }.bind(this)
                         }
-                        >
+                    >
                         <span className='fa fa-envelope' />
-                        <span>Create new {strings.Team} with email address</span>
+                        <span>Create new team with email address</span>
                     </a>
             );
         }
@@ -54,7 +54,7 @@ export default class ChooseAuthPage extends React.Component {
             <div>
                 {buttons}
                 <div className='form-group margin--extra-2x'>
-                    <span><a href='/find_team'>{'Find my ' + strings.Team}</a></span>
+                    <span><a href='/find_team'>{'Find my team'}</a></span>
                 </div>
             </div>
         );

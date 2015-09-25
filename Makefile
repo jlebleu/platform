@@ -3,9 +3,11 @@
 GOPATH ?= $(GOPATH:)
 GOFLAGS ?= $(GOFLAGS:)
 BUILD_NUMBER ?= $(BUILD_NUMBER:)
+BUILD_DATE = $(shell date -u)
+BUILD_HASH = $(shell git rev-parse HEAD)
 
 GO=$(GOPATH)/bin/godep go
-ESLINT=web/react/node_modules/eslint/bin/eslint.js
+ESLINT=node_modules/eslint/bin/eslint.js
 
 ifeq ($(BUILD_NUMBER),)
 	BUILD_NUMBER := dev
@@ -32,13 +34,34 @@ all: travis
 travis:
 	@echo building for travis
 
+	if [ "$(TRAVIS_DB)" = "postgres" ]; then \
+		sed -i'.bak' 's|mysql|postgres|g' config/config.json; \
+		sed -i'.bak' 's|mmuser:mostest@tcp(dockerhost:3306)/mattermost_test?charset=utf8mb4,utf8|postgres://mmuser:mostest@dockerhost:5432/mattermost_test?sslmode=disable\&connect_timeout=10|g' config/config.json; \
+	fi
+
 	rm -Rf $(DIST_ROOT)
 	@$(GO) clean $(GOFLAGS) -i ./...
 
 	@cd web/react/ && npm install
 
+	@echo Checking for style guide compliance
+	cd web/react && $(ESLINT) --quiet components/* dispatcher/* pages/* stores/* utils/*
+	@echo Running gofmt
+	$(eval GOFMT_OUTPUT := $(shell gofmt -d -s api/ model/ store/ utils/ manualtesting/ mattermost.go 2>&1))
+	@echo "$(GOFMT_OUTPUT)"
+	@if [ ! "$(GOFMT_OUTPUT)" ]; then \
+		echo "gofmt sucess"; \
+	else \
+		echo "gofmt failure"; \
+		exit 1; \
+	fi
+
+	@sed -i'.bak' 's|_BUILD_NUMBER_|$(BUILD_NUMBER)|g' ./model/version.go
+	@sed -i'.bak' 's|_BUILD_DATE_|$(BUILD_DATE)|g' ./model/version.go
+	@sed -i'.bak' 's|_BUILD_HASH_|$(BUILD_HASH)|g' ./model/version.go
+
 	@$(GO) build $(GOFLAGS) ./...
-	@$(GO) install $(GOFLAGS) -a ./...
+	@$(GO) install $(GOFLAGS) ./...
 
 	@mkdir -p logs
 
@@ -69,17 +92,16 @@ travis:
 	mkdir -p $(DIST_PATH)/api
 	cp -RL api/templates $(DIST_PATH)/api
 
-	cp APACHE-2.0.txt $(DIST_PATH)
-	cp GNU-AGPL-3.0.txt $(DIST_PATH)
 	cp LICENSE.txt $(DIST_PATH)
 	cp NOTICE.txt $(DIST_PATH)
 	cp README.md $(DIST_PATH)
 
 	mv $(DIST_PATH)/web/static/js/bundle.min.js $(DIST_PATH)/web/static/js/bundle-$(BUILD_NUMBER).min.js
 
-	@sed -i'.bak' 's|react-with-addons-0.13.1.js|react-with-addons-0.13.1.min.js|g' $(DIST_PATH)/web/templates/head.html
+	@sed -i'.bak' 's|react-with-addons-0.13.3.js|react-with-addons-0.13.3.min.js|g' $(DIST_PATH)/web/templates/head.html
 	@sed -i'.bak' 's|jquery-1.11.1.js|jquery-1.11.1.min.js|g' $(DIST_PATH)/web/templates/head.html
-	@sed -i'.bak' 's|bootstrap-3.3.1.js|bootstrap-3.3.1.min.js|g' $(DIST_PATH)/web/templates/head.html
+	@sed -i'.bak' 's|bootstrap-3.3.5.js|bootstrap-3.3.5.min.js|g' $(DIST_PATH)/web/templates/head.html
+	@sed -i'.bak' 's|react-bootstrap-0.25.1.js|react-bootstrap-0.25.1.min.js|g' $(DIST_PATH)/web/templates/head.html
 	@sed -i'.bak' 's|perfect-scrollbar.js|perfect-scrollbar.min.js|g' $(DIST_PATH)/web/templates/head.html
 	@sed -i'.bak' 's|bundle.js|bundle-$(BUILD_NUMBER).min.js|g' $(DIST_PATH)/web/templates/head.html
 	rm $(DIST_PATH)/web/templates/*.bak
@@ -105,11 +127,16 @@ install:
 
 check: install
 	@echo Running ESLint...
-	@$(ESLINT) web/react/components/*
-	@$(ESLINT) web/react/dispatcher/*
-	@$(ESLINT) web/react/pages/*
-	@$(ESLINT) web/react/stores/*
-	@$(ESLINT) web/react/utils/*
+	-cd web/react && $(ESLINT) components/* dispatcher/* pages/* stores/* utils/*
+	@echo Running gofmt
+	$(eval GOFMT_OUTPUT := $(shell gofmt -d -s api/ model/ store/ utils/ manualtesting/ mattermost.go 2>&1))
+	@echo "$(GOFMT_OUTPUT)"
+	@if [[ ! "$(GOFMT_OUTPUT)" ]]; then \
+		echo "gofmt sucess"; \
+	else \
+		echo "gofmt failure"; \
+		exit 1; \
+	fi
 
 test: install
 	@mkdir -p logs
@@ -159,6 +186,8 @@ clean:
 	rm -rf api/data/*
 	rm -rf logs/*
 
+	rm -rf Godeps/_workspace/pkg/
+
 
 run: install
 	mkdir -p web/static/js
@@ -204,8 +233,12 @@ cleandb:
 	fi
 dist: install
 
-	@$(GO) build $(GOFLAGS) -i -a ./...
-	@$(GO) install $(GOFLAGS) -a ./...
+	@sed -i'.bak' 's|_BUILD_NUMBER_|$(BUILD_NUMBER)|g' ./model/version.go
+	@sed -i'.bak' 's|_BUILD_DATE_|$(BUILD_DATE)|g' ./model/version.go
+	@sed -i'.bak' 's|_BUILD_HASH_|$(BUILD_HASH)|g' ./model/version.go
+
+	@$(GO) build $(GOFLAGS) -i ./...
+	@$(GO) install $(GOFLAGS) ./...
 
 	mkdir -p $(DIST_PATH)/bin
 	cp $(GOPATH)/bin/platform $(DIST_PATH)/bin
@@ -228,17 +261,16 @@ dist: install
 	mkdir -p $(DIST_PATH)/api
 	cp -RL api/templates $(DIST_PATH)/api
 
-	cp APACHE-2.0.txt $(DIST_PATH)
-	cp GNU-AGPL-3.0.txt $(DIST_PATH)
 	cp LICENSE.txt $(DIST_PATH)
 	cp NOTICE.txt $(DIST_PATH)
 	cp README.md $(DIST_PATH)
 
 	mv $(DIST_PATH)/web/static/js/bundle.min.js $(DIST_PATH)/web/static/js/bundle-$(BUILD_NUMBER).min.js
 
-	@sed -i'.bak' 's|react-with-addons-0.13.1.js|react-with-addons-0.13.1.min.js|g' $(DIST_PATH)/web/templates/head.html
+	@sed -i'.bak' 's|react-with-addons-0.13.3.js|react-with-addons-0.13.3.min.js|g' $(DIST_PATH)/web/templates/head.html
 	@sed -i'.bak' 's|jquery-1.11.1.js|jquery-1.11.1.min.js|g' $(DIST_PATH)/web/templates/head.html
-	@sed -i'.bak' 's|bootstrap-3.3.1.js|bootstrap-3.3.1.min.js|g' $(DIST_PATH)/web/templates/head.html
+	@sed -i'.bak' 's|bootstrap-3.3.5.js|bootstrap-3.3.5.min.js|g' $(DIST_PATH)/web/templates/head.html
+	@sed -i'.bak' 's|react-bootstrap-0.25.1.js|react-bootstrap-0.25.1.min.js|g' $(DIST_PATH)/web/templates/head.html
 	@sed -i'.bak' 's|perfect-scrollbar.js|perfect-scrollbar.min.js|g' $(DIST_PATH)/web/templates/head.html
 	@sed -i'.bak' 's|bundle.js|bundle-$(BUILD_NUMBER).min.js|g' $(DIST_PATH)/web/templates/head.html
 	rm $(DIST_PATH)/web/templates/*.bak

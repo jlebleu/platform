@@ -32,7 +32,9 @@ func InitTeam(r *mux.Router) {
 	sr.Handle("/update_name", ApiUserRequired(updateTeamDisplayName)).Methods("POST")
 	sr.Handle("/update_valet_feature", ApiUserRequired(updateValetFeature)).Methods("POST")
 	sr.Handle("/me", ApiUserRequired(getMyTeam)).Methods("GET")
+	// These should be moved to the global admain console
 	sr.Handle("/import_team", ApiUserRequired(importTeam)).Methods("POST")
+	sr.Handle("/export_team", ApiUserRequired(exportTeam)).Methods("GET")
 }
 
 func signupTeam(c *Context, w http.ResponseWriter, r *http.Request) {
@@ -54,8 +56,10 @@ func signupTeam(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subjectPage := NewServerTemplatePage("signup_team_subject", c.GetSiteURL())
-	bodyPage := NewServerTemplatePage("signup_team_body", c.GetSiteURL())
+	subjectPage := NewServerTemplatePage("signup_team_subject")
+	subjectPage.Props["SiteURL"] = c.GetSiteURL()
+	bodyPage := NewServerTemplatePage("signup_team_body")
+	bodyPage.Props["SiteURL"] = c.GetSiteURL()
 	bodyPage.Props["TourUrl"] = utils.Cfg.TeamSettings.TourLink
 
 	props := make(map[string]string)
@@ -93,6 +97,10 @@ func createTeamFromSSO(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	if team == nil {
 		c.SetInvalidParam("createTeamFromSSO", "team")
+		return
+	}
+
+	if !isTreamCreationAllowed(c, team.Email) {
 		return
 	}
 
@@ -239,47 +247,55 @@ func createTeamFromSignup(c *Context, w http.ResponseWriter, r *http.Request) {
 }
 
 func createTeam(c *Context, w http.ResponseWriter, r *http.Request) {
+	team := model.TeamFromJson(r.Body)
+	rteam := CreateTeam(c, team)
+	if c.Err != nil {
+		return
+	}
+
+	w.Write([]byte(rteam.ToJson()))
+}
+
+func CreateTeam(c *Context, team *model.Team) *model.Team {
 	if utils.Cfg.ServiceSettings.DisableEmailSignUp {
 		c.Err = model.NewAppError("createTeam", "Team sign-up with email is disabled.", "")
 		c.Err.StatusCode = http.StatusNotImplemented
-		return
+		return nil
 	}
-
-	team := model.TeamFromJson(r.Body)
 
 	if team == nil {
 		c.SetInvalidParam("createTeam", "team")
-		return
+		return nil
 	}
 
 	if !isTreamCreationAllowed(c, team.Email) {
-		return
+		return nil
 	}
 
 	if utils.Cfg.ServiceSettings.Mode != utils.MODE_DEV {
-		c.Err = model.NewAppError("createTeam", "The mode does not allow network creation without a valid invite", "")
-		return
+		c.Err = model.NewAppError("CreateTeam", "The mode does not allow network creation without a valid invite", "")
+		return nil
 	}
 
 	if result := <-Srv.Store.Team().Save(team); result.Err != nil {
 		c.Err = result.Err
-		return
+		return nil
 	} else {
 		rteam := result.Data.(*model.Team)
 
 		if _, err := CreateDefaultChannels(c, rteam.Id); err != nil {
 			c.Err = err
-			return
+			return nil
 		}
 
 		if rteam.AllowValet {
 			CreateValet(c, rteam)
 			if c.Err != nil {
-				return
+				return nil
 			}
 		}
 
-		w.Write([]byte(rteam.ToJson()))
+		return rteam
 	}
 }
 
@@ -391,8 +407,10 @@ func emailTeams(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subjectPage := NewServerTemplatePage("find_teams_subject", c.GetSiteURL())
-	bodyPage := NewServerTemplatePage("find_teams_body", c.GetSiteURL())
+	subjectPage := NewServerTemplatePage("find_teams_subject")
+	subjectPage.Props["SiteURL"] = c.GetSiteURL()
+	bodyPage := NewServerTemplatePage("find_teams_body")
+	bodyPage.Props["SiteURL"] = c.GetSiteURL()
 
 	if result := <-Srv.Store.Team().GetTeamsForEmail(email); result.Err != nil {
 		c.Err = result.Err
@@ -467,22 +485,23 @@ func InviteMembers(c *Context, team *model.Team, user *model.User, invites []str
 			sender := user.GetDisplayName()
 
 			senderRole := ""
-			if strings.Contains(user.Roles, model.ROLE_ADMIN) || strings.Contains(user.Roles, model.ROLE_SYSTEM_ADMIN) {
+			if model.IsInRole(user.Roles, model.ROLE_TEAM_ADMIN) || model.IsInRole(user.Roles, model.ROLE_SYSTEM_ADMIN) {
 				senderRole = "administrator"
 			} else {
 				senderRole = "member"
 			}
 
-			subjectPage := NewServerTemplatePage("invite_subject", c.GetSiteURL())
+			subjectPage := NewServerTemplatePage("invite_subject")
+			subjectPage.Props["SiteURL"] = c.GetSiteURL()
 			subjectPage.Props["SenderName"] = sender
 			subjectPage.Props["TeamDisplayName"] = team.DisplayName
-			bodyPage := NewServerTemplatePage("invite_body", c.GetSiteURL())
+
+			bodyPage := NewServerTemplatePage("invite_body")
+			bodyPage.Props["SiteURL"] = c.GetSiteURL()
 			bodyPage.Props["TeamDisplayName"] = team.DisplayName
 			bodyPage.Props["SenderName"] = sender
 			bodyPage.Props["SenderStatus"] = senderRole
-
 			bodyPage.Props["Email"] = invite
-
 			props := make(map[string]string)
 			props["email"] = invite
 			props["id"] = team.Id
@@ -526,7 +545,7 @@ func updateTeamDisplayName(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !strings.Contains(c.Session.Roles, model.ROLE_ADMIN) {
+	if !model.IsInRole(c.Session.Roles, model.ROLE_TEAM_ADMIN) {
 		c.Err = model.NewAppError("updateTeamDisplayName", "You do not have the appropriate permissions", "userId="+c.Session.UserId)
 		c.Err.StatusCode = http.StatusForbidden
 		return
@@ -566,7 +585,7 @@ func updateValetFeature(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !strings.Contains(c.Session.Roles, model.ROLE_ADMIN) {
+	if !model.IsInRole(c.Session.Roles, model.ROLE_TEAM_ADMIN) {
 		c.Err = model.NewAppError("updateValetFeature", "You do not have the appropriate permissions", "userId="+c.Session.UserId)
 		c.Err.StatusCode = http.StatusForbidden
 		return
@@ -674,4 +693,23 @@ func importTeam(c *Context, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=MattermostImportLog.txt")
 	w.Header().Set("Content-Type", "application/octet-stream")
 	http.ServeContent(w, r, "MattermostImportLog.txt", time.Now(), bytes.NewReader(log.Bytes()))
+}
+
+func exportTeam(c *Context, w http.ResponseWriter, r *http.Request) {
+	if !c.HasPermissionsToTeam(c.Session.TeamId, "export") || !c.IsTeamAdmin(c.Session.UserId) {
+		c.Err = model.NewAppError("exportTeam", "Only a team admin can export data.", "userId="+c.Session.UserId)
+		c.Err.StatusCode = http.StatusForbidden
+		return
+	}
+
+	options := ExportOptionsFromJson(r.Body)
+
+	if link, err := ExportToFile(options); err != nil {
+		c.Err = err
+		return
+	} else {
+		result := map[string]string{}
+		result["link"] = link
+		w.Write([]byte(model.MapToJson(result)))
+	}
 }

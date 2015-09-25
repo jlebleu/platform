@@ -3,17 +3,17 @@
 
 var PasswordReset = require('../components/password_reset.jsx');
 
-global.window.setup_password_reset_page = function(is_reset, team_display_name, team_name, hash, data) {
-
+function setupPasswordResetPage(props) {
     React.render(
         <PasswordReset
-            isReset={is_reset}
-            teamDisplayName={team_display_name}
-            teamName={team_name}
-            hash={hash}
-            data={data}
+            isReset={props.IsReset}
+            teamDisplayName={props.TeamDisplayName}
+            teamName={props.TeamName}
+            hash={props.Hash}
+            data={props.Data}
         />,
         document.getElementById('reset')
     );
+}
 
-};
+global.window.setup_password_reset_page = setupPasswordResetPage;

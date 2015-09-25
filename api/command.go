@@ -154,7 +154,7 @@ func echoCommand(c *Context, command *model.Command) bool {
 		return true
 
 	} else if strings.Index(cmd, command.Command) == 0 {
-		command.AddSuggestion(&model.SuggestCommand{Suggestion: cmd, Description: "Echo back text from your account, /echo \"message\" [delay in seoncds]"})
+		command.AddSuggestion(&model.SuggestCommand{Suggestion: cmd, Description: "Echo back text from your account, /echo \"message\" [delay in seconds]"})
 	}
 
 	return false
@@ -315,7 +315,7 @@ func loadTestSetupCommand(c *Context, command *model.Command) bool {
 				numPosts, _ = strconv.Atoi(tokens[numArgs+2])
 			}
 		}
-		client := model.NewClient(c.GetSiteURL() + "/api/v1")
+		client := model.NewClient(c.GetSiteURL())
 
 		if doTeams {
 			if err := CreateBasicUser(client); err != nil {
@@ -341,7 +341,7 @@ func loadTestSetupCommand(c *Context, command *model.Command) bool {
 				}
 			}
 		} else {
-			client.MockSession(c.Session.Id)
+			client.MockSession(c.Session.Token)
 			CreateTestEnviromentInTeam(
 				client,
 				c.Session.TeamId,
@@ -375,7 +375,7 @@ func loadTestUsersCommand(c *Context, command *model.Command) bool {
 		if err == false {
 			usersr = utils.Range{10, 15}
 		}
-		client := model.NewClient(c.GetSiteURL() + "/api/v1")
+		client := model.NewClient(c.GetSiteURL())
 		userCreator := NewAutoUserCreator(client, c.Session.TeamId)
 		userCreator.Fuzzy = doFuzz
 		userCreator.CreateTestUsers(usersr)
@@ -405,8 +405,8 @@ func loadTestChannelsCommand(c *Context, command *model.Command) bool {
 		if err == false {
 			channelsr = utils.Range{20, 30}
 		}
-		client := model.NewClient(c.GetSiteURL() + "/api/v1")
-		client.MockSession(c.Session.Id)
+		client := model.NewClient(c.GetSiteURL())
+		client.MockSession(c.Session.Token)
 		channelCreator := NewAutoChannelCreator(client, c.Session.TeamId)
 		channelCreator.Fuzzy = doFuzz
 		channelCreator.CreateTestChannels(channelsr)
@@ -457,8 +457,8 @@ func loadTestPostsCommand(c *Context, command *model.Command) bool {
 			}
 		}
 
-		client := model.NewClient(c.GetSiteURL() + "/api/v1")
-		client.MockSession(c.Session.Id)
+		client := model.NewClient(c.GetSiteURL())
+		client.MockSession(c.Session.Token)
 		testPoster := NewAutoPostCreator(client, command.ChannelId)
 		testPoster.Fuzzy = doFuzz
 		testPoster.Users = usernames

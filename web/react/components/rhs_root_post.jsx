@@ -4,13 +4,26 @@
 var ChannelStore = require('../stores/channel_store.jsx');
 var UserProfile = require('./user_profile.jsx');
 var UserStore = require('../stores/user_store.jsx');
+var TextFormatting = require('../utils/text_formatting.jsx');
 var utils = require('../utils/utils.jsx');
 var FileAttachmentList = require('./file_attachment_list.jsx');
+var twemoji = require('twemoji');
+var Constants = require('../utils/constants.jsx');
 
 export default class RhsRootPost extends React.Component {
     constructor(props) {
         super(props);
+
+        this.parseEmojis = this.parseEmojis.bind(this);
+
         this.state = {};
+    }
+    parseEmojis() {
+        twemoji.parse(React.findDOMNode(this), {size: Constants.EMOJI_SIZE});
+        global.window.emojify.run(React.findDOMNode(this.refs.message_holder));
+    }
+    componentDidMount() {
+        this.parseEmojis();
     }
     shouldComponentUpdate(nextProps) {
         if (!utils.areStatesEqual(nextProps.post, this.props.post)) {
@@ -19,9 +32,11 @@ export default class RhsRootPost extends React.Component {
 
         return false;
     }
+    componentDidUpdate() {
+        this.parseEmojis();
+    }
     render() {
         var post = this.props.post;
-        var message = utils.textToJsx(post.message);
         var isOwner = UserStore.getCurrentId() === post.user_id;
         var timestamp = UserStore.getProfile(post.user_id).update_at;
         var channel = ChannelStore.get(post.channel_id);
@@ -99,7 +114,8 @@ export default class RhsRootPost extends React.Component {
                     filenames={post.filenames}
                     modalId={'rhs_view_image_modal_' + post.id}
                     channelId={post.channel_id}
-                    userId={post.user_id} />
+                    userId={post.user_id}
+                />
             );
         }
 
@@ -117,7 +133,14 @@ export default class RhsRootPost extends React.Component {
                 <div className='post__content'>
                     <ul className='post-header'>
                         <li className='post-header-col'><strong><UserProfile userId={post.user_id} /></strong></li>
-                        <li className='post-header-col'><time className='post-right-root-time'>{utils.displayCommentDateTime(post.create_at)}</time></li>
+                        <li className='post-header-col'>
+                            <time
+                                className='post-profile-time'
+                                title={new Date(post.create_at).toString()}
+                            >
+                                {utils.displayCommentDateTime(post.create_at)}
+                            </time>
+                        </li>
                         <li className='post-header-col post-header__reply'>
                             <div className='dropdown'>
                                 {ownerOptions}
@@ -125,7 +148,11 @@ export default class RhsRootPost extends React.Component {
                         </li>
                     </ul>
                     <div className='post-body'>
-                        <p>{message}</p>
+                        <div
+                            ref='message_holder'
+                            onClick={TextFormatting.handleClick}
+                            dangerouslySetInnerHTML={{__html: TextFormatting.formatText(post.message)}}
+                        />
                         {fileAttachment}
                     </div>
                 </div>

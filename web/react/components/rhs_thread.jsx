@@ -18,7 +18,6 @@ export default class RhsThread extends React.Component {
 
         this.onChange = this.onChange.bind(this);
         this.onChangeAll = this.onChangeAll.bind(this);
-        this.onTimeChange = this.onTimeChange.bind(this);
 
         this.state = this.getStateFromStores();
     }
@@ -33,7 +32,9 @@ export default class RhsThread extends React.Component {
 
         if (pendingPostList) {
             for (var pid in pendingPostList.posts) {
-                postList.posts[pid] = pendingPostList.posts[pid];
+                if (pendingPostList.posts.hasOwnProperty(pid)) {
+                    postList.posts[pid] = pendingPostList.posts[pid];
+                }
             }
         }
 
@@ -42,7 +43,6 @@ export default class RhsThread extends React.Component {
     componentDidMount() {
         PostStore.addSelectedPostChangeListener(this.onChange);
         PostStore.addChangeListener(this.onChangeAll);
-        UserStore.addStatusesChangeListener(this.onTimeChange);
         this.resize();
         $(window).resize(function resize() {
             this.resize();
@@ -56,7 +56,6 @@ export default class RhsThread extends React.Component {
     componentWillUnmount() {
         PostStore.removeSelectedPostChangeListener(this.onChange);
         PostStore.removeChangeListener(this.onChangeAll);
-        UserStore.removeStatusesChangeListener(this.onTimeChange);
     }
     onChange() {
         var newState = this.getStateFromStores();
@@ -81,7 +80,9 @@ export default class RhsThread extends React.Component {
         if (currentPosts.posts[currentPosts.order[0]].channel_id === currentSelected.posts[currentSelected.order[0]].channel_id) {
             currentSelected.posts = {};
             for (var postId in currentPosts.posts) {
-                currentSelected.posts[postId] = currentPosts.posts[postId];
+                if (currentPosts.posts.hasOwnProperty(postId)) {
+                    currentSelected.posts[postId] = currentPosts.posts[postId];
+                }
             }
 
             PostStore.storeSelectedPost(currentSelected);
@@ -90,14 +91,6 @@ export default class RhsThread extends React.Component {
         var newState = this.getStateFromStores();
         if (!utils.areStatesEqual(newState, this.state)) {
             this.setState(newState);
-        }
-    }
-    onTimeChange() {
-        for (var id in this.state.postList.posts) {
-            if (!this.refs[id]) {
-                continue;
-            }
-            this.refs[id].forceUpdate();
         }
     }
     resize() {
@@ -128,9 +121,11 @@ export default class RhsThread extends React.Component {
         var postsArray = [];
 
         for (var postId in postList.posts) {
-            var cpost = postList.posts[postId];
-            if (cpost.root_id === rootPost.id) {
-                postsArray.push(cpost);
+            if (postList.posts.hasOwnProperty(postId)) {
+                var cpost = postList.posts[postId];
+                if (cpost.root_id === rootPost.id) {
+                    postsArray.push(cpost);
+                }
             }
         }
 
@@ -167,8 +162,7 @@ export default class RhsThread extends React.Component {
 
         return (
             <div className='post-right__container'>
-                <FileUploadOverlay
-                    overlayType='right' />
+                <FileUploadOverlay overlayType='right' />
                 <div className='search-bar__container sidebar--right__search-header'>{searchForm}</div>
                 <div className='sidebar-right__body'>
                     <RhsHeaderPost
@@ -185,7 +179,7 @@ export default class RhsThread extends React.Component {
                             return (
                                 <Comment
                                     ref={comPost.id}
-                                    key={comPost.id}
+                                    key={comPost.id + 'commentKey'}
                                     post={comPost}
                                     selected={(comPost.id === selectedPost.id)}
                                 />
@@ -209,6 +203,7 @@ RhsThread.defaultProps = {
     fromSearch: '',
     isMentionSearch: false
 };
+
 RhsThread.propTypes = {
     fromSearch: React.PropTypes.string,
     isMentionSearch: React.PropTypes.bool

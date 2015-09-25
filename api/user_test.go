@@ -68,7 +68,7 @@ func TestCreateUser(t *testing.T) {
 		}
 	}
 
-	if _, err := Client.DoPost("/users/create", "garbage"); err == nil {
+	if _, err := Client.DoApiPost("/users/create", "garbage"); err == nil {
 		t.Fatal("should have been an error")
 	}
 }
@@ -190,11 +190,11 @@ func TestSessions(t *testing.T) {
 
 	for _, session := range sessions {
 		if session.DeviceId == deviceId {
-			otherSession = session.AltId
+			otherSession = session.Id
 		}
 
-		if len(session.Id) != 0 {
-			t.Fatal("shouldn't return sessions")
+		if len(session.Token) != 0 {
+			t.Fatal("shouldn't return session tokens")
 		}
 	}
 
@@ -212,11 +212,6 @@ func TestSessions(t *testing.T) {
 	if len(sessions2) != 1 {
 		t.Fatal("invalid number of sessions")
 	}
-
-	if _, err := Client.RevokeSession(otherSession); err != nil {
-		t.Fatal(err)
-	}
-
 }
 
 func TestGetUser(t *testing.T) {
@@ -355,7 +350,7 @@ func TestUserCreateImage(t *testing.T) {
 
 	Client.LoginByEmail(team.Name, user.Email, "pwd")
 
-	Client.DoGet("/users/"+user.Id+"/image", "", "")
+	Client.DoApiGet("/users/"+user.Id+"/image", "", "")
 
 	if utils.IsS3Configured() && !utils.Cfg.ServiceSettings.UseLocalStorage {
 		var auth aws.Auth
@@ -453,7 +448,7 @@ func TestUserUploadProfileImage(t *testing.T) {
 			t.Fatal(upErr)
 		}
 
-		Client.DoGet("/users/"+user.Id+"/image", "", "")
+		Client.DoApiGet("/users/"+user.Id+"/image", "", "")
 
 		if utils.IsS3Configured() && !utils.Cfg.ServiceSettings.UseLocalStorage {
 			var auth aws.Auth
@@ -509,7 +504,7 @@ func TestUserUpdate(t *testing.T) {
 	user.TeamId = "12345678901234567890123456"
 	user.LastActivityAt = time2
 	user.LastPingAt = time2
-	user.Roles = model.ROLE_ADMIN
+	user.Roles = model.ROLE_TEAM_ADMIN
 	user.LastPasswordUpdate = 123
 
 	if result, err := Client.UpdateUser(user); err != nil {
@@ -684,6 +679,7 @@ func TestUserUpdateRoles(t *testing.T) {
 	data["user_id"] = user2.Id
 
 	if result, err := Client.UpdateUserRoles(data); err != nil {
+		t.Log(data["new_roles"])
 		t.Fatal(err)
 	} else {
 		if result.Data.(*model.User).Roles != "admin" {

@@ -16,8 +16,8 @@ var Constants = require('../utils/constants.jsx');
 var ActionTypes = Constants.ActionTypes;
 
 export default class PostList extends React.Component {
-    constructor() {
-        super();
+    constructor(props) {
+        super(props);
 
         this.gotMorePosts = false;
         this.scrolled = false;
@@ -25,6 +25,7 @@ export default class PostList extends React.Component {
         this.seenNewMessages = false;
         this.isUserScroll = true;
         this.userHasSeenNew = false;
+        this.loadInProgress = false;
 
         this.onChange = this.onChange.bind(this);
         this.onTimeChange = this.onTimeChange.bind(this);
@@ -32,27 +33,26 @@ export default class PostList extends React.Component {
         this.createChannelIntroMessage = this.createChannelIntroMessage.bind(this);
         this.loadMorePosts = this.loadMorePosts.bind(this);
         this.loadFirstPosts = this.loadFirstPosts.bind(this);
+        this.activate = this.activate.bind(this);
+        this.deactivate = this.deactivate.bind(this);
+        this.resize = this.resize.bind(this);
 
-        this.state = this.getStateFromStores();
+        this.state = this.getStateFromStores(props.channelId);
         this.state.numToDisplay = Constants.POST_CHUNK_SIZE;
         this.state.isFirstLoadComplete = false;
     }
-    getStateFromStores() {
-        var channel = ChannelStore.getCurrent();
-
-        if (channel == null) {
-            channel = {};
-        }
-
-        var postList = PostStore.getCurrentPosts();
+    getStateFromStores(id) {
+        var postList = PostStore.getPosts(id);
 
         if (postList != null) {
-            var deletedPosts = PostStore.getUnseenDeletedPosts(channel.id);
+            var deletedPosts = PostStore.getUnseenDeletedPosts(id);
 
             if (deletedPosts && Object.keys(deletedPosts).length > 0) {
                 for (var pid in deletedPosts) {
-                    postList.posts[pid] = deletedPosts[pid];
-                    postList.order.unshift(pid);
+                    if (deletedPosts.hasOwnProperty(pid)) {
+                        postList.posts[pid] = deletedPosts[pid];
+                        postList.order.unshift(pid);
+                    }
                 }
 
                 postList.order.sort(function postSort(a, b) {
@@ -66,53 +66,55 @@ export default class PostList extends React.Component {
                 });
             }
 
-            var pendingPostList = PostStore.getPendingPosts(channel.id);
+            var pendingPostList = PostStore.getPendingPosts(id);
 
             if (pendingPostList) {
                 postList.order = pendingPostList.order.concat(postList.order);
                 for (var ppid in pendingPostList.posts) {
-                    postList.posts[ppid] = pendingPostList.posts[ppid];
+                    if (pendingPostList.posts.hasOwnProperty(ppid)) {
+                        postList.posts[ppid] = pendingPostList.posts[ppid];
+                    }
                 }
             }
         }
 
-        var lastViewed = Number.MAX_VALUE;
-
-        if (ChannelStore.getCurrentMember() != null) {
-            lastViewed = ChannelStore.getCurrentMember().last_viewed_at;
-        }
-
         return {
-            postList: postList,
-            channel: channel,
-            lastViewed: lastViewed
+            postList: postList
         };
     }
     componentDidMount() {
+        window.onload = () => this.scrollToBottom();
+        if (this.props.isActive) {
+            this.activate();
+            this.loadFirstPosts(this.props.channelId);
+        }
+    }
+    componentWillUnmount() {
+        this.deactivate();
+    }
+    activate() {
+        this.gotMorePosts = false;
+        this.scrolled = false;
+        this.prevScrollTop = 0;
+        this.seenNewMessages = false;
+        this.isUserScroll = true;
+        this.userHasSeenNew = false;
+
+        PostStore.clearUnseenDeletedPosts(this.props.channelId);
         PostStore.addChangeListener(this.onChange);
-        ChannelStore.addChangeListener(this.onChange);
         UserStore.addStatusesChangeListener(this.onTimeChange);
         SocketStore.addChangeListener(this.onSocketChange);
 
-        var postHolder = $('.post-list-holder-by-time');
+        var postHolder = $(React.findDOMNode(this.refs.postlist));
 
-        $('.modal').on('show.bs.modal', function onShow() {
-            $('.modal-body').css('overflow-y', 'auto');
-            $('.modal-body').css('max-height', $(window).height() * 0.7);
-        });
-
-        $(window).resize(function resize() {
-            if ($('#create_post').length > 0) {
-                var height = $(window).height() - $('#create_post').height() - $('#error_bar').outerHeight() - 50;
-                postHolder.css('height', height + 'px');
-            }
-
+        $(window).on('resize.' + this.props.channelId, function resize() {
+            this.resize();
             if (!this.scrolled) {
                 this.scrollToBottom();
             }
         }.bind(this));
 
-        postHolder.scroll(function scroll() {
+        postHolder.on('scroll', function scroll() {
             var position = postHolder.scrollTop() + postHolder.height() + 14;
             var bottom = postHolder[0].scrollHeight;
 
@@ -128,43 +130,31 @@ export default class PostList extends React.Component {
             this.isUserScroll = true;
         }.bind(this));
 
-        $('body').on('click.userpopover', function popOver(e) {
-            if ($(e.target).attr('data-toggle') !== 'popover' &&
-                $(e.target).parents('.popover.in').length === 0) {
-                $('.user-popover').popover('hide');
-            }
-        });
-
         $('.post-list__content div .post').removeClass('post--last');
         $('.post-list__content div:last-child .post').addClass('post--last');
 
-        $('body').on('mouseenter mouseleave', '.post', function mouseOver(ev) {
-            if (ev.type === 'mouseenter') {
-                $(this).parent('div').prev('.date-separator, .new-separator').addClass('hovered--after');
-                $(this).parent('div').next('.date-separator, .new-separator').addClass('hovered--before');
-            } else {
-                $(this).parent('div').prev('.date-separator, .new-separator').removeClass('hovered--after');
-                $(this).parent('div').next('.date-separator, .new-separator').removeClass('hovered--before');
-            }
-        });
-
-        $('body').on('mouseenter mouseleave', '.post.post--comment.same--root', function mouseOver(ev) {
-            if (ev.type === 'mouseenter') {
-                $(this).parent('div').prev('.date-separator, .new-separator').addClass('hovered--comment');
-                $(this).parent('div').next('.date-separator, .new-separator').addClass('hovered--comment');
-            } else {
-                $(this).parent('div').prev('.date-separator, .new-separator').removeClass('hovered--comment');
-                $(this).parent('div').next('.date-separator, .new-separator').removeClass('hovered--comment');
-            }
-        });
-
-        this.scrollToBottom();
-
-        if (this.state.channel.id != null) {
-            this.loadFirstPosts(this.state.channel.id);
+        if (!this.state.isFirstLoadComplete) {
+            this.loadFirstPosts(this.props.channelId);
         }
+
+        this.resize();
+        this.onChange();
+        this.scrollToBottom();
+    }
+    deactivate() {
+        PostStore.removeChangeListener(this.onChange);
+        UserStore.removeStatusesChangeListener(this.onTimeChange);
+        SocketStore.removeChangeListener(this.onSocketChange);
+        $('body').off('click.userpopover');
+        $(window).off('resize.' + this.props.channelId);
+        var postHolder = $(React.findDOMNode(this.refs.postlist));
+        postHolder.off('scroll');
     }
     componentDidUpdate(prevProps, prevState) {
+        if (!this.props.isActive) {
+            return;
+        }
+
         $('.post-list__content div .post').removeClass('post--last');
         $('.post-list__content div:last-child .post').addClass('post--last');
 
@@ -181,7 +171,7 @@ export default class PostList extends React.Component {
         var firstPost = posts[order[0]] || {};
         var isNewPost = oldOrder.indexOf(order[0]) === -1;
 
-        if (this.state.channel.id !== prevState.channel.id) {
+        if (this.props.isActive && !prevProps.isActive) {
             this.scrollToBottom();
         } else if (oldOrder.length === 0) {
             this.scrollToBottom();
@@ -195,39 +185,51 @@ export default class PostList extends React.Component {
         } else if (isNewPost &&
                     userId === firstPost.user_id &&
                     !utils.isComment(firstPost)) {
-            this.state.lastViewed = utils.getTimestamp();
             this.scrollToBottom(true);
 
         // the user clicked 'load more messages'
-        } else if (this.gotMorePosts) {
-            var lastPost = oldPosts[oldOrder[prevState.numToDisplay]];
-            $('#' + lastPost.id)[0].scrollIntoView();
+        } else if (this.gotMorePosts && oldOrder.length > 0) {
+            let index;
+            if (prevState.numToDisplay >= oldOrder.length) {
+                index = oldOrder.length - 1;
+            } else {
+                index = prevState.numToDisplay;
+            }
+            const lastPost = oldPosts[oldOrder[index]];
+            $('#post_' + lastPost.id)[0].scrollIntoView();
+            this.gotMorePosts = false;
         } else {
             this.scrollTo(this.prevScrollTop);
         }
     }
     componentWillUpdate() {
-        var postHolder = $('.post-list-holder-by-time');
+        var postHolder = $(React.findDOMNode(this.refs.postlist));
         this.prevScrollTop = postHolder.scrollTop();
     }
-    componentWillUnmount() {
-        PostStore.removeChangeListener(this.onChange);
-        ChannelStore.removeChangeListener(this.onChange);
-        UserStore.removeStatusesChangeListener(this.onTimeChange);
-        SocketStore.removeChangeListener(this.onSocketChange);
-        $('body').off('click.userpopover');
-        $('.modal').off('show.bs.modal');
+    componentWillReceiveProps(nextProps) {
+        if (nextProps.isActive === true && this.props.isActive === false) {
+            this.activate();
+        } else if (nextProps.isActive === false && this.props.isActive === true) {
+            this.deactivate();
+        }
+    }
+    resize() {
+        const postHolder = $(React.findDOMNode(this.refs.postlist));
+        if ($('#create_post').length > 0) {
+            const height = $(window).height() - $('#create_post').height() - $('#error_bar').outerHeight() - 50;
+            postHolder.css('height', height + 'px');
+        }
     }
     scrollTo(val) {
         this.isUserScroll = false;
-        var postHolder = $('.post-list-holder-by-time');
+        var postHolder = $(React.findDOMNode(this.refs.postlist));
         postHolder[0].scrollTop = val;
     }
     scrollToBottom(force) {
         this.isUserScroll = false;
-        var postHolder = $('.post-list-holder-by-time');
-        if ($('#new_message')[0] && !this.userHasSeenNew && !force) {
-            $('#new_message')[0].scrollIntoView();
+        var postHolder = $(React.findDOMNode(this.refs.postlist));
+        if ($('#new_message_' + this.props.channelId)[0] && !this.userHasSeenNew && !force) {
+            $('#new_message_' + this.props.channelId)[0].scrollIntoView();
         } else {
             postHolder.addClass('hide-scroll');
             postHolder[0].scrollTop = postHolder[0].scrollHeight;
@@ -235,39 +237,36 @@ export default class PostList extends React.Component {
         }
     }
     loadFirstPosts(id) {
+        if (this.loadInProgress) {
+            return;
+        }
+
+        if (this.props.channelId == null) {
+            return;
+        }
+
+        this.loadInProgress = true;
         Client.getPosts(
             id,
             PostStore.getLatestUpdate(id),
             function success() {
+                this.loadInProgress = false;
                 this.setState({isFirstLoadComplete: true});
             }.bind(this),
             function fail() {
+                this.loadInProgress = false;
                 this.setState({isFirstLoadComplete: true});
             }.bind(this)
         );
     }
     onChange() {
-        var newState = this.getStateFromStores();
+        var newState = this.getStateFromStores(this.props.channelId);
 
-        // Special case where the channel wasn't yet set in componentDidMount
-        if (!this.state.isFirstLoadComplete && this.state.channel.id == null && newState.channel.id != null) {
-            this.loadFirstPosts(newState.channel.id);
-        }
-
-        if (!utils.areStatesEqual(newState, this.state)) {
-            if (this.state.channel.id !== newState.channel.id) {
-                PostStore.clearUnseenDeletedPosts(this.state.channel.id);
-                this.userHasSeenNew = false;
-                newState.numToDisplay = Constants.POST_CHUNK_SIZE;
-            } else {
-                newState.lastViewed = this.state.lastViewed;
-            }
-
+        if (!utils.areStatesEqual(newState.postList, this.state.postList)) {
             this.setState(newState);
         }
     }
     onSocketChange(msg) {
-        var postList;
         var post;
         if (msg.action === 'posted' || msg.action === 'post_edited') {
             post = JSON.parse(msg.props.post);
@@ -280,7 +279,6 @@ export default class PostList extends React.Component {
             }
 
             post = JSON.parse(msg.props.post);
-            postList = this.state.postList;
 
             PostStore.storeUnseenDeletedPost(post);
             PostStore.removePost(post, true);
@@ -348,7 +346,7 @@ export default class PostList extends React.Component {
 
         return (
             <div className='channel-intro'>
-                <p className='channel-intro-text'>{'This is the start of your private message history with this ' + strings.Team + 'mate. Private messages and files shared here are not shown to people outside this area.'}</p>
+                <p className='channel-intro-text'>{'This is the start of your private message history with this teammate. Private messages and files shared here are not shown to people outside this area.'}</p>
             </div>
         );
     }
@@ -370,7 +368,7 @@ export default class PostList extends React.Component {
                 <p className='channel-intro__content'>
                     Welcome to {channel.display_name}!
                     <br/><br/>
-                    This is the first channel {strings.Team}mates see when they
+                    This is the first channel teammates see when they
                     <br/>
                     sign up - use it for posting updates everyone needs to know.
                     <br/><br/>
@@ -420,9 +418,9 @@ export default class PostList extends React.Component {
             }
         }
 
-        var members = ChannelStore.getCurrentExtraInfo().members;
+        var members = ChannelStore.getExtraInfo(channel.id).members;
         for (var i = 0; i < members.length; i++) {
-            if (members[i].roles.indexOf('admin') > -1) {
+            if (utils.isAdmin(members[i].roles)) {
                 return members[i].username;
             }
         }
@@ -484,6 +482,11 @@ export default class PostList extends React.Component {
         var userId = UserStore.getCurrentId();
 
         var renderedLastViewed = false;
+        var lastViewed = Number.MAX_VALUE;
+
+        if (ChannelStore.getMember(this.props.channelId) != null) {
+            lastViewed = ChannelStore.getMember(this.props.channelId).last_viewed_at;
+        }
 
         var numToDisplay = this.state.numToDisplay;
         if (order.length - 1 < numToDisplay) {
@@ -514,7 +517,7 @@ export default class PostList extends React.Component {
 
             var postCtl = (
                 <Post
-                    key={post.id}
+                    key={post.id + 'postKey'}
                     ref={post.id}
                     sameUser={sameUser}
                     sameRoot={sameRoot}
@@ -539,13 +542,13 @@ export default class PostList extends React.Component {
                 );
             }
 
-            if (post.user_id !== userId && post.create_at > this.state.lastViewed && !renderedLastViewed) {
+            if (post.user_id !== userId && post.create_at > lastViewed && !renderedLastViewed) {
                 renderedLastViewed = true;
 
                 // Temporary fix to solve ie10/11 rendering issue
                 let newSeparatorId = '';
                 if (!utils.isBrowserIE()) {
-                    newSeparatorId = 'new_message';
+                    newSeparatorId = 'new_message_' + this.props.channelId;
                 }
                 postCtls.push(
                     <div
@@ -555,7 +558,7 @@ export default class PostList extends React.Component {
                     >
                         <hr
                             className='separator__hr'
-                         />
+                        />
                         <div className='separator__text'>New Messages</div>
                     </div>
                 );
@@ -573,16 +576,16 @@ export default class PostList extends React.Component {
 
         var posts = this.state.postList.posts;
         var order = this.state.postList.order;
-        var channelId = this.state.channel.id;
+        var channelId = this.props.channelId;
 
-        $(this.refs.loadmore.getDOMNode()).text('Retrieving more messages...');
+        $(React.findDOMNode(this.refs.loadmore)).text('Retrieving more messages...');
 
         Client.getPostsPage(
             channelId,
             order.length,
             Constants.POST_CHUNK_SIZE,
             function success(data) {
-                $(this.refs.loadmore.getDOMNode()).text('Load more messages');
+                $(React.findDOMNode(this.refs.loadmore)).text('Load more messages');
                 this.gotMorePosts = true;
                 this.setState({numToDisplay: this.state.numToDisplay + Constants.POST_CHUNK_SIZE});
 
@@ -607,7 +610,7 @@ export default class PostList extends React.Component {
                 Client.getProfiles();
             }.bind(this),
             function fail(err) {
-                $(this.refs.loadmore.getDOMNode()).text('Load more messages');
+                $(React.findDOMNode(this.refs.loadmore)).text('Load more messages');
                 AsyncClient.dispatchError(err, 'getPosts');
             }.bind(this)
         );
@@ -615,7 +618,7 @@ export default class PostList extends React.Component {
     render() {
         var order = [];
         var posts;
-        var channel = this.state.channel;
+        var channel = ChannelStore.get(this.props.channelId);
 
         if (this.state.postList != null) {
             posts = this.state.postList.posts;
@@ -624,7 +627,7 @@ export default class PostList extends React.Component {
 
         var moreMessages = <p className='beginning-messages-text'>Beginning of Channel</p>;
         if (channel != null) {
-            if (order.length > this.state.numToDisplay) {
+            if (order.length >= this.state.numToDisplay) {
                 moreMessages = (
                     <a
                         ref='loadmore'
@@ -644,11 +647,23 @@ export default class PostList extends React.Component {
         if (posts && this.state.isFirstLoadComplete) {
             postCtls = this.createPosts(posts, order);
         } else {
-            postCtls.push(<LoadingScreen position='absolute' />);
+            postCtls.push(
+                <LoadingScreen
+                    position='absolute'
+                    key='loading'
+                />);
+        }
+
+        var activeClass = '';
+        if (!this.props.isActive) {
+            activeClass = 'inactive';
         }
 
         return (
-            <div ref='postlist' className='post-list-holder-by-time'>
+            <div
+                ref='postlist'
+                className={'post-list-holder-by-time ' + activeClass}
+            >
                 <div className='post-list__table'>
                     <div className='post-list__content'>
                         {moreMessages}
@@ -659,3 +674,12 @@ export default class PostList extends React.Component {
         );
     }
 }
+
+PostList.defaultProps = {
+    isActive: false,
+    channelId: null
+};
+PostList.propTypes = {
+    isActive: React.PropTypes.bool,
+    channelId: React.PropTypes.string
+};

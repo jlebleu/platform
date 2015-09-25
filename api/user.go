@@ -5,10 +5,10 @@ package api
 
 import (
 	"bytes"
-	"code.google.com/p/freetype-go/freetype"
 	l4g "code.google.com/p/log4go"
 	b64 "encoding/base64"
 	"fmt"
+	"github.com/golang/freetype"
 	"github.com/gorilla/mux"
 	"github.com/mattermost/platform/model"
 	"github.com/mattermost/platform/store"
@@ -166,10 +166,7 @@ func createUser(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !model.IsUsernameValid(user.Username) {
-		c.Err = model.NewAppError("createUser", "That username is invalid", "might be using a resrved username")
-		return
-	}
+	// the user's username is checked to be valid when they are saved to the database
 
 	user.EmailVerified = false
 
@@ -268,7 +265,7 @@ func CreateUser(c *Context, team *model.Team, user *model.User) *model.User {
 
 	channelRole := ""
 	if team.Email == user.Email {
-		user.Roles = model.ROLE_ADMIN
+		user.Roles = model.ROLE_TEAM_ADMIN
 		channelRole = model.CHANNEL_ROLE_ADMIN
 	} else {
 		user.Roles = ""
@@ -314,8 +311,10 @@ func CreateUser(c *Context, team *model.Team, user *model.User) *model.User {
 func fireAndForgetWelcomeEmail(name, email, teamDisplayName, link, siteURL string) {
 	go func() {
 
-		subjectPage := NewServerTemplatePage("welcome_subject", siteURL)
-		bodyPage := NewServerTemplatePage("welcome_body", siteURL)
+		subjectPage := NewServerTemplatePage("welcome_subject")
+		subjectPage.Props["SiteURL"] = siteURL
+		bodyPage := NewServerTemplatePage("welcome_body")
+		bodyPage.Props["SiteURL"] = siteURL
 		bodyPage.Props["Nickname"] = name
 		bodyPage.Props["TeamDisplayName"] = teamDisplayName
 		bodyPage.Props["FeedbackName"] = utils.Cfg.EmailSettings.FeedbackName
@@ -333,9 +332,11 @@ func FireAndForgetVerifyEmail(userId, userEmail, teamName, teamDisplayName, site
 
 		link := fmt.Sprintf("%s/verify_email?uid=%s&hid=%s&teamname=%s&email=%s", siteURL, userId, model.HashPassword(userId), teamName, userEmail)
 
-		subjectPage := NewServerTemplatePage("verify_subject", siteURL)
+		subjectPage := NewServerTemplatePage("verify_subject")
+		subjectPage.Props["SiteURL"] = siteURL
 		subjectPage.Props["TeamDisplayName"] = teamDisplayName
-		bodyPage := NewServerTemplatePage("verify_body", siteURL)
+		bodyPage := NewServerTemplatePage("verify_body")
+		bodyPage.Props["SiteURL"] = siteURL
 		bodyPage.Props["TeamDisplayName"] = teamDisplayName
 		bodyPage.Props["VerifyUrl"] = link
 
@@ -430,7 +431,7 @@ func Login(c *Context, w http.ResponseWriter, r *http.Request, user *model.User,
 		return
 	}
 
-	session := &model.Session{UserId: user.Id, TeamId: user.TeamId, Roles: user.Roles, DeviceId: deviceId}
+	session := &model.Session{UserId: user.Id, TeamId: user.TeamId, Roles: user.Roles, DeviceId: deviceId, IsOAuth: false}
 
 	maxAge := model.SESSION_TIME_WEB_IN_SECS
 
@@ -472,13 +473,13 @@ func Login(c *Context, w http.ResponseWriter, r *http.Request, user *model.User,
 		return
 	} else {
 		session = result.Data.(*model.Session)
-		sessionCache.Add(session.Id, session)
+		AddSessionToCache(session)
 	}
 
-	w.Header().Set(model.HEADER_TOKEN, session.Id)
+	w.Header().Set(model.HEADER_TOKEN, session.Token)
 	sessionCookie := &http.Cookie{
 		Name:     model.SESSION_TOKEN,
-		Value:    session.Id,
+		Value:    session.Token,
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
@@ -524,25 +525,27 @@ func login(c *Context, w http.ResponseWriter, r *http.Request) {
 
 func revokeSession(c *Context, w http.ResponseWriter, r *http.Request) {
 	props := model.MapFromJson(r.Body)
-	altId := props["id"]
+	id := props["id"]
 
-	if result := <-Srv.Store.Session().GetSessions(c.Session.UserId); result.Err != nil {
+	if result := <-Srv.Store.Session().Get(id); result.Err != nil {
 		c.Err = result.Err
 		return
 	} else {
-		sessions := result.Data.([]*model.Session)
+		session := result.Data.(*model.Session)
 
-		for _, session := range sessions {
-			if session.AltId == altId {
-				c.LogAudit("session_id=" + session.AltId)
-				sessionCache.Remove(session.Id)
-				if result := <-Srv.Store.Session().Remove(session.Id); result.Err != nil {
-					c.Err = result.Err
-					return
-				} else {
-					w.Write([]byte(model.MapToJson(props)))
-					return
-				}
+		c.LogAudit("session_id=" + session.Id)
+
+		if session.IsOAuth {
+			RevokeAccessToken(session.Token)
+		} else {
+			sessionCache.Remove(session.Token)
+
+			if result := <-Srv.Store.Session().Remove(session.Id); result.Err != nil {
+				c.Err = result.Err
+				return
+			} else {
+				w.Write([]byte(model.MapToJson(props)))
+				return
 			}
 		}
 	}
@@ -556,8 +559,8 @@ func RevokeAllSession(c *Context, userId string) {
 		sessions := result.Data.([]*model.Session)
 
 		for _, session := range sessions {
-			c.LogAuditWithUserId(userId, "session_id="+session.AltId)
-			sessionCache.Remove(session.Id)
+			c.LogAuditWithUserId(userId, "session_id="+session.Id)
+			sessionCache.Remove(session.Token)
 			if result := <-Srv.Store.Session().Remove(session.Id); result.Err != nil {
 				c.Err = result.Err
 				return
@@ -1020,7 +1023,16 @@ func updateRoles(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	new_roles := props["new_roles"]
-	// no check since we allow the clearing of Roles
+	if !model.IsValidRoles(new_roles) {
+		c.SetInvalidParam("updateRoles", "new_roles")
+		return
+	}
+
+	if model.IsInRole(new_roles, model.ROLE_SYSTEM_ADMIN) {
+		c.Err = model.NewAppError("updateRoles", "The system_admin role can only be set from the command line", "")
+		c.Err.StatusCode = http.StatusForbidden
+		return
+	}
 
 	var user *model.User
 	if result := <-Srv.Store.User().Get(user_id); result.Err != nil {
@@ -1034,43 +1046,15 @@ func updateRoles(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !strings.Contains(c.Session.Roles, model.ROLE_ADMIN) && !c.IsSystemAdmin() {
+	if !model.IsInRole(c.Session.Roles, model.ROLE_TEAM_ADMIN) && !c.IsSystemAdmin() {
 		c.Err = model.NewAppError("updateRoles", "You do not have the appropriate permissions", "userId="+user_id)
 		c.Err.StatusCode = http.StatusForbidden
 		return
 	}
 
-	// make sure there is at least 1 other active admin
-	if strings.Contains(user.Roles, model.ROLE_ADMIN) && !strings.Contains(new_roles, model.ROLE_ADMIN) {
-		if result := <-Srv.Store.User().GetProfiles(user.TeamId); result.Err != nil {
-			c.Err = result.Err
-			return
-		} else {
-			activeAdmins := -1
-			profileUsers := result.Data.(map[string]*model.User)
-			for _, profileUser := range profileUsers {
-				if profileUser.DeleteAt == 0 && strings.Contains(profileUser.Roles, model.ROLE_ADMIN) {
-					activeAdmins = activeAdmins + 1
-				}
-			}
-
-			if activeAdmins <= 0 {
-				c.Err = model.NewAppError("updateRoles", "There must be at least one active admin", "userId="+user_id)
-				return
-			}
-		}
-	}
-
-	user.Roles = new_roles
-
-	var ruser *model.User
-	if result := <-Srv.Store.User().Update(user, true); result.Err != nil {
-		c.Err = result.Err
+	ruser := UpdateRoles(c, user, new_roles)
+	if c.Err != nil {
 		return
-	} else {
-		c.LogAuditWithUserId(user.Id, "roles="+new_roles)
-
-		ruser = result.Data.([2]*model.User)[0]
 	}
 
 	uchan := Srv.Store.Session().UpdateRoles(user.Id, new_roles)
@@ -1097,6 +1081,45 @@ func updateRoles(c *Context, w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(ruser.ToJson()))
 }
 
+func UpdateRoles(c *Context, user *model.User, roles string) *model.User {
+	// make sure there is at least 1 other active admin
+
+	if !model.IsInRole(roles, model.ROLE_SYSTEM_ADMIN) {
+		if model.IsInRole(user.Roles, model.ROLE_TEAM_ADMIN) && !model.IsInRole(roles, model.ROLE_TEAM_ADMIN) {
+			if result := <-Srv.Store.User().GetProfiles(user.TeamId); result.Err != nil {
+				c.Err = result.Err
+				return nil
+			} else {
+				activeAdmins := -1
+				profileUsers := result.Data.(map[string]*model.User)
+				for _, profileUser := range profileUsers {
+					if profileUser.DeleteAt == 0 && model.IsInRole(profileUser.Roles, model.ROLE_TEAM_ADMIN) {
+						activeAdmins = activeAdmins + 1
+					}
+				}
+
+				if activeAdmins <= 0 {
+					c.Err = model.NewAppError("updateRoles", "There must be at least one active admin", "")
+					return nil
+				}
+			}
+		}
+	}
+
+	user.Roles = roles
+
+	var ruser *model.User
+	if result := <-Srv.Store.User().Update(user, true); result.Err != nil {
+		c.Err = result.Err
+		return nil
+	} else {
+		c.LogAuditWithUserId(user.Id, "roles="+roles)
+		ruser = result.Data.([2]*model.User)[0]
+	}
+
+	return ruser
+}
+
 func updateActive(c *Context, w http.ResponseWriter, r *http.Request) {
 	props := model.MapFromJson(r.Body)
 
@@ -1120,14 +1143,14 @@ func updateActive(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !strings.Contains(c.Session.Roles, model.ROLE_ADMIN) && !c.IsSystemAdmin() {
+	if !model.IsInRole(c.Session.Roles, model.ROLE_TEAM_ADMIN) && !c.IsSystemAdmin() {
 		c.Err = model.NewAppError("updateActive", "You do not have the appropriate permissions", "userId="+user_id)
 		c.Err.StatusCode = http.StatusForbidden
 		return
 	}
 
 	// make sure there is at least 1 other active admin
-	if !active && strings.Contains(user.Roles, model.ROLE_ADMIN) {
+	if !active && model.IsInRole(user.Roles, model.ROLE_TEAM_ADMIN) {
 		if result := <-Srv.Store.User().GetProfiles(user.TeamId); result.Err != nil {
 			c.Err = result.Err
 			return
@@ -1135,7 +1158,7 @@ func updateActive(c *Context, w http.ResponseWriter, r *http.Request) {
 			activeAdmins := -1
 			profileUsers := result.Data.(map[string]*model.User)
 			for _, profileUser := range profileUsers {
-				if profileUser.DeleteAt == 0 && strings.Contains(profileUser.Roles, model.ROLE_ADMIN) {
+				if profileUser.DeleteAt == 0 && model.IsInRole(profileUser.Roles, model.ROLE_TEAM_ADMIN) {
 					activeAdmins = activeAdmins + 1
 				}
 			}
@@ -1211,8 +1234,10 @@ func sendPasswordReset(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	link := fmt.Sprintf("%s/reset_password?d=%s&h=%s", c.GetTeamURLFromTeam(team), url.QueryEscape(data), url.QueryEscape(hash))
 
-	subjectPage := NewServerTemplatePage("reset_subject", c.GetSiteURL())
-	bodyPage := NewServerTemplatePage("reset_body", c.GetSiteURL())
+	subjectPage := NewServerTemplatePage("reset_subject")
+	subjectPage.Props["SiteURL"] = c.GetSiteURL()
+	bodyPage := NewServerTemplatePage("reset_body")
+	bodyPage.Props["SiteURL"] = c.GetSiteURL()
 	bodyPage.Props["ResetUrl"] = link
 
 	if err := utils.SendMail(email, subjectPage.Render(), bodyPage.Render()); err != nil {
@@ -1311,9 +1336,11 @@ func resetPassword(c *Context, w http.ResponseWriter, r *http.Request) {
 func fireAndForgetPasswordChangeEmail(email, teamDisplayName, teamURL, siteURL, method string) {
 	go func() {
 
-		subjectPage := NewServerTemplatePage("password_change_subject", siteURL)
+		subjectPage := NewServerTemplatePage("password_change_subject")
+		subjectPage.Props["SiteURL"] = siteURL
 		subjectPage.Props["TeamDisplayName"] = teamDisplayName
-		bodyPage := NewServerTemplatePage("password_change_body", siteURL)
+		bodyPage := NewServerTemplatePage("password_change_body")
+		bodyPage.Props["SiteURL"] = siteURL
 		bodyPage.Props["TeamDisplayName"] = teamDisplayName
 		bodyPage.Props["TeamURL"] = teamURL
 		bodyPage.Props["Method"] = method
@@ -1328,9 +1355,11 @@ func fireAndForgetPasswordChangeEmail(email, teamDisplayName, teamURL, siteURL, 
 func fireAndForgetEmailChangeEmail(email, teamDisplayName, teamURL, siteURL string) {
 	go func() {
 
-		subjectPage := NewServerTemplatePage("email_change_subject", siteURL)
+		subjectPage := NewServerTemplatePage("email_change_subject")
+		subjectPage.Props["SiteURL"] = siteURL
 		subjectPage.Props["TeamDisplayName"] = teamDisplayName
-		bodyPage := NewServerTemplatePage("email_change_body", siteURL)
+		bodyPage := NewServerTemplatePage("email_change_body")
+		bodyPage.Props["SiteURL"] = siteURL
 		bodyPage.Props["TeamDisplayName"] = teamDisplayName
 		bodyPage.Props["TeamURL"] = teamURL
 

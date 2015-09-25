@@ -3,9 +3,19 @@
 
 var SignupUserComplete = require('../components/signup_user_complete.jsx');
 
-global.window.setup_signup_user_complete_page = function(email, name, ui_name, id, data, hash, auth_services) {
+function setupSignupUserCompletePage(props) {
     React.render(
-        <SignupUserComplete teamId={id} teamName={name} teamDisplayName={ui_name} email={email} hash={hash} data={data} authServices={auth_services} />,
+        <SignupUserComplete
+            teamId={props.TeamId}
+            teamName={props.TeamName}
+            teamDisplayName={props.TeamDisplayName}
+            email={props.Email}
+            hash={props.Hash}
+            data={props.Data}
+            authServices={props.AuthServices}
+        />,
         document.getElementById('signup-user-complete')
     );
-};
+}
+
+global.window.setup_signup_user_complete_page = setupSignupUserCompletePage;

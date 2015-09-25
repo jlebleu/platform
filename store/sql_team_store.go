@@ -49,6 +49,7 @@ func (s SqlTeamStore) Save(team *model.Team) StoreChannel {
 		}
 
 		team.PreSave()
+
 		if result.Err = team.IsValid(); result.Err != nil {
 			storeChannel <- result
 			close(storeChannel)
@@ -183,6 +184,26 @@ func (s SqlTeamStore) GetTeamsForEmail(email string) StoreChannel {
 		var data []*model.Team
 		if _, err := s.GetReplica().Select(&data, "SELECT Teams.* FROM Teams, Users WHERE Teams.Id = Users.TeamId AND Users.Email = :Email", map[string]interface{}{"Email": email}); err != nil {
 			result.Err = model.NewAppError("SqlTeamStore.GetTeamsForEmail", "We encounted a problem when looking up teams", "email="+email+", "+err.Error())
+		}
+
+		result.Data = data
+
+		storeChannel <- result
+		close(storeChannel)
+	}()
+
+	return storeChannel
+}
+
+func (s SqlTeamStore) GetForExport() StoreChannel {
+	storeChannel := make(StoreChannel)
+
+	go func() {
+		result := StoreResult{}
+
+		var data []*model.Team
+		if _, err := s.GetReplica().Select(&data, "SELECT * FROM Teams"); err != nil {
+			result.Err = model.NewAppError("SqlTeamStore.GetForExport", "We could not get all teams", err.Error())
 		}
 
 		result.Data = data

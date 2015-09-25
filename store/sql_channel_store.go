@@ -37,7 +37,6 @@ func NewSqlChannelStore(sqlStore *SqlStore) ChannelStore {
 }
 
 func (s SqlChannelStore) UpgradeSchemaIfNeeded() {
-	s.CreateColumnIfNotExists("Channels", "CreatorId", "varchar(26)", "character varying(26)", "")
 }
 
 func (s SqlChannelStore) CreateIndexesIfNotExists() {
@@ -86,9 +85,9 @@ func (s SqlChannelStore) Save(channel *model.Channel) StoreChannel {
 				dupChannel := model.Channel{}
 				s.GetReplica().SelectOne(&dupChannel, "SELECT * FROM Channels WHERE TeamId = :TeamId AND Name = :Name AND DeleteAt > 0", map[string]interface{}{"TeamId": channel.TeamId, "Name": channel.Name})
 				if dupChannel.DeleteAt > 0 {
-					result.Err = model.NewAppError("SqlChannelStore.Update", "A channel with that handle was previously created", "id="+channel.Id+", "+err.Error())
+					result.Err = model.NewAppError("SqlChannelStore.Update", "A channel with that URL was previously created", "id="+channel.Id+", "+err.Error())
 				} else {
-					result.Err = model.NewAppError("SqlChannelStore.Update", "A channel with that handle already exists", "id="+channel.Id+", "+err.Error())
+					result.Err = model.NewAppError("SqlChannelStore.Update", "A channel with that URL already exists", "id="+channel.Id+", "+err.Error())
 				}
 			} else {
 				result.Err = model.NewAppError("SqlChannelStore.Save", "We couldn't save the channel", "id="+channel.Id+", "+err.Error())
@@ -440,7 +439,7 @@ func (s SqlChannelStore) GetExtraMembers(channelId string, limit int) StoreChann
 		if err != nil {
 			result.Err = model.NewAppError("SqlChannelStore.GetExtraMembers", "We couldn't get the extra info for channel members", "channel_id="+channelId+", "+err.Error())
 		} else {
-			for i, _ := range members {
+			for i := range members {
 				members[i].Sanitize(utils.SanitizeOptions)
 			}
 			result.Data = members
@@ -678,6 +677,29 @@ func (s SqlChannelStore) UpdateNotifyLevel(channelId, userId, notifyLevel string
 
 	return storeChannel
 }
+
+func (s SqlChannelStore) GetForExport(teamId string) StoreChannel {
+	storeChannel := make(StoreChannel)
+
+	go func() {
+		result := StoreResult{}
+
+		var data []*model.Channel
+		_, err := s.GetReplica().Select(&data, "SELECT * FROM Channels WHERE TeamId = :TeamId AND DeleteAt = 0 AND Type = 'O'", map[string]interface{}{"TeamId": teamId})
+
+		if err != nil {
+			result.Err = model.NewAppError("SqlChannelStore.GetAllChannels", "We couldn't get all the channels", "teamId="+teamId+", err="+err.Error())
+		} else {
+			result.Data = data
+		}
+
+		storeChannel <- result
+		close(storeChannel)
+	}()
+
+	return storeChannel
+}
+
 
 func (s SqlChannelStore) GetDirectChannel(userId1 string, userId2 string) StoreChannel {
 	storeChannel := make(StoreChannel)

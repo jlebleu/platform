@@ -10,13 +10,20 @@ var SocketStore = require('../stores/socket_store.jsx');
 var ChannelStore = require('../stores/channel_store.jsx');
 var PostStore = require('../stores/post_store.jsx');
 var UserStore = require('../stores/user_store.jsx');
-var Constants = require('../utils/constants.jsx');
 
-var utils = require('../utils/utils.jsx');
+var Utils = require('../utils/utils.jsx');
 
-module.exports = React.createClass({
-    componentDidMount: function() {
+export default class ChannelLoader extends React.Component {
+    constructor(props) {
+        super(props);
 
+        this.intervalId = null;
+
+        this.onSocketChange = this.onSocketChange.bind(this);
+
+        this.state = {};
+    }
+    componentDidMount() {
         /* Initial aysnc loads */
         AsyncClient.getMe();
         AsyncClient.getPosts(ChannelStore.getCurrentId());
@@ -30,10 +37,12 @@ module.exports = React.createClass({
         PostStore.clearPendingPosts();
 
         /* Set up interval functions */
-        setInterval(
+        this.intervalId = setInterval(
             function pollStatuses() {
                 AsyncClient.getStatuses();
-            }, 30000);
+            },
+            30000
+        );
 
         /* Device tracking setup */
         var iOS = (/(iPad|iPhone|iPod)/g).test(navigator.userAgent);
@@ -44,12 +53,12 @@ module.exports = React.createClass({
         /* Set up tracking for whether the window is active */
         window.isActive = true;
 
-        $(window).focus(function windowFocus() {
+        $(window).on('focus', function windowFocus() {
             AsyncClient.updateLastViewedAt();
             window.isActive = true;
         });
 
-        $(window).blur(function windowBlur() {
+        $(window).on('blur', function windowBlur() {
             window.isActive = false;
         });
 
@@ -60,32 +69,80 @@ module.exports = React.createClass({
         var user = UserStore.getCurrentUser();
 
         if (user.props && user.props.theme) {
-            utils.changeCss('div.theme', 'background-color:' + user.props.theme + ';');
-            utils.changeCss('.btn.btn-primary', 'background: ' + user.props.theme + ';');
-            utils.changeCss('.modal .modal-header', 'background: ' + user.props.theme + ';');
-            utils.changeCss('.mention', 'background: ' + user.props.theme + ';');
-            utils.changeCss('.mention-link', 'color: ' + user.props.theme + ';');
-            utils.changeCss('@media(max-width: 768px){.search-bar__container', 'background: ' + user.props.theme + ';}');
-            utils.changeCss('.search-item-container:hover', 'background: ' + utils.changeOpacity(user.props.theme, 0.05) + ';');
+            Utils.changeCss('div.theme', 'background-color:' + user.props.theme + ';');
+            Utils.changeCss('.btn.btn-primary', 'background: ' + user.props.theme + ';');
+            Utils.changeCss('.modal .modal-header', 'background: ' + user.props.theme + ';');
+            Utils.changeCss('.mention', 'background: ' + user.props.theme + ';');
+            Utils.changeCss('.mention-link', 'color: ' + user.props.theme + ';');
+            Utils.changeCss('@media(max-width: 768px){.search-bar__container', 'background: ' + user.props.theme + ';}');
+            Utils.changeCss('.search-item-container:hover', 'background: ' + Utils.changeOpacity(user.props.theme, 0.05) + ';');
         }
 
         if (user.props.theme !== '#000000' && user.props.theme !== '#585858') {
-            utils.changeCss('.btn.btn-primary:hover, .btn.btn-primary:active, .btn.btn-primary:focus', 'background: ' + utils.changeColor(user.props.theme, -10) + ';');
-            utils.changeCss('a.theme', 'color:' + user.props.theme + '; fill:' + user.props.theme + '!important;');
+            Utils.changeCss('.btn.btn-primary:hover, .btn.btn-primary:active, .btn.btn-primary:focus', 'background: ' + Utils.changeColor(user.props.theme, -10) + ';');
+            Utils.changeCss('a.theme', 'color:' + user.props.theme + '; fill:' + user.props.theme + '!important;');
         } else if (user.props.theme === '#000000') {
-            utils.changeCss('.btn.btn-primary:hover, .btn.btn-primary:active, .btn.btn-primary:focus', 'background: ' + utils.changeColor(user.props.theme, +50) + ';');
+            Utils.changeCss('.btn.btn-primary:hover, .btn.btn-primary:active, .btn.btn-primary:focus', 'background: ' + Utils.changeColor(user.props.theme, +50) + ';');
             $('.team__header').addClass('theme--black');
         } else if (user.props.theme === '#585858') {
-            utils.changeCss('.btn.btn-primary:hover, .btn.btn-primary:active, .btn.btn-primary:focus', 'background: ' + utils.changeColor(user.props.theme, +10) + ';');
+            Utils.changeCss('.btn.btn-primary:hover, .btn.btn-primary:active, .btn.btn-primary:focus', 'background: ' + Utils.changeColor(user.props.theme, +10) + ';');
             $('.team__header').addClass('theme--gray');
         }
-    },
-    onSocketChange: function(msg) {
+
+        /* Setup global mouse events */
+        $('body').on('click.userpopover', function popOver(e) {
+            if ($(e.target).attr('data-toggle') !== 'popover' &&
+                $(e.target).parents('.popover.in').length === 0) {
+                $('.user-popover').popover('hide');
+            }
+        });
+
+        $('body').on('mouseenter mouseleave', '.post', function mouseOver(ev) {
+            if (ev.type === 'mouseenter') {
+                $(this).parent('div').prev('.date-separator, .new-separator').addClass('hovered--after');
+                $(this).parent('div').next('.date-separator, .new-separator').addClass('hovered--before');
+            } else {
+                $(this).parent('div').prev('.date-separator, .new-separator').removeClass('hovered--after');
+                $(this).parent('div').next('.date-separator, .new-separator').removeClass('hovered--before');
+            }
+        });
+
+        $('body').on('mouseenter mouseleave', '.post.post--comment.same--root', function mouseOver(ev) {
+            if (ev.type === 'mouseenter') {
+                $(this).parent('div').prev('.date-separator, .new-separator').addClass('hovered--comment');
+                $(this).parent('div').next('.date-separator, .new-separator').addClass('hovered--comment');
+            } else {
+                $(this).parent('div').prev('.date-separator, .new-separator').removeClass('hovered--comment');
+                $(this).parent('div').next('.date-separator, .new-separator').removeClass('hovered--comment');
+            }
+        });
+
+        /* Setup modal events */
+        $('.modal').on('show.bs.modal', function onShow() {
+            $('.modal-body').css('overflow-y', 'auto');
+            $('.modal-body').css('max-height', $(window).height() * 0.7);
+        });
+    }
+    componentWillUnmount() {
+        clearInterval(this.intervalId);
+
+        $(window).off('focus');
+        $(window).off('blur');
+
+        SocketStore.removeChangeListener(this.onSocketChange);
+
+        $('body').off('click.userpopover');
+        $('body').off('mouseenter mouseleave', '.post');
+        $('body').off('mouseenter mouseleave', '.post.post--comment.same--root');
+
+        $('.modal').off('show.bs.modal');
+    }
+    onSocketChange(msg) {
         if (msg && msg.user_id && msg.user_id !== UserStore.getCurrentId()) {
             UserStore.setStatus(msg.user_id, 'online');
         }
-    },
-    render: function() {
+    }
+    render() {
         return <div/>;
     }
-});
+}

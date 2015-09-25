@@ -4,19 +4,20 @@
 package web
 
 import (
-	"fmt"
-	"html/template"
-	"net/http"
-	"strconv"
-	"strings"
-
 	l4g "code.google.com/p/log4go"
+	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/mattermost/platform/api"
 	"github.com/mattermost/platform/model"
+	"github.com/mattermost/platform/store"
 	"github.com/mattermost/platform/utils"
 	"github.com/mssola/user_agent"
 	"gopkg.in/fsnotify.v1"
+	"html/template"
+	"net/http"
+	"regexp"
+	"strconv"
+	"strings"
 )
 
 var Templates *template.Template
@@ -30,10 +31,8 @@ func NewHtmlTemplatePage(templateName string, title string) *HtmlTemplatePage {
 	}
 
 	props := make(map[string]string)
-	props["AnalyticsUrl"] = utils.Cfg.ServiceSettings.AnalyticsUrl
-	props["ProfileHeight"] = fmt.Sprintf("%v", utils.Cfg.ImageSettings.ProfileHeight)
-	props["ProfileWidth"] = fmt.Sprintf("%v", utils.Cfg.ImageSettings.ProfileWidth)
-	return &HtmlTemplatePage{TemplateName: templateName, Title: title, SiteName: utils.Cfg.ServiceSettings.SiteName, Props: props}
+	props["Title"] = title
+	return &HtmlTemplatePage{TemplateName: templateName, Props: props, ClientProps: utils.ClientProperties}
 }
 
 func (me *HtmlTemplatePage) Render(c *api.Context, w http.ResponseWriter) {
@@ -52,31 +51,34 @@ func InitWeb() {
 	mainrouter.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir(staticDir))))
 
 	mainrouter.Handle("/", api.AppHandlerIndependent(root)).Methods("GET")
-	mainrouter.Handle("/{team:[A-Za-z0-9-]+(__)?[A-Za-z0-9-]+}", api.AppHandler(login)).Methods("GET")
-	mainrouter.Handle("/{team:[A-Za-z0-9-]+(__)?[A-Za-z0-9-]+}/", api.AppHandler(login)).Methods("GET")
-	mainrouter.Handle("/{team:[A-Za-z0-9-]+(__)?[A-Za-z0-9-]+}/login", api.AppHandler(login)).Methods("GET")
+	mainrouter.Handle("/oauth/authorize", api.UserRequired(authorizeOAuth)).Methods("GET")
+	mainrouter.Handle("/oauth/access_token", api.ApiAppHandler(getAccessToken)).Methods("POST")
 
-	// Bug in gorilla.mux prevents us from using regex here.
-	mainrouter.Handle("/{team}/login/{service}", api.AppHandler(loginWithOAuth)).Methods("GET")
-	mainrouter.Handle("/login/{service:[A-Za-z]+}/complete", api.AppHandlerIndependent(loginCompleteOAuth)).Methods("GET")
-
-	mainrouter.Handle("/{team:[A-Za-z0-9-]+(__)?[A-Za-z0-9-]+}/logout", api.AppHandler(logout)).Methods("GET")
-	mainrouter.Handle("/{team:[A-Za-z0-9-]+(__)?[A-Za-z0-9-]+}/reset_password", api.AppHandler(resetPassword)).Methods("GET")
-	// Bug in gorilla.mux prevents us from using regex here.
-	mainrouter.Handle("/{team}/channels/{channelname}", api.UserRequired(getChannel)).Methods("GET")
-
-	// Anything added here must have an _ in it so it does not conflict with team names
 	mainrouter.Handle("/signup_team_complete/", api.AppHandlerIndependent(signupTeamComplete)).Methods("GET")
 	mainrouter.Handle("/signup_user_complete/", api.AppHandlerIndependent(signupUserComplete)).Methods("GET")
 	mainrouter.Handle("/signup_team_confirm/", api.AppHandlerIndependent(signupTeamConfirm)).Methods("GET")
-
-	// Bug in gorilla.mux prevents us from using regex here.
-	mainrouter.Handle("/{team}/signup/{service}", api.AppHandler(signupWithOAuth)).Methods("GET")
-	mainrouter.Handle("/signup/{service:[A-Za-z]+}/complete", api.AppHandlerIndependent(signupCompleteOAuth)).Methods("GET")
-
 	mainrouter.Handle("/verify_email", api.AppHandlerIndependent(verifyEmail)).Methods("GET")
 	mainrouter.Handle("/find_team", api.AppHandlerIndependent(findTeam)).Methods("GET")
 	mainrouter.Handle("/signup_team", api.AppHandlerIndependent(signup)).Methods("GET")
+	mainrouter.Handle("/login/{service:[A-Za-z]+}/complete", api.AppHandlerIndependent(loginCompleteOAuth)).Methods("GET")
+	mainrouter.Handle("/signup/{service:[A-Za-z]+}/complete", api.AppHandlerIndependent(signupCompleteOAuth)).Methods("GET")
+
+	mainrouter.Handle("/admin_console", api.UserRequired(adminConsole)).Methods("GET")
+
+	mainrouter.Handle("/hooks/{id:[A-Za-z0-9]+}", api.ApiAppHandler(incomingWebhook)).Methods("POST")
+
+	// ----------------------------------------------------------------------------------------------
+	// *ANYTHING* team specific should go below this line
+	// ----------------------------------------------------------------------------------------------
+
+	mainrouter.Handle("/{team:[A-Za-z0-9-]+(__)?[A-Za-z0-9-]+}", api.AppHandler(login)).Methods("GET")
+	mainrouter.Handle("/{team:[A-Za-z0-9-]+(__)?[A-Za-z0-9-]+}/", api.AppHandler(login)).Methods("GET")
+	mainrouter.Handle("/{team:[A-Za-z0-9-]+(__)?[A-Za-z0-9-]+}/login", api.AppHandler(login)).Methods("GET")
+	mainrouter.Handle("/{team:[A-Za-z0-9-]+(__)?[A-Za-z0-9-]+}/logout", api.AppHandler(logout)).Methods("GET")
+	mainrouter.Handle("/{team:[A-Za-z0-9-]+(__)?[A-Za-z0-9-]+}/reset_password", api.AppHandler(resetPassword)).Methods("GET")
+	mainrouter.Handle("/{team}/login/{service}", api.AppHandler(loginWithOAuth)).Methods("GET")      // Bug in gorilla.mux prevents us from using regex here.
+	mainrouter.Handle("/{team}/channels/{channelname}", api.UserRequired(getChannel)).Methods("GET") // Bug in gorilla.mux prevents us from using regex here.
+	mainrouter.Handle("/{team}/signup/{service}", api.AppHandler(signupWithOAuth)).Methods("GET")    // Bug in gorilla.mux prevents us from using regex here.
 
 	watchAndParseTemplates()
 }
@@ -345,7 +347,7 @@ func getChannel(c *api.Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	page := NewHtmlTemplatePage("channel", "")
-	page.Title = name + " - " + team.DisplayName + " " + page.SiteName
+	page.Props["Title"] = name + " - " + team.DisplayName + " " + page.ClientProps["SiteName"]
 	page.Props["TeamDisplayName"] = team.DisplayName
 	page.Props["TeamType"] = team.Type
 	page.Props["TeamId"] = team.Id
@@ -448,7 +450,7 @@ func resetPassword(c *api.Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	page := NewHtmlTemplatePage("password_reset", "")
-	page.Title = "Reset Password - " + page.SiteName
+	page.Props["Title"] = "Reset Password " + page.ClientProps["SiteName"]
 	page.Props["TeamDisplayName"] = teamDisplayName
 	page.Props["Hash"] = hash
 	page.Props["Data"] = data
@@ -561,6 +563,7 @@ func signupCompleteOAuth(c *api.Context, w http.ResponseWriter, r *http.Request)
 		}
 
 		user.TeamId = team.Id
+		user.EmailVerified = true
 
 		ruser := api.CreateUser(c, team, user)
 		if c.Err != nil {
@@ -639,4 +642,284 @@ func loginCompleteOAuth(c *api.Context, w http.ResponseWriter, r *http.Request) 
 			root(c, w, r)
 		}
 	}
+}
+
+func adminConsole(c *api.Context, w http.ResponseWriter, r *http.Request) {
+
+	if !c.HasSystemAdminPermissions("adminConsole") {
+		return
+	}
+
+	page := NewHtmlTemplatePage("admin_console", "Admin Console")
+	page.Render(c, w)
+}
+
+func authorizeOAuth(c *api.Context, w http.ResponseWriter, r *http.Request) {
+	if !utils.Cfg.ServiceSettings.EnableOAuthServiceProvider {
+		c.Err = model.NewAppError("authorizeOAuth", "The system admin has turned off OAuth service providing.", "")
+		c.Err.StatusCode = http.StatusNotImplemented
+		return
+	}
+
+	if !CheckBrowserCompatability(c, r) {
+		return
+	}
+
+	responseType := r.URL.Query().Get("response_type")
+	clientId := r.URL.Query().Get("client_id")
+	redirect := r.URL.Query().Get("redirect_uri")
+	scope := r.URL.Query().Get("scope")
+	state := r.URL.Query().Get("state")
+
+	if len(responseType) == 0 || len(clientId) == 0 || len(redirect) == 0 {
+		c.Err = model.NewAppError("authorizeOAuth", "Missing one or more of response_type, client_id, or redirect_uri", "")
+		return
+	}
+
+	var app *model.OAuthApp
+	if result := <-api.Srv.Store.OAuth().GetApp(clientId); result.Err != nil {
+		c.Err = result.Err
+		return
+	} else {
+		app = result.Data.(*model.OAuthApp)
+	}
+
+	var team *model.Team
+	if result := <-api.Srv.Store.Team().Get(c.Session.TeamId); result.Err != nil {
+		c.Err = result.Err
+		return
+	} else {
+		team = result.Data.(*model.Team)
+	}
+
+	page := NewHtmlTemplatePage("authorize", "Authorize Application")
+	page.Props["TeamName"] = team.Name
+	page.Props["AppName"] = app.Name
+	page.Props["ResponseType"] = responseType
+	page.Props["ClientId"] = clientId
+	page.Props["RedirectUri"] = redirect
+	page.Props["Scope"] = scope
+	page.Props["State"] = state
+	page.Render(c, w)
+}
+
+func getAccessToken(c *api.Context, w http.ResponseWriter, r *http.Request) {
+	if !utils.Cfg.ServiceSettings.EnableOAuthServiceProvider {
+		c.Err = model.NewAppError("getAccessToken", "The system admin has turned off OAuth service providing.", "")
+		c.Err.StatusCode = http.StatusNotImplemented
+		return
+	}
+
+	c.LogAudit("attempt")
+
+	r.ParseForm()
+
+	grantType := r.FormValue("grant_type")
+	if grantType != model.ACCESS_TOKEN_GRANT_TYPE {
+		c.Err = model.NewAppError("getAccessToken", "invalid_request: Bad grant_type", "")
+		return
+	}
+
+	clientId := r.FormValue("client_id")
+	if len(clientId) != 26 {
+		c.Err = model.NewAppError("getAccessToken", "invalid_request: Bad client_id", "")
+		return
+	}
+
+	secret := r.FormValue("client_secret")
+	if len(secret) == 0 {
+		c.Err = model.NewAppError("getAccessToken", "invalid_request: Missing client_secret", "")
+		return
+	}
+
+	code := r.FormValue("code")
+	if len(code) == 0 {
+		c.Err = model.NewAppError("getAccessToken", "invalid_request: Missing code", "")
+		return
+	}
+
+	redirectUri := r.FormValue("redirect_uri")
+
+	achan := api.Srv.Store.OAuth().GetApp(clientId)
+	tchan := api.Srv.Store.OAuth().GetAccessDataByAuthCode(code)
+
+	authData := api.GetAuthData(code)
+
+	if authData == nil {
+		c.LogAudit("fail - invalid auth code")
+		c.Err = model.NewAppError("getAccessToken", "invalid_grant: Invalid or expired authorization code", "")
+		return
+	}
+
+	uchan := api.Srv.Store.User().Get(authData.UserId)
+
+	if authData.IsExpired() {
+		c.LogAudit("fail - auth code expired")
+		c.Err = model.NewAppError("getAccessToken", "invalid_grant: Invalid or expired authorization code", "")
+		return
+	}
+
+	if authData.RedirectUri != redirectUri {
+		c.LogAudit("fail - redirect uri provided did not match previous redirect uri")
+		c.Err = model.NewAppError("getAccessToken", "invalid_request: Supplied redirect_uri does not match authorization code redirect_uri", "")
+		return
+	}
+
+	if !model.ComparePassword(code, fmt.Sprintf("%v:%v:%v:%v", clientId, redirectUri, authData.CreateAt, authData.UserId)) {
+		c.LogAudit("fail - auth code is invalid")
+		c.Err = model.NewAppError("getAccessToken", "invalid_grant: Invalid or expired authorization code", "")
+		return
+	}
+
+	var app *model.OAuthApp
+	if result := <-achan; result.Err != nil {
+		c.Err = model.NewAppError("getAccessToken", "invalid_client: Invalid client credentials", "")
+		return
+	} else {
+		app = result.Data.(*model.OAuthApp)
+	}
+
+	if !model.ComparePassword(app.ClientSecret, secret) {
+		c.LogAudit("fail - invalid client credentials")
+		c.Err = model.NewAppError("getAccessToken", "invalid_client: Invalid client credentials", "")
+		return
+	}
+
+	callback := redirectUri
+	if len(callback) == 0 {
+		callback = app.CallbackUrls[0]
+	}
+
+	if result := <-tchan; result.Err != nil {
+		c.Err = model.NewAppError("getAccessToken", "server_error: Encountered internal server error while accessing database", "")
+		return
+	} else if result.Data != nil {
+		c.LogAudit("fail - auth code has been used previously")
+		accessData := result.Data.(*model.AccessData)
+
+		// Revoke access token, related auth code, and session from DB as well as from cache
+		if err := api.RevokeAccessToken(accessData.Token); err != nil {
+			l4g.Error("Encountered an error revoking an access token, err=" + err.Message)
+		}
+
+		c.Err = model.NewAppError("getAccessToken", "invalid_grant: Authorization code already exchanged for an access token", "")
+		return
+	}
+
+	var user *model.User
+	if result := <-uchan; result.Err != nil {
+		c.Err = model.NewAppError("getAccessToken", "server_error: Encountered internal server error while pulling user from database", "")
+		return
+	} else {
+		user = result.Data.(*model.User)
+	}
+
+	session := &model.Session{UserId: user.Id, TeamId: user.TeamId, Roles: user.Roles, IsOAuth: true}
+
+	if result := <-api.Srv.Store.Session().Save(session); result.Err != nil {
+		c.Err = model.NewAppError("getAccessToken", "server_error: Encountered internal server error while saving session to database", "")
+		return
+	} else {
+		session = result.Data.(*model.Session)
+		api.AddSessionToCache(session)
+	}
+
+	accessData := &model.AccessData{AuthCode: authData.Code, Token: session.Token, RedirectUri: callback}
+
+	if result := <-api.Srv.Store.OAuth().SaveAccessData(accessData); result.Err != nil {
+		l4g.Error(result.Err)
+		c.Err = model.NewAppError("getAccessToken", "server_error: Encountered internal server error while saving access token to database", "")
+		return
+	}
+
+	accessRsp := &model.AccessResponse{AccessToken: session.Token, TokenType: model.ACCESS_TOKEN_TYPE, ExpiresIn: model.SESSION_TIME_OAUTH_IN_SECS}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+
+	c.LogAuditWithUserId(user.Id, "success")
+
+	w.Write([]byte(accessRsp.ToJson()))
+}
+
+func incomingWebhook(c *api.Context, w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	id := params["id"]
+
+	hchan := api.Srv.Store.Webhook().GetIncoming(id)
+
+	r.ParseForm()
+
+	props := model.MapFromJson(strings.NewReader(r.FormValue("payload")))
+
+	text := props["text"]
+	if len(text) == 0 {
+		c.Err = model.NewAppError("incomingWebhook", "No text specified", "")
+		return
+	}
+
+	channelName := props["channel"]
+
+	var hook *model.IncomingWebhook
+	if result := <-hchan; result.Err != nil {
+		c.Err = model.NewAppError("incomingWebhook", "Invalid webhook", "err="+result.Err.Message)
+		return
+	} else {
+		hook = result.Data.(*model.IncomingWebhook)
+	}
+
+	var channel *model.Channel
+	var cchan store.StoreChannel
+
+	if len(channelName) != 0 {
+		if channelName[0] == '@' {
+			if result := <-api.Srv.Store.User().GetByUsername(hook.TeamId, channelName[1:]); result.Err != nil {
+				c.Err = model.NewAppError("incomingWebhook", "Couldn't find the user", "err="+result.Err.Message)
+				return
+			} else {
+				channelName = model.GetDMNameFromIds(result.Data.(*model.User).Id, hook.UserId)
+			}
+		} else if channelName[0] == '#' {
+			channelName = channelName[1:]
+		}
+
+		cchan = api.Srv.Store.Channel().GetByName(hook.TeamId, channelName)
+	} else {
+		cchan = api.Srv.Store.Channel().Get(hook.ChannelId)
+	}
+
+	// parse links into Markdown format
+	linkWithTextRegex := regexp.MustCompile(`<([^<\|]+)\|([^>]+)>`)
+	text = linkWithTextRegex.ReplaceAllString(text, "[${2}](${1})")
+
+	linkRegex := regexp.MustCompile(`<\s*(\S*)\s*>`)
+	text = linkRegex.ReplaceAllString(text, "${1}")
+
+	if result := <-cchan; result.Err != nil {
+		c.Err = model.NewAppError("incomingWebhook", "Couldn't find the channel", "err="+result.Err.Message)
+		return
+	} else {
+		channel = result.Data.(*model.Channel)
+	}
+
+	pchan := api.Srv.Store.Channel().CheckPermissionsTo(hook.TeamId, channel.Id, hook.UserId)
+
+	post := &model.Post{UserId: hook.UserId, ChannelId: channel.Id, Message: text}
+
+	if !c.HasPermissionsToChannel(pchan, "createIncomingHook") && channel.Type != model.CHANNEL_OPEN {
+		c.Err = model.NewAppError("incomingWebhook", "Inappropriate channel permissions", "")
+		return
+	}
+
+	// create a mock session
+	c.Session = model.Session{UserId: hook.UserId, TeamId: hook.TeamId, IsOAuth: false}
+
+	if _, err := api.CreatePost(c, post, false); err != nil {
+		c.Err = model.NewAppError("incomingWebhook", "Error creating post", "err="+err.Message)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte("ok"))
 }

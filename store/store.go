@@ -34,6 +34,9 @@ type Store interface {
 	User() UserStore
 	Audit() AuditStore
 	Session() SessionStore
+	OAuth() OAuthStore
+	System() SystemStore
+	Webhook() WebhookStore
 	Close()
 }
 
@@ -44,6 +47,7 @@ type TeamStore interface {
 	Get(id string) StoreChannel
 	GetByName(name string) StoreChannel
 	GetTeamsForEmail(domain string) StoreChannel
+	GetForExport() StoreChannel
 }
 
 type ChannelStore interface {
@@ -55,6 +59,7 @@ type ChannelStore interface {
 	GetChannels(teamId string, userId string) StoreChannel
 	GetMoreChannels(teamId string, userId string) StoreChannel
 	GetChannelCounts(teamId string, userId string) StoreChannel
+	GetForExport(teamId string) StoreChannel
 
 	SaveMember(member *model.ChannelMember) StoreChannel
 	GetMembers(channelId string) StoreChannel
@@ -80,6 +85,7 @@ type PostStore interface {
 	GetPostsSince(channelId string, time int64) StoreChannel
 	GetEtag(channelId string) StoreChannel
 	Search(teamId string, userId string, terms string, isHashtagSearch bool) StoreChannel
+	GetForExport(channelId string) StoreChannel
 }
 
 type UserStore interface {
@@ -98,13 +104,14 @@ type UserStore interface {
 	VerifyEmail(userId string) StoreChannel
 	GetEtagForProfiles(teamId string) StoreChannel
 	UpdateFailedPasswordAttempts(userId string, attempts int) StoreChannel
+	GetForExport(teamId string) StoreChannel
 }
 
 type SessionStore interface {
 	Save(session *model.Session) StoreChannel
-	Get(id string) StoreChannel
+	Get(sessionIdOrToken string) StoreChannel
 	GetSessions(userId string) StoreChannel
-	Remove(sessionIdOrAlt string) StoreChannel
+	Remove(sessionIdOrToken string) StoreChannel
 	UpdateLastActivityAt(sessionId string, time int64) StoreChannel
 	UpdateRoles(userId string, roles string) StoreChannel
 }
@@ -112,4 +119,31 @@ type SessionStore interface {
 type AuditStore interface {
 	Save(audit *model.Audit) StoreChannel
 	Get(user_id string, limit int) StoreChannel
+}
+
+type OAuthStore interface {
+	SaveApp(app *model.OAuthApp) StoreChannel
+	UpdateApp(app *model.OAuthApp) StoreChannel
+	GetApp(id string) StoreChannel
+	GetAppByUser(userId string) StoreChannel
+	SaveAuthData(authData *model.AuthData) StoreChannel
+	GetAuthData(code string) StoreChannel
+	RemoveAuthData(code string) StoreChannel
+	SaveAccessData(accessData *model.AccessData) StoreChannel
+	GetAccessData(token string) StoreChannel
+	GetAccessDataByAuthCode(authCode string) StoreChannel
+	RemoveAccessData(token string) StoreChannel
+}
+
+type SystemStore interface {
+	Save(system *model.System) StoreChannel
+	Update(system *model.System) StoreChannel
+	Get() StoreChannel
+}
+
+type WebhookStore interface {
+	SaveIncoming(webhook *model.IncomingWebhook) StoreChannel
+	GetIncoming(id string) StoreChannel
+	GetIncomingByUser(userId string) StoreChannel
+	DeleteIncoming(webhookId string, time int64) StoreChannel
 }

@@ -2,9 +2,7 @@
 // See License.txt for license information.
 
 var EmailItem = require('./team_signup_email_item.jsx');
-var utils = require('../utils/utils.jsx');
-var ConfigStore = require('../stores/config_store.jsx');
-var client = require('../utils/client.jsx');
+var Client = require('../utils/client.jsx');
 
 export default class TeamSignupSendInvitesPage extends React.Component {
     constructor(props) {
@@ -15,17 +13,17 @@ export default class TeamSignupSendInvitesPage extends React.Component {
         this.submitSkip = this.submitSkip.bind(this);
         this.keySubmit = this.keySubmit.bind(this);
         this.state = {
-            emailEnabled: !ConfigStore.getSettingAsBoolean('ByPassEmail', false)
+            emailEnabled: !global.window.config.ByPassEmail
         };
+
+        if (!this.state.emailEnabled) {
+            this.props.state.wizard = 'username';
+            this.props.updateParent(this.props.state);
+        }
     }
     submitBack(e) {
         e.preventDefault();
-
-        if (config.AllowSignupDomainsWizard) {
-            this.props.state.wizard = 'allowed_domains';
-        } else {
-            this.props.state.wizard = 'team_url';
-        }
+        this.props.state.wizard = 'team_url';
 
         this.props.updateParent(this.props.state);
     }
@@ -71,13 +69,7 @@ export default class TeamSignupSendInvitesPage extends React.Component {
     }
     keySubmit(e) {
         if (e && e.keyCode === 13) {
-            this.submitNext(e)
-        }
-    }
-    componentWillMount() {
-        if (!this.state.emailEnabled) {
-            this.props.state.wizard = 'username';
-            this.props.updateParent(this.props.state);
+            this.submitNext(e);
         }
     }
     componentDidMount() {
@@ -92,7 +84,7 @@ export default class TeamSignupSendInvitesPage extends React.Component {
         }
     }
     render() {
-        client.track('signup', 'signup_team_05_send_invites');
+        Client.track('signup', 'signup_team_05_send_invites');
 
         var content = null;
         var bottomContent = null;
@@ -138,7 +130,7 @@ export default class TeamSignupSendInvitesPage extends React.Component {
 
             bottomContent = (
                 <p className='color--light'>
-                    {'if you prefer, you can invite ' + strings.Team + ' members later'}
+                    {'if you prefer, you can invite team members later'}
                     <br />
                     {' and '}
                     <a
@@ -153,7 +145,7 @@ export default class TeamSignupSendInvitesPage extends React.Component {
         } else {
             content = (
                 <div className='form-group color--light'>
-                    {'Email is currently disabled for your ' + strings.Team + ', and emails cannot be sent. Contact your system administrator to enable email and email invitations.'}
+                    {'Email is currently disabled for your team, and emails cannot be sent. Contact your system administrator to enable email and email invitations.'}
                 </div>
             );
         }
@@ -165,7 +157,7 @@ export default class TeamSignupSendInvitesPage extends React.Component {
                         className='signup-team-logo'
                         src='/static/images/logo.png'
                     />
-                    <h2>{'Invite ' + utils.toTitleCase(strings.Team) + ' Members'}</h2>
+                    <h2>{'Invite Team Members'}</h2>
                     {content}
                     <div className='form-group'>
                         <button
@@ -190,6 +182,7 @@ export default class TeamSignupSendInvitesPage extends React.Component {
         );
     }
 }
+
 TeamSignupSendInvitesPage.propTypes = {
     state: React.PropTypes.object.isRequired,
     updateParent: React.PropTypes.func.isRequired

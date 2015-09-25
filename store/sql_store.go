@@ -38,6 +38,9 @@ type SqlStore struct {
 	user     UserStore
 	audit    AuditStore
 	session  SessionStore
+	oauth    OAuthStore
+	system   SystemStore
+	webhook  WebhookStore
 }
 
 func NewSqlStore() Store {
@@ -55,21 +58,43 @@ func NewSqlStore() Store {
 			utils.Cfg.SqlSettings.Trace)
 	}
 
+	schemaVersion := sqlStore.GetCurrentSchemaVersion()
+
+	// If the version is already set then we are potentially in an 'upgrade needed' state
+	if schemaVersion != "" {
+		// Check to see if it's the most current database schema version
+		if !model.IsCurrentVersion(schemaVersion) {
+			// If we are upgrading from the previous version then print a warning and continue
+			if model.IsPreviousVersion(schemaVersion) {
+				l4g.Warn("The database schema version of " + schemaVersion + " appears to be out of date")
+				l4g.Warn("Attempting to upgrade the database schema version to " + model.CurrentVersion)
+			} else {
+				// If this is an 'upgrade needed' state but the user is attempting to skip a version then halt the world
+				l4g.Critical("The database schema version of " + schemaVersion + " cannot be upgraded.  You must not skip a version.")
+				time.Sleep(time.Second)
+				panic("The database schema version of " + schemaVersion + " cannot be upgraded.  You must not skip a version.")
+			}
+		}
+	}
+
+	// Temporary upgrade code, remove after 0.8.0 release
+	if sqlStore.DoesTableExist("Sessions") {
+		if sqlStore.DoesColumnExist("Sessions", "AltId") {
+			sqlStore.GetMaster().Exec("DROP TABLE IF EXISTS Sessions")
+		}
+	}
+
 	sqlStore.team = NewSqlTeamStore(sqlStore)
 	sqlStore.channel = NewSqlChannelStore(sqlStore)
 	sqlStore.post = NewSqlPostStore(sqlStore)
 	sqlStore.user = NewSqlUserStore(sqlStore)
 	sqlStore.audit = NewSqlAuditStore(sqlStore)
 	sqlStore.session = NewSqlSessionStore(sqlStore)
+	sqlStore.oauth = NewSqlOAuthStore(sqlStore)
+	sqlStore.system = NewSqlSystemStore(sqlStore)
+	sqlStore.webhook = NewSqlWebhookStore(sqlStore)
 
 	sqlStore.master.CreateTablesIfNotExists()
-
-	sqlStore.team.(*SqlTeamStore).CreateIndexesIfNotExists()
-	sqlStore.channel.(*SqlChannelStore).CreateIndexesIfNotExists()
-	sqlStore.post.(*SqlPostStore).CreateIndexesIfNotExists()
-	sqlStore.user.(*SqlUserStore).CreateIndexesIfNotExists()
-	sqlStore.audit.(*SqlAuditStore).CreateIndexesIfNotExists()
-	sqlStore.session.(*SqlSessionStore).CreateIndexesIfNotExists()
 
 	sqlStore.team.(*SqlTeamStore).UpgradeSchemaIfNeeded()
 	sqlStore.channel.(*SqlChannelStore).UpgradeSchemaIfNeeded()
@@ -77,6 +102,29 @@ func NewSqlStore() Store {
 	sqlStore.user.(*SqlUserStore).UpgradeSchemaIfNeeded()
 	sqlStore.audit.(*SqlAuditStore).UpgradeSchemaIfNeeded()
 	sqlStore.session.(*SqlSessionStore).UpgradeSchemaIfNeeded()
+	sqlStore.oauth.(*SqlOAuthStore).UpgradeSchemaIfNeeded()
+	sqlStore.system.(*SqlSystemStore).UpgradeSchemaIfNeeded()
+	sqlStore.webhook.(*SqlWebhookStore).UpgradeSchemaIfNeeded()
+
+	sqlStore.team.(*SqlTeamStore).CreateIndexesIfNotExists()
+	sqlStore.channel.(*SqlChannelStore).CreateIndexesIfNotExists()
+	sqlStore.post.(*SqlPostStore).CreateIndexesIfNotExists()
+	sqlStore.user.(*SqlUserStore).CreateIndexesIfNotExists()
+	sqlStore.audit.(*SqlAuditStore).CreateIndexesIfNotExists()
+	sqlStore.session.(*SqlSessionStore).CreateIndexesIfNotExists()
+	sqlStore.oauth.(*SqlOAuthStore).CreateIndexesIfNotExists()
+	sqlStore.system.(*SqlSystemStore).CreateIndexesIfNotExists()
+	sqlStore.webhook.(*SqlWebhookStore).CreateIndexesIfNotExists()
+
+	if model.IsPreviousVersion(schemaVersion) {
+		sqlStore.system.Update(&model.System{Name: "Version", Value: model.CurrentVersion})
+		l4g.Warn("The database schema has been upgraded to version " + model.CurrentVersion)
+	}
+
+	if schemaVersion == "" {
+		sqlStore.system.Save(&model.System{Name: "Version", Value: model.CurrentVersion})
+		l4g.Info("The database schema has been set to version " + model.CurrentVersion)
+	}
 
 	return sqlStore
 }
@@ -85,12 +133,12 @@ func setupConnection(con_type string, driver string, dataSource string, maxIdle 
 
 	db, err := dbsql.Open(driver, dataSource)
 	if err != nil {
-		l4g.Critical("Failed to open sql connection to '%v' err:%v", dataSource, err)
+		l4g.Critical("Failed to open sql connection to err:%v", err)
 		time.Sleep(time.Second)
 		panic("Failed to open sql connection" + err.Error())
 	}
 
-	l4g.Info("Pinging sql %v database at '%v'", con_type, dataSource)
+	l4g.Info("Pinging sql %v database", con_type)
 	err = db.Ping()
 	if err != nil {
 		l4g.Critical("Failed to ping db err:%v", err)
@@ -122,6 +170,56 @@ func setupConnection(con_type string, driver string, dataSource string, maxIdle 
 	return dbmap
 }
 
+func (ss SqlStore) GetCurrentSchemaVersion() string {
+	version, _ := ss.GetMaster().SelectStr("SELECT Value FROM Systems WHERE Name='Version'")
+	return version
+}
+
+func (ss SqlStore) DoesTableExist(tableName string) bool {
+	if utils.Cfg.SqlSettings.DriverName == "postgres" {
+		count, err := ss.GetMaster().SelectInt(
+			`SELECT count(relname) FROM pg_class WHERE relname=$1`,
+			strings.ToLower(tableName),
+		)
+
+		if err != nil {
+			l4g.Critical("Failed to check if table exists %v", err)
+			time.Sleep(time.Second)
+			panic("Failed to check if table exists " + err.Error())
+		}
+
+		return count > 0
+
+	} else if utils.Cfg.SqlSettings.DriverName == "mysql" {
+
+		count, err := ss.GetMaster().SelectInt(
+			`SELECT
+		    COUNT(0) AS table_exists
+			FROM
+			    information_schema.TABLES
+			WHERE
+			    TABLE_SCHEMA = DATABASE()
+			        AND TABLE_NAME = ?
+		    `,
+			tableName,
+		)
+
+		if err != nil {
+			l4g.Critical("Failed to check if table exists %v", err)
+			time.Sleep(time.Second)
+			panic("Failed to check if table exists " + err.Error())
+		}
+
+		return count > 0
+
+	} else {
+		l4g.Critical("Failed to check if column exists because of missing driver")
+		time.Sleep(time.Second)
+		panic("Failed to check if column exists because of missing driver")
+	}
+
+}
+
 func (ss SqlStore) DoesColumnExist(tableName string, columnName string) bool {
 	if utils.Cfg.SqlSettings.DriverName == "postgres" {
 		count, err := ss.GetMaster().SelectInt(
@@ -135,6 +233,10 @@ func (ss SqlStore) DoesColumnExist(tableName string, columnName string) bool {
 		)
 
 		if err != nil {
+			if err.Error() == "pq: relation \""+strings.ToLower(tableName)+"\" does not exist" {
+				return false
+			}
+
 			l4g.Critical("Failed to check if column exists %v", err)
 			time.Sleep(time.Second)
 			panic("Failed to check if column exists " + err.Error())
@@ -361,6 +463,18 @@ func (ss SqlStore) Session() SessionStore {
 
 func (ss SqlStore) Audit() AuditStore {
 	return ss.audit
+}
+
+func (ss SqlStore) OAuth() OAuthStore {
+	return ss.oauth
+}
+
+func (ss SqlStore) System() SystemStore {
+	return ss.system
+}
+
+func (ss SqlStore) Webhook() WebhookStore {
+	return ss.webhook
 }
 
 type mattermConverter struct{}

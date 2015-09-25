@@ -6,18 +6,21 @@ var ChannelStore = require('../stores/channel_store.jsx');
 var UserProfile = require('./user_profile.jsx');
 var UserStore = require('../stores/user_store.jsx');
 var AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
-var utils = require('../utils/utils.jsx');
+var Utils = require('../utils/utils.jsx');
 var Constants = require('../utils/constants.jsx');
 var FileAttachmentList = require('./file_attachment_list.jsx');
-var client = require('../utils/client.jsx');
+var Client = require('../utils/client.jsx');
 var AsyncClient = require('../utils/async_client.jsx');
 var ActionTypes = Constants.ActionTypes;
+var TextFormatting = require('../utils/text_formatting.jsx');
+var twemoji = require('twemoji');
 
 export default class RhsComment extends React.Component {
     constructor(props) {
         super(props);
 
         this.retryComment = this.retryComment.bind(this);
+        this.parseEmojis = this.parseEmojis.bind(this);
 
         this.state = {};
     }
@@ -25,7 +28,7 @@ export default class RhsComment extends React.Component {
         e.preventDefault();
 
         var post = this.props.post;
-        client.createPost(post, post.channel_id,
+        Client.createPost(post, post.channel_id,
             function success(data) {
                 AsyncClient.getPosts(post.channel_id);
 
@@ -51,12 +54,22 @@ export default class RhsComment extends React.Component {
         PostStore.updatePendingPost(post);
         this.forceUpdate();
     }
+    parseEmojis() {
+        twemoji.parse(React.findDOMNode(this), {size: Constants.EMOJI_SIZE});
+        global.window.emojify.run(React.findDOMNode(this.refs.message_holder));
+    }
+    componentDidMount() {
+        this.parseEmojis();
+    }
     shouldComponentUpdate(nextProps) {
-        if (!utils.areStatesEqual(nextProps.post, this.props.post)) {
+        if (!Utils.areStatesEqual(nextProps.post, this.props.post)) {
             return true;
         }
 
         return false;
+    }
+    componentDidUpdate() {
+        this.parseEmojis();
     }
     render() {
         var post = this.props.post;
@@ -73,7 +86,6 @@ export default class RhsComment extends React.Component {
             type = 'Comment';
         }
 
-        var message = utils.textToJsx(post.message);
         var timestamp = UserStore.getCurrentUser().update_at;
 
         var loading;
@@ -161,7 +173,8 @@ export default class RhsComment extends React.Component {
                     filenames={post.filenames}
                     modalId={'rhs_comment_view_image_modal_' + post.id}
                     channelId={post.channel_id}
-                    userId={post.user_id} />
+                    userId={post.user_id}
+                />
             );
         }
 
@@ -181,8 +194,11 @@ export default class RhsComment extends React.Component {
                             <strong><UserProfile userId={post.user_id} /></strong>
                         </li>
                         <li className='post-header-col'>
-                            <time className='post-right-comment-time'>
-                                {utils.displayCommentDateTime(post.create_at)}
+                            <time
+                                className='post-profile-time'
+                                title={new Date(post.create_at).toString()}
+                            >
+                                {Utils.displayCommentDateTime(post.create_at)}
                             </time>
                         </li>
                         <li className='post-header-col post-header__reply'>
@@ -190,7 +206,14 @@ export default class RhsComment extends React.Component {
                         </li>
                     </ul>
                     <div className='post-body'>
-                        <p className={postClass}>{loading}{message}</p>
+                        <p className={postClass}>
+                            {loading}
+                            <div
+                                ref='message_holder'
+                                onClick={TextFormatting.handleClick}
+                                dangerouslySetInnerHTML={{__html: TextFormatting.formatText(post.message)}}
+                            />
+                        </p>
                         {fileAttachment}
                     </div>
                 </div>

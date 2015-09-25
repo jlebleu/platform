@@ -74,7 +74,7 @@ func (us SqlUserStore) Save(user *model.User) StoreChannel {
 			close(storeChannel)
 			return
 		} else if int(count) > utils.Cfg.TeamSettings.MaxUsersPerTeam {
-			result.Err = model.NewAppError("SqlUserStore.Save", "You've reached the limit of the number of allowed accounts.", "teamId="+user.TeamId)
+			result.Err = model.NewAppError("SqlUserStore.Save", "This team has reached the maxmium number of allowed accounts. Contact your systems administrator to set a higher limit.", "teamId="+user.TeamId)
 			storeChannel <- result
 			close(storeChannel)
 			return
@@ -325,9 +325,9 @@ func (s SqlUserStore) GetEtagForProfiles(teamId string) StoreChannel {
 
 		updateAt, err := s.GetReplica().SelectInt("SELECT UpdateAt FROM Users WHERE TeamId = :TeamId ORDER BY UpdateAt DESC LIMIT 1", map[string]interface{}{"TeamId": teamId})
 		if err != nil {
-			result.Data = fmt.Sprintf("%v.%v", model.ETAG_ROOT_VERSION, model.GetMillis())
+			result.Data = fmt.Sprintf("%v.%v", model.CurrentVersion, model.GetMillis())
 		} else {
-			result.Data = fmt.Sprintf("%v.%v", model.ETAG_ROOT_VERSION, updateAt)
+			result.Data = fmt.Sprintf("%v.%v", model.CurrentVersion, updateAt)
 		}
 
 		storeChannel <- result
@@ -445,6 +445,33 @@ func (us SqlUserStore) VerifyEmail(userId string) StoreChannel {
 		}
 
 		result.Data = userId
+
+		storeChannel <- result
+		close(storeChannel)
+	}()
+
+	return storeChannel
+}
+
+func (us SqlUserStore) GetForExport(teamId string) StoreChannel {
+
+	storeChannel := make(StoreChannel)
+
+	go func() {
+		result := StoreResult{}
+
+		var users []*model.User
+
+		if _, err := us.GetReplica().Select(&users, "SELECT * FROM Users WHERE TeamId = :TeamId", map[string]interface{}{"TeamId": teamId}); err != nil {
+			result.Err = model.NewAppError("SqlUserStore.GetProfiles", "We encounted an error while finding user profiles", err.Error())
+		} else {
+			for _, u := range users {
+				u.Password = ""
+				u.AuthData = ""
+			}
+
+			result.Data = users
+		}
 
 		storeChannel <- result
 		close(storeChannel)

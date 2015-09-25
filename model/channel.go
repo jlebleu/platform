@@ -117,3 +117,14 @@ func (o *Channel) PreUpdate() {
 func (o *Channel) ExtraUpdated() {
 	o.ExtraUpdateAt = GetMillis()
 }
+
+func (o *Channel) PreExport() {
+}
+
+func GetDMNameFromIds(userId1, userId2 string) string {
+	if userId1 > userId2 {
+		return userId2 + "__" + userId1
+	} else {
+		return userId1 + "__" + userId2
+	}
+}

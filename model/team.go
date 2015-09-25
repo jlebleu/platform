@@ -158,7 +158,7 @@ func IsReservedTeamName(s string) bool {
 
 func IsValidTeamName(s string) bool {
 
-	if !IsValidAlphaNum(s) {
+	if !IsValidAlphaNum(s, false) {
 		return false
 	}
 
@@ -196,4 +196,7 @@ func CleanTeamName(s string) string {
 	}
 
 	return s
+}
+
+func (o *Team) PreExport() {
 }

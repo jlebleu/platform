@@ -1,11 +1,17 @@
 // Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
 // See License.txt for license information.
 
-var SignupTeamComplete =require('../components/signup_team_complete.jsx');
+var SignupTeamComplete = require('../components/signup_team_complete.jsx');
 
-global.window.setup_signup_team_complete_page = function(email, data, hash) {
+function setupSignupTeamCompletePage(props) {
     React.render(
-        <SignupTeamComplete email={email} hash={hash} data={data}/>,
+        <SignupTeamComplete
+            email={props.Email}
+            hash={props.Hash}
+            data={props.Data}
+        />,
         document.getElementById('signup-team-complete')
     );
-};
+}
+
+global.window.setup_signup_team_complete_page = setupSignupTeamCompletePage;

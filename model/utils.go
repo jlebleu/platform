@@ -16,11 +16,6 @@ import (
 	"time"
 )
 
-const (
-	// Also change web/react/stores/browser_store.jsx BROWSER_STORE_VERSION
-	ETAG_ROOT_VERSION = "12"
-)
-
 type StringMap map[string]string
 type StringArray []string
 type EncryptStringMap map[string]string
@@ -32,6 +27,7 @@ type AppError struct {
 	RequestId     string `json:"request_id"`     // The RequestId that's also set in the header
 	StatusCode    int    `json:"status_code"`    // The http status code
 	Where         string `json:"-"`              // The function where it happened in the form of Struct.Func
+	IsOAuth       bool   `json:"is_oauth"`       // Whether the error is OAuth specific
 }
 
 func (er *AppError) Error() string {
@@ -65,6 +61,7 @@ func NewAppError(where string, message string, details string) *AppError {
 	ap.Where = where
 	ap.DetailedError = details
 	ap.StatusCode = 500
+	ap.IsOAuth = false
 	return ap
 }
 
@@ -202,7 +199,7 @@ func GetSubDomain(s string) (string, string) {
 
 func IsValidChannelIdentifier(s string) bool {
 
-	if !IsValidAlphaNum(s) {
+	if !IsValidAlphaNum(s, true) {
 		return false
 	}
 
@@ -213,10 +210,16 @@ func IsValidChannelIdentifier(s string) bool {
 	return true
 }
 
+var validAlphaNumUnderscore = regexp.MustCompile(`^[a-z0-9]+([a-z\-\_0-9]+|(__)?)[a-z0-9]+$`)
 var validAlphaNum = regexp.MustCompile(`^[a-z0-9]+([a-z\-0-9]+|(__)?)[a-z0-9]+$`)
 
-func IsValidAlphaNum(s string) bool {
-	match := validAlphaNum.MatchString(s)
+func IsValidAlphaNum(s string, allowUnderscores bool) bool {
+	var match bool
+	if allowUnderscores {
+		match = validAlphaNumUnderscore.MatchString(s)
+	} else {
+		match = validAlphaNum.MatchString(s)
+	}
 
 	if !match {
 		return false
@@ -227,7 +230,7 @@ func IsValidAlphaNum(s string) bool {
 
 func Etag(parts ...interface{}) string {
 
-	etag := ETAG_ROOT_VERSION
+	etag := CurrentVersion
 
 	for _, part := range parts {
 		etag += fmt.Sprintf(".%v", part)

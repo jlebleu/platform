@@ -121,11 +121,7 @@ func CreateDirectChannel(c *Context, otherUserId string) (*model.Channel, *model
 	channel := new(model.Channel)
 
 	channel.DisplayName = ""
-	if otherUserId > c.Session.UserId {
-		channel.Name = c.Session.UserId + "__" + otherUserId
-	} else {
-		channel.Name = otherUserId + "__" + c.Session.UserId
-	}
+	channel.Name = model.GetDMNameFromIds(otherUserId, c.Session.UserId)
 
 	channel.TeamId = c.Session.TeamId
 	channel.Description = ""
@@ -191,7 +187,7 @@ func updateChannel(c *Context, w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if !strings.Contains(channelMember.Roles, model.CHANNEL_ROLE_ADMIN) && !strings.Contains(c.Session.Roles, model.ROLE_ADMIN) {
+		if !strings.Contains(channelMember.Roles, model.CHANNEL_ROLE_ADMIN) && !strings.Contains(c.Session.Roles, model.ROLE_TEAM_ADMIN) {
 			c.Err = model.NewAppError("updateChannel", "You do not have the appropriate permissions", "")
 			c.Err.StatusCode = http.StatusForbidden
 			return
@@ -514,7 +510,7 @@ func deleteChannel(c *Context, w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if !strings.Contains(channelMember.Roles, model.CHANNEL_ROLE_ADMIN) && !strings.Contains(c.Session.Roles, model.ROLE_ADMIN) {
+		if !strings.Contains(channelMember.Roles, model.CHANNEL_ROLE_ADMIN) && !strings.Contains(c.Session.Roles, model.ROLE_TEAM_ADMIN) {
 			c.Err = model.NewAppError("deleteChannel", "You do not have the appropriate permissions", "")
 			c.Err.StatusCode = http.StatusForbidden
 			return
@@ -756,7 +752,7 @@ func removeChannelMember(c *Context, w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if !strings.Contains(channelMember.Roles, model.CHANNEL_ROLE_ADMIN) && !strings.Contains(c.Session.Roles, model.ROLE_ADMIN) {
+		if !strings.Contains(channelMember.Roles, model.CHANNEL_ROLE_ADMIN) && !strings.Contains(c.Session.Roles, model.ROLE_TEAM_ADMIN) {
 			c.Err = model.NewAppError("updateChannel", "You do not have the appropriate permissions ", "")
 			c.Err.StatusCode = http.StatusForbidden
 			return

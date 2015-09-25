@@ -57,18 +57,18 @@ func TestCreateChannel(t *testing.T) {
 
 	rchannel.Data.(*model.Channel).Id = ""
 	if _, err := Client.CreateChannel(rchannel.Data.(*model.Channel)); err != nil {
-		if err.Message != "A channel with that handle already exists" {
+		if err.Message != "A channel with that URL already exists" {
 			t.Fatal(err)
 		}
 	}
 
-	if _, err := Client.DoPost("/channels/create", "garbage"); err == nil {
+	if _, err := Client.DoApiPost("/channels/create", "garbage"); err == nil {
 		t.Fatal("should have been an error")
 	}
 
 	Client.DeleteChannel(savedId)
 	if _, err := Client.CreateChannel(rchannel.Data.(*model.Channel)); err != nil {
-		if err.Message != "A channel with that handle was previously created" {
+		if err.Message != "A channel with that URL was previously created" {
 			t.Fatal(err)
 		}
 	}
@@ -627,7 +627,7 @@ func TestGetChannelExtraInfo(t *testing.T) {
 		currentEtag = cache_result.Etag
 	}
 
-	Client2 := model.NewClient("http://localhost:" + utils.Cfg.ServiceSettings.Port + "/api/v1")
+	Client2 := model.NewClient("http://localhost:" + utils.Cfg.ServiceSettings.Port)
 
 	user2 := &model.User{TeamId: team.Id, Email: model.NewId() + "tester2@test.com", Nickname: "Tester 2", Password: "pwd"}
 	user2 = Client2.Must(Client2.CreateUser(user2, "")).Data.(*model.User)
