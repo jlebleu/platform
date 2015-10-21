@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var UserStore = require('../stores/user_store.jsx');
@@ -8,22 +8,26 @@ export default class GetLinkModal extends React.Component {
         super(props);
 
         this.handleClick = this.handleClick.bind(this);
+        this.onShow = this.onShow.bind(this);
+        this.onHide = this.onHide.bind(this);
 
         this.state = {copiedLink: false};
     }
+    onShow(e) {
+        var button = e.relatedTarget;
+        this.setState({title: $(button).attr('data-title'), value: $(button).attr('data-value')});
+    }
+    onHide() {
+        this.setState({copiedLink: false});
+    }
     componentDidMount() {
         if (this.refs.modal) {
-            $(React.findDOMNode(this.refs.modal)).on('show.bs.modal', function show(e) {
-                var button = e.relatedTarget;
-                this.setState({title: $(button).attr('data-title'), value: $(button).attr('data-value')});
-            }.bind(this));
-            $(React.findDOMNode(this.refs.modal)).on('hide.bs.modal', function hide() {
-                this.setState({copiedLink: false});
-            }.bind(this));
+            $(ReactDOM.findDOMNode(this.refs.modal)).on('show.bs.modal', this.onShow);
+            $(ReactDOM.findDOMNode(this.refs.modal)).on('hide.bs.modal', this.onHide);
         }
     }
     handleClick() {
-        var copyTextarea = $(React.findDOMNode(this.refs.textarea));
+        var copyTextarea = $(ReactDOM.findDOMNode(this.refs.textarea));
         copyTextarea.select();
 
         try {
@@ -39,8 +43,23 @@ export default class GetLinkModal extends React.Component {
     }
     render() {
         var currentUser = UserStore.getCurrentUser();
-        var copyLinkConfirm = null;
 
+        let copyLink = null;
+        if (document.queryCommandSupported('copy')) {
+            copyLink = (
+                <button
+                    data-copy-btn='true'
+                    type='button'
+                    className='btn btn-primary pull-left'
+                    onClick={this.handleClick}
+                    data-clipboard-text={this.state.value}
+                >
+                    Copy Link
+                </button>
+            );
+        }
+
+        var copyLinkConfirm = null;
         if (this.state.copiedLink) {
             copyLinkConfirm = <p className='alert alert-success copy-link-confirm'><i className='fa fa-check'></i> Link copied to clipboard.</p>;
         }
@@ -77,7 +96,6 @@ export default class GetLinkModal extends React.Component {
                                 <p>
                                 Send teammates the link below for them to sign-up to this team site.
                                 <br /><br />
-                                Be careful not to share this link publicly, since anyone with the link can join your team.
                                 </p>
                                 <textarea
                                     className='form-control no-resize'
@@ -94,15 +112,7 @@ export default class GetLinkModal extends React.Component {
                                 >
                                     Close
                                 </button>
-                                <button
-                                    data-copy-btn='true'
-                                    type='button'
-                                    className='btn btn-primary pull-left'
-                                    onClick={this.handleClick}
-                                    data-clipboard-text={this.state.value}
-                                >
-                                    Copy Link
-                                </button>
+                                {copyLink}
                                 {copyLinkConfirm}
                             </div>
                         </div>

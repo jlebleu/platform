@@ -2,14 +2,13 @@
 
 var BrowserStore = require('../stores/browser_store.jsx');
 var TeamStore = require('../stores/team_store.jsx');
+var ErrorStore = require('../stores/error_store.jsx');
 
 export function track(category, action, label, prop, val) {
-    global.window.snowplow('trackStructEvent', category, action, label, prop, val);
     global.window.analytics.track(action, {category: category, label: label, property: prop, value: val});
 }
 
 export function trackPage() {
-    global.window.snowplow('trackPageView');
     global.window.analytics.page();
 }
 
@@ -17,7 +16,7 @@ function handleError(methodName, xhr, status, err) {
     var e = null;
     try {
         e = JSON.parse(xhr.responseText);
-    } catch(parseError) {
+    } catch (parseError) {
         e = null;
     }
 
@@ -29,7 +28,16 @@ function handleError(methodName, xhr, status, err) {
         msg = 'error in ' + methodName + ' status=' + status + ' statusCode=' + xhr.status + ' err=' + err;
 
         if (xhr.status === 0) {
-            e = {message: 'There appears to be a problem with your internet connection'};
+            let errorCount = 1;
+            const oldError = ErrorStore.getLastError();
+            let connectError = 'There appears to be a problem with your internet connection';
+
+            if (oldError && oldError.connErrorCount) {
+                errorCount += oldError.connErrorCount;
+                connectError = 'We cannot reach the Mattermost service.  The service may be down or misconfigured.  Please contact an administrator to make sure the WebSocket port is configured properly.';
+            }
+
+            e = {message: connectError, connErrorCount: errorCount};
         } else {
             e = {message: 'We received an unexpected status code from the server (' + xhr.status + ')'};
         }
@@ -334,6 +342,49 @@ export function saveConfig(config, success, error) {
     });
 }
 
+export function logClientError(msg) {
+    var l = {};
+    l.level = 'ERROR';
+    l.message = msg;
+
+    $.ajax({
+        url: '/api/v1/admin/log_client',
+        dataType: 'json',
+        contentType: 'application/json',
+        type: 'POST',
+        data: JSON.stringify(l)
+    });
+}
+
+export function testEmail(config, success, error) {
+    $.ajax({
+        url: '/api/v1/admin/test_email',
+        dataType: 'json',
+        contentType: 'application/json',
+        type: 'POST',
+        data: JSON.stringify(config),
+        success,
+        error: function onError(xhr, status, err) {
+            var e = handleError('testEmail', xhr, status, err);
+            error(e);
+        }
+    });
+}
+
+export function getAllTeams(success, error) {
+    $.ajax({
+        url: '/api/v1/teams/all',
+        dataType: 'json',
+        contentType: 'application/json',
+        type: 'GET',
+        success,
+        error: function onError(xhr, status, err) {
+            var e = handleError('getAllTeams', xhr, status, err);
+            error(e);
+        }
+    });
+}
+
 export function getMeSynchronous(success, error) {
     var currentUser = null;
     $.ajax({
@@ -541,16 +592,16 @@ export function updateChannelDesc(data, success, error) {
     track('api', 'api_channels_desc');
 }
 
-export function updateNotifyLevel(data, success, error) {
+export function updateNotifyProps(data, success, error) {
     $.ajax({
-        url: '/api/v1/channels/update_notify_level',
+        url: '/api/v1/channels/update_notify_props',
         dataType: 'json',
         contentType: 'application/json',
         type: 'POST',
         data: JSON.stringify(data),
         success,
         error: function onError(xhr, status, err) {
-            var e = handleError('updateNotifyLevel', xhr, status, err);
+            var e = handleError('updateNotifyProps', xhr, status, err);
             error(e);
         }
     });
@@ -877,6 +928,21 @@ export function getProfiles(success, error) {
     });
 }
 
+export function getProfilesForTeam(teamId, success, error) {
+    $.ajax({
+        cache: false,
+        url: '/api/v1/users/profiles/' + teamId,
+        dataType: 'json',
+        contentType: 'application/json',
+        type: 'GET',
+        success,
+        error: function onError(xhr, status, err) {
+            var e = handleError('getProfilesForTeam', xhr, status, err);
+            error(e);
+        }
+    });
+}
+
 export function uploadFile(formData, success, error) {
     var request = $.ajax({
         url: '/api/v1/files/upload',
@@ -1000,23 +1066,6 @@ export function getMyTeam(success, error) {
     });
 }
 
-export function updateValetFeature(data, success, error) {
-    $.ajax({
-        url: '/api/v1/teams/update_valet_feature',
-        dataType: 'json',
-        contentType: 'application/json',
-        type: 'POST',
-        data: JSON.stringify(data),
-        success,
-        error: function onError(xhr, status, err) {
-            var e = handleError('updateValetFeature', xhr, status, err);
-            error(e);
-        }
-    });
-
-    track('api', 'api_teams_update_valet_feature');
-}
-
 export function registerOAuthApp(app, success, error) {
     $.ajax({
         url: '/api/v1/oauth/register',
@@ -1093,26 +1142,125 @@ export function listIncomingHooks(success, error) {
     });
 }
 
+export function getAllPreferences(success, error) {
+    $.ajax({
+        url: `/api/v1/preferences/`,
+        dataType: 'json',
+        type: 'GET',
+        success,
+        error: (xhr, status, err) => {
+            var e = handleError('getAllPreferences', xhr, status, err);
+            error(e);
+        }
+    });
+}
+
+export function getPreferenceCategory(category, success, error) {
+    $.ajax({
+        url: `/api/v1/preferences/${category}`,
+        dataType: 'json',
+        type: 'GET',
+        success,
+        error: (xhr, status, err) => {
+            var e = handleError('getPreferenceCategory', xhr, status, err);
+            error(e);
+        }
+    });
+}
+
+export function savePreferences(preferences, success, error) {
+    $.ajax({
+        url: '/api/v1/preferences/save',
+        dataType: 'json',
+        contentType: 'application/json',
+        type: 'POST',
+        data: JSON.stringify(preferences),
+        success,
+        error: (xhr, status, err) => {
+            var e = handleError('savePreferences', xhr, status, err);
+            error(e);
+        }
+    });
+}
+
+export function addOutgoingHook(hook, success, error) {
+    $.ajax({
+        url: '/api/v1/hooks/outgoing/create',
+        dataType: 'json',
+        contentType: 'application/json',
+        type: 'POST',
+        data: JSON.stringify(hook),
+        success,
+        error: (xhr, status, err) => {
+            var e = handleError('addOutgoingHook', xhr, status, err);
+            error(e);
+        }
+    });
+}
+
+export function deleteOutgoingHook(data, success, error) {
+    $.ajax({
+        url: '/api/v1/hooks/outgoing/delete',
+        dataType: 'json',
+        contentType: 'application/json',
+        type: 'POST',
+        data: JSON.stringify(data),
+        success,
+        error: (xhr, status, err) => {
+            var e = handleError('deleteOutgoingHook', xhr, status, err);
+            error(e);
+        }
+    });
+}
+
+export function listOutgoingHooks(success, error) {
+    $.ajax({
+        url: '/api/v1/hooks/outgoing/list',
+        dataType: 'json',
+        type: 'GET',
+        success,
+        error: (xhr, status, err) => {
+            var e = handleError('listOutgoingHooks', xhr, status, err);
+            error(e);
+        }
+    });
+}
+
+export function regenOutgoingHookToken(data, success, error) {
+    $.ajax({
+        url: '/api/v1/hooks/outgoing/regen_token',
+        dataType: 'json',
+        contentType: 'application/json',
+        type: 'POST',
+        data: JSON.stringify(data),
+        success,
+        error: (xhr, status, err) => {
+            var e = handleError('regenOutgoingHookToken', xhr, status, err);
+            error(e);
+        }
+    });
+}
+
 export function dialByUsername(srcUsername, dstUsername) {
     $.ajax({
-        url: "/api/v1/cti/dialByUsername",
+        url: '/api/v1/cti/dialByUsername',
         dataType: 'json',
         type: 'POST',
         data: JSON.stringify({
-            'src_user_name': srcUsername,
-            'dst_user_name': dstUsername
+            src_user_name: srcUsername,
+            dst_user_name: dstUsername
         })
     });
 }
 
 export function dial(userName, number) {
     $.ajax({
-        url: "/api/v1/cti/dial",
+        url: '/api/v1/cti/dial',
         dataType: 'json',
         type: 'POST',
         data: JSON.stringify({
-            'user_name': userName,
-            'number': number
+            user_name: userName,
+            number: number
         })
     });
 }

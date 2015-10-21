@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 const AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
@@ -16,6 +16,7 @@ const Utils = require('../utils/utils.jsx');
 
 const Constants = require('../utils/constants.jsx');
 const ActionTypes = Constants.ActionTypes;
+const KeyCodes = Constants.KeyCodes;
 
 export default class CreatePost extends React.Component {
     constructor(props) {
@@ -23,6 +24,7 @@ export default class CreatePost extends React.Component {
 
         this.lastTime = 0;
 
+        this.getCurrentDraft = this.getCurrentDraft.bind(this);
         this.handleSubmit = this.handleSubmit.bind(this);
         this.postMsgKeyPress = this.postMsgKeyPress.bind(this);
         this.handleUserInput = this.handleUserInput.bind(this);
@@ -30,35 +32,67 @@ export default class CreatePost extends React.Component {
         this.handleUploadStart = this.handleUploadStart.bind(this);
         this.handleFileUploadComplete = this.handleFileUploadComplete.bind(this);
         this.handleUploadError = this.handleUploadError.bind(this);
+        this.handleTextDrop = this.handleTextDrop.bind(this);
         this.removePreview = this.removePreview.bind(this);
         this.onChange = this.onChange.bind(this);
         this.getFileCount = this.getFileCount.bind(this);
+        this.handleArrowUp = this.handleArrowUp.bind(this);
+        this.handleResize = this.handleResize.bind(this);
 
         PostStore.clearDraftUploads();
 
-        const draft = PostStore.getCurrentDraft();
-        let previews = [];
-        let messageText = '';
-        let uploadsInProgress = [];
-        if (draft && draft.previews && draft.message) {
-            previews = draft.previews;
-            messageText = draft.message;
-            uploadsInProgress = draft.uploadsInProgress;
-        }
+        const draft = this.getCurrentDraft();
 
         this.state = {
             channelId: ChannelStore.getCurrentId(),
-            messageText: messageText,
-            uploadsInProgress: uploadsInProgress,
-            previews: previews,
+            messageText: draft.messageText,
+            uploadsInProgress: draft.uploadsInProgress,
+            previews: draft.previews,
             submitting: false,
-            initialText: messageText
+            initialText: draft.messageText,
+            windowWidth: Utils.windowWidth(),
+            windowHeigth: Utils.windowHeight()
         };
+    }
+    handleResize() {
+        this.setState({
+            windowWidth: Utils.windowWidth(),
+            windowHeight: Utils.windowHeight()
+        });
     }
     componentDidUpdate(prevProps, prevState) {
         if (prevState.previews.length !== this.state.previews.length) {
             this.resizePostHolder();
+            return;
         }
+
+        if (prevState.uploadsInProgress !== this.state.uploadsInProgress) {
+            this.resizePostHolder();
+            return;
+        }
+
+        if (prevState.windowWidth !== this.state.windowWidth || prevState.windowHeight !== this.state.windowHeigth) {
+            this.resizePostHolder();
+            return;
+        }
+    }
+    getCurrentDraft() {
+        const draft = PostStore.getCurrentDraft();
+        const safeDraft = {previews: [], messageText: '', uploadsInProgress: []};
+
+        if (draft) {
+            if (draft.message) {
+                safeDraft.messageText = draft.message;
+            }
+            if (draft.previews) {
+                safeDraft.previews = draft.previews;
+            }
+            if (draft.uploadsInProgress) {
+                safeDraft.uploadsInProgress = draft.uploadsInProgress;
+            }
+        }
+
+        return safeDraft;
     }
     handleSubmit(e) {
         e.preventDefault();
@@ -67,7 +101,7 @@ export default class CreatePost extends React.Component {
             return;
         }
 
-        let post = {};
+        const post = {};
         post.filenames = [];
         post.message = this.state.messageText;
 
@@ -87,20 +121,20 @@ export default class CreatePost extends React.Component {
                 this.state.channelId,
                 post.message,
                 false,
-                function handleCommandSuccess(data) {
+                (data) => {
                     PostStore.storeDraft(data.channel_id, null);
                     this.setState({messageText: '', submitting: false, postError: null, previews: [], serverError: null});
 
                     if (data.goto_location.length > 0) {
                         window.location.href = data.goto_location;
                     }
-                }.bind(this),
-                function handleCommandError(err) {
-                    let state = {};
+                },
+                (err) => {
+                    const state = {};
                     state.serverError = err.message;
                     state.submitting = false;
                     this.setState(state);
-                }.bind(this)
+                }
             );
         } else {
             post.channel_id = this.state.channelId;
@@ -121,10 +155,10 @@ export default class CreatePost extends React.Component {
             this.setState({messageText: '', submitting: false, postError: null, previews: [], serverError: null});
 
             Client.createPost(post, channel,
-                function handlePostSuccess(data) {
+                (data) => {
                     AsyncClient.getPosts();
 
-                    let member = ChannelStore.getMember(channel.id);
+                    const member = ChannelStore.getMember(channel.id);
                     member.msg_count = channel.total_msg_count;
                     member.last_viewed_at = Date.now();
                     ChannelStore.setChannelMember(member);
@@ -134,8 +168,8 @@ export default class CreatePost extends React.Component {
                         post: data
                     });
                 },
-                function handlePostError(err) {
-                    let state = {};
+                (err) => {
+                    const state = {};
 
                     if (err.message === 'Invalid RootId parameter') {
                         if ($('#post_deleted').length > 0) {
@@ -149,14 +183,14 @@ export default class CreatePost extends React.Component {
 
                     state.submitting = false;
                     this.setState(state);
-                }.bind(this)
+                }
             );
         }
     }
     postMsgKeyPress(e) {
-        if (e.which === 13 && !e.shiftKey && !e.altKey) {
+        if (e.which === KeyCodes.ENTER && !e.shiftKey && !e.altKey) {
             e.preventDefault();
-            React.findDOMNode(this.refs.textbox).blur();
+            ReactDOM.findDOMNode(this.refs.textbox).blur();
             this.handleSubmit(e);
         }
 
@@ -167,19 +201,21 @@ export default class CreatePost extends React.Component {
         }
     }
     handleUserInput(messageText) {
-        this.setState({messageText: messageText});
+        this.setState({messageText});
 
-        let draft = PostStore.getCurrentDraft();
+        const draft = PostStore.getCurrentDraft();
         draft.message = messageText;
         PostStore.storeCurrentDraft(draft);
     }
     resizePostHolder() {
-        const height = $(window).height() - $(React.findDOMNode(this.refs.topDiv)).height() - $('#error_bar').outerHeight() - 50;
+        const height = this.state.windowHeigth - $(ReactDOM.findDOMNode(this.refs.topDiv)).height() - 50;
         $('.post-list-holder-by-time').css('height', `${height}px`);
-        $(window).trigger('resize');
+        if (this.state.windowWidth > 960) {
+            $('#post_textbox').focus();
+        }
     }
     handleUploadStart(clientIds, channelId) {
-        let draft = PostStore.getDraft(channelId);
+        const draft = PostStore.getDraft(channelId);
 
         draft.uploadsInProgress = draft.uploadsInProgress.concat(clientIds);
         PostStore.storeDraft(channelId, draft);
@@ -187,7 +223,7 @@ export default class CreatePost extends React.Component {
         this.setState({uploadsInProgress: draft.uploadsInProgress});
     }
     handleFileUploadComplete(filenames, clientIds, channelId) {
-        let draft = PostStore.getDraft(channelId);
+        const draft = PostStore.getDraft(channelId);
 
         // remove each finished file from uploads
         for (let i = 0; i < clientIds.length; i++) {
@@ -204,8 +240,10 @@ export default class CreatePost extends React.Component {
         this.setState({uploadsInProgress: draft.uploadsInProgress, previews: draft.previews});
     }
     handleUploadError(err, clientId) {
-        if (clientId !== -1) {
-            let draft = PostStore.getDraft(this.state.channelId);
+        if (clientId === -1) {
+            this.setState({serverError: err});
+        } else {
+            const draft = PostStore.getDraft(this.state.channelId);
 
             const index = draft.uploadsInProgress.indexOf(clientId);
             if (index !== -1) {
@@ -215,56 +253,52 @@ export default class CreatePost extends React.Component {
             PostStore.storeDraft(this.state.channelId, draft);
 
             this.setState({uploadsInProgress: draft.uploadsInProgress, serverError: err});
-        } else {
-            this.setState({serverError: err});
         }
     }
+    handleTextDrop(text) {
+        const newText = this.state.messageText + text;
+        this.handleUserInput(newText);
+        Utils.setCaretPosition(ReactDOM.findDOMNode(this.refs.textbox.refs.message), newText.length);
+    }
     removePreview(id) {
-        let previews = this.state.previews;
-        let uploadsInProgress = this.state.uploadsInProgress;
+        const previews = Object.assign([], this.state.previews);
+        const uploadsInProgress = this.state.uploadsInProgress;
 
         // id can either be the path of an uploaded file or the client id of an in progress upload
         let index = previews.indexOf(id);
-        if (index !== -1) {
-            previews.splice(index, 1);
-        } else {
+        if (index === -1) {
             index = uploadsInProgress.indexOf(id);
 
             if (index !== -1) {
                 uploadsInProgress.splice(index, 1);
                 this.refs.fileUpload.cancelUpload(id);
             }
+        } else {
+            previews.splice(index, 1);
         }
 
-        let draft = PostStore.getCurrentDraft();
+        const draft = PostStore.getCurrentDraft();
         draft.previews = previews;
         draft.uploadsInProgress = uploadsInProgress;
         PostStore.storeCurrentDraft(draft);
 
-        this.setState({previews: previews, uploadsInProgress: uploadsInProgress});
+        this.setState({previews, uploadsInProgress});
     }
     componentDidMount() {
         ChannelStore.addChangeListener(this.onChange);
         this.resizePostHolder();
+        window.addEventListener('resize', this.handleResize);
     }
     componentWillUnmount() {
         ChannelStore.removeChangeListener(this.onChange);
+        window.removeEventListener('resize', this.handleResize);
     }
     onChange() {
         const channelId = ChannelStore.getCurrentId();
         if (this.state.channelId !== channelId) {
-            let draft = PostStore.getCurrentDraft();
+            const draft = this.getCurrentDraft();
 
-            let previews = [];
-            let messageText = '';
-            let uploadsInProgress = [];
-            if (draft && draft.previews && draft.message) {
-                previews = draft.previews;
-                messageText = draft.message;
-                uploadsInProgress = draft.uploadsInProgress;
-            }
-
-            this.setState({channelId: channelId, messageText: messageText, initialText: messageText, submitting: false, serverError: null, postError: null, previews: previews, uploadsInProgress: uploadsInProgress});
+            this.setState({channelId, messageText: draft.messageText, initialText: draft.messageText, submitting: false, serverError: null, postError: null, previews: draft.previews, uploadsInProgress: draft.uploadsInProgress});
         }
     }
     getFileCount(channelId) {
@@ -274,6 +308,27 @@ export default class CreatePost extends React.Component {
 
         const draft = PostStore.getDraft(channelId);
         return draft.previews.length + draft.uploadsInProgress.length;
+    }
+    handleArrowUp(e) {
+        if (e.keyCode === KeyCodes.UP && this.state.messageText === '') {
+            e.preventDefault();
+
+            const channelId = ChannelStore.getCurrentId();
+            const lastPost = PostStore.getCurrentUsersLatestPost(channelId);
+            if (!lastPost) {
+                return;
+            }
+            var type = (lastPost.root_id && lastPost.root_id.length > 0) ? 'Comment' : 'Post';
+
+            AppDispatcher.handleViewAction({
+                type: ActionTypes.RECIEVED_EDIT_POST,
+                refocusId: '#post_textbox',
+                title: type,
+                message: lastPost.message,
+                postId: lastPost.id,
+                channelId: lastPost.channel_id
+            });
+        }
     }
     render() {
         let serverError = null;
@@ -319,6 +374,7 @@ export default class CreatePost extends React.Component {
                             <Textbox
                                 onUserInput={this.handleUserInput}
                                 onKeyPress={this.postMsgKeyPress}
+                                onKeyDown={this.handleArrowUp}
                                 onHeightChange={this.resizePostHolder}
                                 messageText={this.state.messageText}
                                 createMessage='Write a message...'
@@ -332,6 +388,7 @@ export default class CreatePost extends React.Component {
                                 onUploadStart={this.handleUploadStart}
                                 onFileUpload={this.handleFileUploadComplete}
                                 onUploadError={this.handleUploadError}
+                                onTextDrop={this.handleTextDrop}
                                 postType='post'
                                 channelId=''
                             />

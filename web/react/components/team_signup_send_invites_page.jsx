@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var EmailItem = require('./team_signup_email_item.jsx');
@@ -13,7 +13,7 @@ export default class TeamSignupSendInvitesPage extends React.Component {
         this.submitSkip = this.submitSkip.bind(this);
         this.keySubmit = this.keySubmit.bind(this);
         this.state = {
-            emailEnabled: !global.window.config.ByPassEmail
+            emailEnabled: global.window.config.SendEmailNotifications === 'true'
         };
 
         if (!this.state.emailEnabled) {
@@ -36,10 +36,10 @@ export default class TeamSignupSendInvitesPage extends React.Component {
             var emails = [];
 
             for (var i = 0; i < this.props.state.invites.length; i++) {
-                if (!this.refs['email_' + i].validate(this.props.state.team.email)) {
-                    valid = false;
-                } else {
+                if (this.refs['email_' + i].validate(this.props.state.team.email)) {
                     emails.push(this.refs['email_' + i].getValue());
+                } else {
+                    valid = false;
                 }
             }
 

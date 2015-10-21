@@ -1,11 +1,9 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
-
 
 const ChannelStore = require('../stores/channel_store.jsx');
 const UserStore = require('../stores/user_store.jsx');
 const PostStore = require('../stores/post_store.jsx');
-const SocketStore = require('../stores/socket_store.jsx');
 const NavbarSearchBox = require('./search_bar.jsx');
 const AsyncClient = require('../utils/async_client.jsx');
 const Client = require('../utils/client.jsx');
@@ -13,17 +11,20 @@ const TextFormatting = require('../utils/text_formatting.jsx');
 const Utils = require('../utils/utils.jsx');
 const MessageWrapper = require('./message_wrapper.jsx');
 const PopoverListMembers = require('./popover_list_members.jsx');
+const Dialer = require('./dialer.jsx');
+
 const AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
 const Constants = require('../utils/constants.jsx');
 const ActionTypes = Constants.ActionTypes;
-const Dialer = require('./dialer.jsx');
+
+const Popover = ReactBootstrap.Popover;
+const OverlayTrigger = ReactBootstrap.OverlayTrigger;
 
 export default class ChannelHeader extends React.Component {
     constructor(props) {
         super(props);
 
         this.onListenerChange = this.onListenerChange.bind(this);
-        this.onSocketChange = this.onSocketChange.bind(this);
         this.handleLeave = this.handleLeave.bind(this);
         this.searchMentions = this.searchMentions.bind(this);
 
@@ -43,7 +44,6 @@ export default class ChannelHeader extends React.Component {
         ChannelStore.addExtraInfoChangeListener(this.onListenerChange);
         PostStore.addSearchChangeListener(this.onListenerChange);
         UserStore.addChangeListener(this.onListenerChange);
-        SocketStore.addChangeListener(this.onSocketChange);
     }
     componentWillUnmount() {
         ChannelStore.removeChangeListener(this.onListenerChange);
@@ -56,16 +56,11 @@ export default class ChannelHeader extends React.Component {
         if (!Utils.areStatesEqual(newState, this.state)) {
             this.setState(newState);
         }
-        $('.channel-header__info .description').popover({placement: 'bottom', trigger: 'hover click', html: true, delay: {show: 500, hide: 500}});
-    }
-    onSocketChange(msg) {
-        if (msg.action === 'new_user') {
-            AsyncClient.getChannelExtraInfo(true);
-        }
+        $('.channel-header__info .description').popover({placement: 'bottom', trigger: 'hover', html: true, delay: {show: 500, hide: 500}});
     }
     handleLeave() {
         Client.leaveChannel(this.state.channel.id,
-            function handleLeaveSuccess() {
+            () => {
                 AppDispatcher.handleViewAction({
                     type: ActionTypes.LEAVE_CHANNEL,
                     id: this.state.channel.id
@@ -73,8 +68,8 @@ export default class ChannelHeader extends React.Component {
 
                 const townsquare = ChannelStore.getByName('town-square');
                 Utils.switchChannel(townsquare);
-            }.bind(this),
-            function handleLeaveError(err) {
+            },
+            (err) => {
                 AsyncClient.dispatchError(err, 'handleLeave');
             }
         );
@@ -109,7 +104,21 @@ export default class ChannelHeader extends React.Component {
         }
 
         const channel = this.state.channel;
-        const popoverContent = React.renderToString(<MessageWrapper message={channel.description}/>);
+        const popoverContent = (
+            <Popover
+                id='hader-popover'
+                bStyle='info'
+                bSize='large'
+                placement='bottom'
+                className='description'
+                onMouseOver={() => this.refs.descriptionOverlay.show()}
+                onMouseOut={() => this.refs.descriptionOverlay.hide()}
+            >
+                <MessageWrapper
+                    message={channel.description}
+                />
+            </Popover>
+        );
         let channelTitle = channel.display_name;
         const currentId = UserStore.getCurrentId();
         const isAdmin = Utils.isAdmin(this.state.memberChannel.roles) || Utils.isAdmin(this.state.memberTeam.roles);
@@ -133,7 +142,26 @@ export default class ChannelHeader extends React.Component {
         }
 
         let dropdownContents = [];
-        if (!isDirect) {
+        if (isDirect) {
+            dropdownContents.push(
+                <li
+                    key='edit_description_direct'
+                    role='presentation'
+                >
+                    <a
+                        role='menuitem'
+                        href='#'
+                        data-toggle='modal'
+                        data-target='#edit_channel'
+                        data-desc={channel.description}
+                        data-title={channel.display_name}
+                        data-channelid={channel.id}
+                    >
+                        Set Channel Description...
+                    </a>
+                </li>
+            );
+        } else {
             dropdownContents.push(
                 <li
                     key='view_info'
@@ -277,99 +305,87 @@ export default class ChannelHeader extends React.Component {
                     </li>
                 );
             }
-        } else {
-            dropdownContents.push(
-                <li
-                    key='edit_description_direct'
-                    role='presentation'
-                >
-                    <a
-                        role='menuitem'
-                        href='#'
-                        data-toggle='modal'
-                        data-target='#edit_channel'
-                        data-desc={channel.description}
-                        data-title={channel.display_name}
-                        data-channelid={channel.id}
-                    >
-                        Set Channel Description...
-                    </a>
-                </li>
-            );
         }
 
         return (
             <table className='channel-header alt'>
-                <tr>
-                    <th>
-                        <div className='channel-header__info'>
-                            <div className='dropdown'>
+                <tbody>
+                    <tr>
+                        <th>
+                            <div className='channel-header__info'>
+                                <div className='dropdown'>
+                                    <a
+                                        href='#'
+                                        className='dropdown-toggle theme'
+                                        type='button'
+                                        id='channel_header_dropdown'
+                                        data-toggle='dropdown'
+                                        aria-expanded='true'
+                                    >
+                                        <strong className='heading'>{channelTitle} </strong>
+                                        <span className='glyphicon glyphicon-chevron-down header-dropdown__icon' />
+                                    </a>
+                                    <ul
+                                        className='dropdown-menu'
+                                        role='menu'
+                                        aria-labelledby='channel_header_dropdown'
+                                    >
+                                        {dropdownContents}
+                                    </ul>
+                                </div>
+                                <OverlayTrigger
+                                    trigger={['hover', 'focus']}
+                                    placement='bottom'
+                                    overlay={popoverContent}
+                                    ref='descriptionOverlay'
+                                >
+                                <div
+                                    onClick={TextFormatting.handleClick}
+                                    className='description'
+                                    dangerouslySetInnerHTML={{__html: TextFormatting.formatText(channel.description, {singleline: true, mentionHighlight: false})}}
+                                />
+                                </OverlayTrigger>
+                            </div>
+                        </th>
+                        <th className='dialer__container'><Dialer /></th>
+                        <th>
+                            <PopoverListMembers
+                                members={this.state.users}
+                                channelId={channel.id}
+                            />
+                        </th>
+                        <th className='search-bar__container'><NavbarSearchBox /></th>
+                        <th>
+                            <div className='dropdown channel-header__links'>
                                 <a
                                     href='#'
                                     className='dropdown-toggle theme'
                                     type='button'
-                                    id='channel_header_dropdown'
+                                    id='channel_header_right_dropdown'
                                     data-toggle='dropdown'
                                     aria-expanded='true'
                                 >
-                                    <strong className='heading'>{channelTitle} </strong>
-                                    <span className='glyphicon glyphicon-chevron-down header-dropdown__icon' />
+                                    <span dangerouslySetInnerHTML={{__html: Constants.MENU_ICON}} />
                                 </a>
                                 <ul
-                                    className='dropdown-menu'
+                                    className='dropdown-menu dropdown-menu-right'
                                     role='menu'
-                                    aria-labelledby='channel_header_dropdown'
+                                    aria-labelledby='channel_header_right_dropdown'
                                 >
-                                    {dropdownContents}
+                                    <li role='presentation'>
+                                        <a
+                                            role='menuitem'
+                                            href='#'
+                                            onClick={this.searchMentions}
+                                        >
+                                            Recent Mentions
+                                        </a>
+                                    </li>
                                 </ul>
                             </div>
-                            <div
-                                data-toggle='popover'
-                                data-content={popoverContent}
-                                className='description'
-                                onClick={TextFormatting.handleClick}
-                                dangerouslySetInnerHTML={{__html: TextFormatting.formatText(channel.description, {singleline: true, mentionHighlight: false})}}
-                            />
-                        </div>
-                    </th>
-                    <th className="dialer__container"><Dialer /></th>
-                    <th>
-                        <PopoverListMembers
-                            members={this.state.users}
-                            channelId={channel.id}
-                        />
-                    </th>
-                    <th className='search-bar__container'><NavbarSearchBox /></th>
-                    <th>
-                        <div className='dropdown channel-header__links'>
-                            <a
-                                href='#'
-                                className='dropdown-toggle theme'
-                                type='button'
-                                id='channel_header_right_dropdown'
-                                data-toggle='dropdown'
-                                aria-expanded='true'
-                            >
-                                <span dangerouslySetInnerHTML={{__html: Constants.MENU_ICON}} />
-                            </a>
-                            <ul
-                                className='dropdown-menu dropdown-menu-right'
-                                role='menu'
-                                aria-labelledby='channel_header_right_dropdown'
-                            >
-                                <li role='presentation'>
-                                    <a
-                                        role='menuitem'
-                                        href='#'
-                                        onClick={this.searchMentions}
-                                    >
-                                        Recent Mentions
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
-                    </th>
-                </tr>
+                        </th>
+                    </tr>
+                </tbody>
             </table>
         );
     }

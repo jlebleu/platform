@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var client = require('../utils/client.jsx');
@@ -15,7 +15,7 @@ export default class PasswordResetForm extends React.Component {
         e.preventDefault();
         var state = {};
 
-        var password = React.findDOMNode(this.refs.password).value.trim();
+        var password = ReactDOM.findDOMNode(this.refs.password).value.trim();
         if (!password || password.length < 5) {
             state.error = 'Please enter at least 5 characters.';
             this.setState(state);
@@ -69,6 +69,7 @@ export default class PasswordResetForm extends React.Component {
                                 name='password'
                                 ref='password'
                                 placeholder='Password'
+                                spellCheck='false'
                             />
                         </div>
                         {error}

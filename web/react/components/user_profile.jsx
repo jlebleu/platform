@@ -1,8 +1,10 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var Utils = require('../utils/utils.jsx');
 var UserStore = require('../stores/user_store.jsx');
+var Popover = ReactBootstrap.Popover;
+var OverlayTrigger = ReactBootstrap.OverlayTrigger;
 
 var id = 0;
 
@@ -31,8 +33,9 @@ export default class UserProfile extends React.Component {
     }
     componentDidMount() {
         UserStore.addChangeListener(this.onChange);
-        $('#profile_' + this.uniqueId).popover({placement: 'right', container: 'body', trigger: 'hover', html: true, delay: {show: 200, hide: 100}});
-        $('body').tooltip({selector: '[data-toggle=tooltip]', trigger: 'hover click'});
+        if (!this.props.disablePopover) {
+            $('body').tooltip({selector: '[data-toggle=tooltip]', trigger: 'hover click'});
+        }
     }
     componentWillUnmount() {
         UserStore.removeChangeListener(this.onChange);
@@ -50,43 +53,85 @@ export default class UserProfile extends React.Component {
             this.setState(this.getStateFromStores(nextProps.userId));
         }
     }
-    dial() {
-        srcUserName = UserStore.getCurrentUser().username;
-        Client.dialByUsername(srcUserName, this.state.profile.username);
-    }
     render() {
         var name = this.state.profile.username;
         if (this.props.overwriteName) {
             name = this.props.overwriteName;
         }
 
-        var dataContent = '<img class="user-popover__image" src="/api/v1/users/' + this.state.profile.id + '/image?time=' + this.state.profile.update_at + '" height="128" width="128" />';
-        if (!global.window.config.ShowEmailAddress) {
-            dataContent += '<div class="text-nowrap">Email not shared</div>';
+        if (this.props.disablePopover) {
+            return <div>{name}</div>;
+        }
+
+        var dataContent = [];
+        dataContent.push(
+            <img
+                className='user-popover__image'
+                src={'/api/v1/users/' + this.state.profile.id + '/image?time=' + this.state.profile.update_at}
+                height='128'
+                width='128'
+                key='user-popover-image'
+            />
+        );
+        if (!global.window.config.ShowEmailAddress === 'true') {
+            dataContent.push(
+                <div
+                    className='text-nowrap'
+                    key='user-popover-no-email'
+                >
+                    {'Email not shared'}
+                </div>
+            );
         } else {
-            dataContent += '<div data-toggle="tooltip" title="' + this.state.profile.email + '"><a href="mailto:' + this.state.profile.email + '" class="text-nowrap text-lowercase user-popover__email">' + this.state.profile.email + '</a></div>';
+            dataContent.push(
+                <div
+                    data-toggle='tooltip'
+                    title={this.state.profile.email}
+                    key='user-popover-email'
+                >
+                    <a
+                        href={'mailto:' + this.state.profile.email}
+                        className='text-nowrap text-lowercase user-popover__email'
+                    >
+                        {this.state.profile.email}
+                    </a>
+                </div>
+            );
         }
 
         return (
-            <div
-                className='user-popover'
-                id={'profile_' + this.uniqueId}
-                data-toggle='popover'
-                data-content={dataContent}
-                data-original-title={this.state.profile.username}
-                onClick={this.dial}
+            <OverlayTrigger
+                trigger='click'
+                placement='right'
+                rootClose={true}
+                overlay={
+                    <Popover
+                        title={this.state.profile.username}
+                        id='user-profile-popover'
+                    >
+                        {dataContent}
+                        onClick={this.dial}
+                    </Popover>
+                }
             >
-                {name}
-            </div>
+                <div
+                    className='user-popover'
+                    id={'profile_' + this.uniqueId}
+                >
+                    {name}
+                </div>
+            </OverlayTrigger>
         );
     }
 }
 
 UserProfile.defaultProps = {
     userId: '',
-    overwriteName: ''
+    overwriteName: '',
+    disablePopover: false
 };
 UserProfile.propTypes = {
     userId: React.PropTypes.string,
-    overwriteName: React.PropTypes.string
+    overwriteName: React.PropTypes.string,
+    disablePopover: React.PropTypes.bool
 };

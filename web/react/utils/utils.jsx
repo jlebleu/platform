@@ -1,9 +1,11 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
 var ChannelStore = require('../stores/channel_store.jsx');
 var UserStore = require('../stores/user_store.jsx');
+var PreferenceStore = require('../stores/preference_store.jsx');
+var TeamStore = require('../stores/team_store.jsx');
 var Constants = require('../utils/constants.jsx');
 var ActionTypes = Constants.ActionTypes;
 var AsyncClient = require('./async_client.jsx');
@@ -11,7 +13,8 @@ var client = require('./client.jsx');
 var Autolinker = require('autolinker');
 
 export function isEmail(email) {
-    var regex = /^([a-zA-Z0-9_.+-])+\@(([a-zA-Z0-9-])+\.)+([a-zA-Z0-9]{2,4})+$/;
+    //var regex = /^([a-zA-Z0-9_.+-])+\@(([a-zA-Z0-9-])+\.)+([a-zA-Z0-9]{2,4})+$/;
+    var regex = /^[-a-z0-9~!$%^&*_=+}{\'?]+(\.[-a-z0-9~!$%^&*_=+}{\'?]+)*@([a-z0-9_][-a-z0-9_]*(\.[-a-z0-9_]+)*\.(aero|arpa|biz|com|coop|edu|gov|info|int|mil|museum|name|net|org|pro|travel|mobi|[a-z][a-z])|([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}))(:[0-9]{1,5})?$/i;
     return regex.test(email);
 }
 
@@ -77,6 +80,14 @@ export function isAdmin(roles) {
     return false;
 }
 
+export function isSystemAdmin(roles) {
+    if (isInRole(roles, 'system_admin')) {
+        return true;
+    }
+
+    return false;
+}
+
 export function getDomainWithOutSub() {
     var parts = window.location.host.split('.');
 
@@ -113,7 +124,7 @@ export function notifyMe(title, body, channel) {
                     if (channel) {
                         switchChannel(channel);
                     } else {
-                        window.location.href = '/';
+                        window.location.href = TeamStore.getCurrentTeamUrl() + '/channels/town-square';
                     }
                 };
                 setTimeout(function closeNotificationOnTimeout() {
@@ -155,23 +166,29 @@ export function displayDate(ticks) {
 }
 
 export function displayTime(ticks) {
-    var d = new Date(ticks);
-    var hours = d.getHours();
-    var minutes = d.getMinutes();
+    const d = new Date(ticks);
+    let hours = d.getHours();
+    let minutes = d.getMinutes();
+    let ampm = '';
 
-    var ampm = 'AM';
-    if (hours >= 12) {
-        ampm = 'PM';
-    }
-
-    hours = hours % 12;
-    if (!hours) {
-        hours = '12';
-    }
     if (minutes <= 9) {
         minutes = '0' + minutes;
     }
-    return hours + ':' + minutes + ' ' + ampm;
+
+    const useMilitaryTime = PreferenceStore.getPreference(Constants.Preferences.CATEGORY_DISPLAY_SETTINGS, 'use_military_time', {value: 'false'}).value;
+    if (useMilitaryTime === 'false') {
+        ampm = ' AM';
+        if (hours >= 12) {
+            ampm = ' PM';
+        }
+
+        hours = hours % 12;
+        if (!hours) {
+            hours = '12';
+        }
+    }
+
+    return hours + ':' + minutes + ampm;
 }
 
 export function displayDateTime(ticks) {
@@ -222,10 +239,10 @@ function testUrlMatch(text) {
         var matchText = match.getMatchedText();
 
         linkData.text = matchText;
-        if (matchText.trim().indexOf('http') !== 0) {
-            linkData.link = 'http://' + matchText;
-        } else {
+        if (matchText.trim().indexOf('http') === 0) {
             linkData.link = matchText;
+        } else {
+            linkData.link = 'http://' + matchText;
         }
 
         result.push(linkData);
@@ -252,164 +269,6 @@ export function extractLinks(text) {
 
 export function escapeRegExp(string) {
     return string.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, '\\$1');
-}
-
-function handleYoutubeTime(link) {
-    var timeRegex = /[\\?&]t=([0-9hms]+)/;
-
-    var time = link.trim().match(timeRegex);
-    if (!time || !time[1]) {
-        return '';
-    }
-
-    var hours = time[1].match(/([0-9]+)h/);
-    var minutes = time[1].match(/([0-9]+)m/);
-    var seconds = time[1].match(/([0-9]+)s/);
-
-    var ticks = 0;
-
-    if (hours && hours[1]) {
-        ticks += parseInt(hours[1], 10) * 3600;
-    }
-
-    if (minutes && minutes[1]) {
-        ticks += parseInt(minutes[1], 10) * 60;
-    }
-
-    if (seconds && seconds[1]) {
-        ticks += parseInt(seconds[1], 10);
-    }
-
-    return '&start=' + ticks.toString();
-}
-
-function getYoutubeEmbed(link) {
-    var regex = /.*(?:youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|watch\?(?:[a-zA-Z-_]+=[a-zA-Z0-9-_]+&)+v=)([^#\&\?]*).*/;
-
-    var youtubeId = link.trim().match(regex)[1];
-    var time = handleYoutubeTime(link);
-
-    function onClick(e) {
-        var div = $(e.target).closest('.video-thumbnail__container')[0];
-        var iframe = document.createElement('iframe');
-        iframe.setAttribute('src',
-                            'https://www.youtube.com/embed/' +
-                            div.id +
-                            '?autoplay=1&autohide=1&border=0&wmode=opaque&fs=1&enablejsapi=1' +
-                            time);
-        iframe.setAttribute('width', '480px');
-        iframe.setAttribute('height', '360px');
-        iframe.setAttribute('type', 'text/html');
-        iframe.setAttribute('frameborder', '0');
-        iframe.setAttribute('allowfullscreen', 'allowfullscreen');
-
-        div.parentNode.replaceChild(iframe, div);
-    }
-
-    function success(data) {
-        if (!data.items.length || !data.items[0].snippet) {
-            return;
-        }
-        var metadata = data.items[0].snippet;
-        $('.video-type.' + youtubeId).html('Youtube - ');
-        $('.video-uploader.' + youtubeId).html(metadata.channelTitle);
-        $('.video-title.' + youtubeId).find('a').html(metadata.title);
-        $('.post-list-holder-by-time').scrollTop($('.post-list-holder-by-time')[0].scrollHeight);
-    }
-
-    if (global.window.config.GoogleDeveloperKey) {
-        $.ajax({
-            async: true,
-            url: 'https://www.googleapis.com/youtube/v3/videos',
-            type: 'GET',
-            data: {part: 'snippet', id: youtubeId, key: global.window.config.GoogleDeveloperKey},
-            success: success
-        });
-    }
-
-    return (
-        <div className='post-comment'>
-            <h4>
-                <span className={'video-type ' + youtubeId}>YouTube</span>
-                <span className={'video-title ' + youtubeId}><a href={link}></a></span>
-            </h4>
-            <h4 className={'video-uploader ' + youtubeId}></h4>
-            <div
-                className='video-div embed-responsive-item'
-                id={youtubeId}
-                onClick={onClick}
-            >
-                <div className='embed-responsive embed-responsive-4by3 video-div__placeholder'>
-                    <div
-                        id={youtubeId}
-                        className='video-thumbnail__container'
-                    >
-                        <img
-                            className='video-thumbnail'
-                            src={'https://i.ytimg.com/vi/' + youtubeId + '/hqdefault.jpg'}
-                        />
-                        <div className='block'>
-                            <span className='play-button'><span/></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-export function getEmbed(link) {
-    var ytRegex = /.*(?:youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|watch\?(?:[a-zA-Z-_]+=[a-zA-Z0-9-_]+&)+v=)([^#\&\?]*).*/;
-
-    var match = link.trim().match(ytRegex);
-    if (match && match[1].length === 11) {
-        return getYoutubeEmbed(link);
-    }
-
-    // Generl embed feature turned off for now
-    return '';
-
-    // NEEDS REFACTORING WHEN TURNED BACK ON
-    /*
-    var id = parseInt((Math.random() * 1000000) + 1);
-
-    $.ajax({
-        type: 'GET',
-        url: 'https://query.yahooapis.com/v1/public/yql',
-        data: {
-            q: 'select * from html where url="' + link + "\" and xpath='html/head'",
-            format: 'json'
-        },
-        async: true
-    }).done(function(data) {
-        if(!data.query.results) {
-            return;
-        }
-
-        var headerData = data.query.results.head;
-
-        var description = ''
-        for(var i = 0; i < headerData.meta.length; i++) {
-            if(headerData.meta[i].name && (headerData.meta[i].name === 'description' || headerData.meta[i].name === 'Description')){
-                description = headerData.meta[i].content;
-                break;
-            }
-        }
-
-        $('.embed-title.'+id).html(headerData.title);
-        $('.embed-description.'+id).html(description);
-    })
-
-    return (
-        <div className='post-comment'>
-            <div className={'web-embed-data'}>
-                <p className={'embed-title ' + id} />
-                <p className={'embed-description ' + id} />
-                <p className={'embed-link ' + id}>{link}</p>
-            </div>
-        </div>
-    );
-    */
 }
 
 export function areStatesEqual(state1, state2) {
@@ -542,7 +401,164 @@ export function toTitleCase(str) {
     return str.replace(/\w\S*/g, doTitleCase);
 }
 
-export function changeCss(className, classValue) {
+export function applyTheme(theme) {
+    if (theme.sidebarBg) {
+        changeCss('.sidebar--left, .settings-modal .settings-table .settings-links, .sidebar--menu', 'background:' + theme.sidebarBg, 1);
+    }
+
+    if (theme.sidebarText) {
+        changeCss('.sidebar--left .nav-pills__container li>a, .sidebar--right, .settings-modal .nav-pills>li a, .sidebar--menu', 'color:' + changeOpacity(theme.sidebarText, 0.6), 1);
+        changeCss('@media(max-width: 768px){.settings-modal .settings-table .nav>li>a', 'color:' + theme.sidebarText, 1);
+        changeCss('.sidebar--left .nav-pills__container li>h4, .sidebar--left .add-channel-btn', 'color:' + changeOpacity(theme.sidebarText, 0.6), 1);
+        changeCss('.sidebar--left .add-channel-btn:hover, .sidebar--left .add-channel-btn:focus', 'color:' + theme.sidebarText, 1);
+        changeCss('.sidebar--left, .sidebar--right .sidebar--right__header', 'border-color:' + changeOpacity(theme.sidebarText, 0.2), 1);
+        changeCss('.sidebar--left .status path', 'fill:' + changeOpacity(theme.sidebarText, 0.5), 1);
+        changeCss('@media(max-width: 768px){.settings-modal .settings-table .nav>li>a', 'border-color:' + changeOpacity(theme.sidebarText, 0.2), 2);
+    }
+
+    if (theme.sidebarUnreadText) {
+        changeCss('.sidebar--left .nav-pills__container li>a.unread-title', 'color:' + theme.sidebarUnreadText + '!important;', 2);
+    }
+
+    if (theme.sidebarTextHoverBg) {
+        changeCss('.sidebar--left .nav-pills__container li>a:hover, .sidebar--left .nav-pills__container li>a:focus, .settings-modal .nav-pills>li:hover a, .settings-modal .nav-pills>li:focus a', 'background:' + theme.sidebarTextHoverBg, 1);
+        changeCss('@media(max-width: 768px){.settings-modal .settings-table .nav>li:hover a', 'background:' + theme.sidebarTextHoverBg, 1);
+    }
+
+    if (theme.sidebarTextActiveBg) {
+        changeCss('.sidebar--left .nav-pills__container li.active a, .sidebar--left .nav-pills__container li.active a:hover, .sidebar--left .nav-pills__container li.active a:focus, .settings-modal .nav-pills>li.active a, .settings-modal .nav-pills>li.active a:hover, .settings-modal .nav-pills>li.active a:active', 'background:' + theme.sidebarTextActiveBg, 1);
+    }
+
+    if (theme.sidebarTextActiveColor) {
+        changeCss('.sidebar--left .nav-pills__container li.active a, .sidebar--left .nav-pills__container li.active a:hover, .sidebar--left .nav-pills__container li.active a:focus, .settings-modal .nav-pills>li.active a, .settings-modal .nav-pills>li.active a:hover, .settings-modal .nav-pills>li.active a:active', 'color:' + theme.sidebarTextActiveColor, 2);
+    }
+
+    if (theme.sidebarTextActiveBg === theme.onlineIndicator) {
+        changeCss('.sidebar--left .nav-pills__container li.active a .status .online--icon', 'fill:' + theme.sidebarTextActiveColor, 1);
+    }
+
+    if (theme.sidebarHeaderBg) {
+        changeCss('.sidebar--left .team__header, .sidebar--menu .team__header', 'background:' + theme.sidebarHeaderBg, 1);
+        changeCss('.modal .modal-header', 'background:' + theme.sidebarHeaderBg, 1);
+        changeCss('#navbar .navbar-default', 'background:' + theme.sidebarHeaderBg, 1);
+        changeCss('@media(max-width: 768px){.search-bar__container', 'background:' + theme.sidebarHeaderBg, 1);
+    }
+
+    if (theme.sidebarHeaderTextColor) {
+        changeCss('.sidebar--left .team__header .header__info, .sidebar--menu .team__header .header__info', 'color:' + theme.sidebarHeaderTextColor, 1);
+        changeCss('.sidebar--left .team__header .user__name, .sidebar--menu .team__header .user__name', 'color:' + changeOpacity(theme.sidebarHeaderTextColor, 0.8), 1);
+        changeCss('.sidebar--left .team__header:hover .user__name, .sidebar--menu .team__header:hover .user__name', 'color:' + theme.sidebarHeaderTextColor, 1);
+        changeCss('.modal .modal-header .modal-title, .modal .modal-header .modal-title .name, .modal .modal-header button.close', 'color:' + theme.sidebarHeaderTextColor, 1);
+        changeCss('#navbar .navbar-default .navbar-brand .heading', 'color:' + theme.sidebarHeaderTextColor, 1);
+        changeCss('#navbar .navbar-default .navbar-toggle .icon-bar, ', 'background:' + theme.sidebarHeaderTextColor, 1);
+        changeCss('@media(max-width: 768px){.search-bar__container', 'color:' + theme.sidebarHeaderTextColor, 2);
+    }
+
+    if (theme.onlineIndicator) {
+        changeCss('.sidebar--left .status .online--icon', 'fill:' + theme.onlineIndicator, 1);
+    }
+
+    if (theme.mentionBj) {
+        changeCss('.sidebar--left .nav-pills__unread-indicator', 'background:' + theme.mentionBj, 1);
+        changeCss('.sidebar--left .badge', 'background:' + theme.mentionBj, 1);
+    }
+
+    if (theme.mentionColor) {
+        changeCss('.sidebar--left .nav-pills__unread-indicator', 'color:' + theme.mentionColor, 2);
+        changeCss('.sidebar--left .badge', 'color:' + theme.mentionColor, 2);
+    }
+
+    if (theme.centerChannelBg) {
+        changeCss('.app__content, .markdown__table, .markdown__table tbody tr, .command-box, .modal .modal-content, .mentions-name, .mentions--top .mentions-box', 'background:' + theme.centerChannelBg, 1);
+        changeCss('#post-list .post-list-holder-by-time', 'background:' + theme.centerChannelBg, 1);
+        changeCss('#post-create', 'background:' + theme.centerChannelBg, 1);
+        changeCss('.date-separator .separator__text, .new-separator .separator__text', 'background:' + theme.centerChannelBg, 1);
+        changeCss('.post-image__column .post-image__details', 'background:' + theme.centerChannelBg, 1);
+        changeCss('.sidebar--right, .dropdown-menu, .popover', 'background:' + theme.centerChannelBg, 1);
+        changeCss('.popover.bottom>.arrow:after', 'border-bottom-color:' + theme.centerChannelBg, 1);
+        changeCss('.popover.right>.arrow:after', 'border-right-color:' + theme.centerChannelBg, 1);
+        changeCss('.popover.left>.arrow:after', 'border-left-color:' + theme.centerChannelBg, 1);
+        changeCss('.popover.top>.arrow:after', 'border-top-color:' + theme.centerChannelBg, 1);
+        changeCss('.search-bar__container .search__form .search-bar, .form-control', 'background:' + theme.centerChannelBg, 1);
+    }
+
+    if (theme.centerChannelColor) {
+        changeCss('.app__content, .post-create__container .post-create-body .btn-file, .post-create__container .post-create-footer .msg-typing, .command-name, .modal .modal-content, .dropdown-menu, .popover, .mentions-name', 'color:' + theme.centerChannelColor, 1);
+        changeCss('#post-create', 'color:' + theme.centerChannelColor, 2);
+        changeCss('.channel-header__links a', 'fill:' + changeOpacity(theme.centerChannelColor, 0.7), 1);
+        changeCss('.channel-header__links a:hover, .channel-header__links a:active', 'fill:' + theme.centerChannelColor, 2);
+        changeCss('.mentions--top, .command-box', 'box-shadow:' + changeOpacity(theme.centerChannelColor, 0.2) + ' 1px -3px 12px', 3);
+        changeCss('.mentions--top, .command-box', '-webkit-box-shadow:' + changeOpacity(theme.centerChannelColor, 0.2) + ' 1px -3px 12px', 2);
+        changeCss('.mentions--top, .command-box', '-moz-box-shadow:' + changeOpacity(theme.centerChannelColor, 0.2) + ' 1px -3px 12px', 1);
+        changeCss('.dropdown-menu, .popover ', 'box-shadow:' + changeOpacity(theme.centerChannelColor, 0.1) + ' 0px 6px 12px', 3);
+        changeCss('.dropdown-menu, .popover ', '-webkit-box-shadow:' + changeOpacity(theme.centerChannelColor, 0.1) + ' 0px 6px 12px', 2);
+        changeCss('.dropdown-menu, .popover ', '-moz-box-shadow:' + changeOpacity(theme.centerChannelColor, 0.1) + ' 0px 6px 12px', 1);
+        changeCss('.post-body hr, .loading-screen .loading__content .round', 'background:' + theme.centerChannelColor, 1);
+        changeCss('.channel-header .heading', 'color:' + theme.centerChannelColor, 1);
+        changeCss('.markdown__table tbody tr:nth-child(2n)', 'background:' + changeOpacity(theme.centerChannelColor, 0.07), 1);
+        changeCss('.channel-header__info>div.dropdown .header-dropdown__icon', 'color:' + changeOpacity(theme.centerChannelColor, 0.8), 1);
+        changeCss('.channel-header #member_popover', 'color:' + changeOpacity(theme.centerChannelColor, 0.8), 1);
+        changeCss('.custom-textarea, .custom-textarea:focus, .preview-container .preview-div, .post-image__column .post-image__details, .sidebar--right .sidebar-right__body, .markdown__table th, .markdown__table td, .command-box, .modal .modal-content, .settings-modal .settings-table .settings-content .divider-light, .dropdown-menu, .modal .modal-header, .popover, .mentions--top .mentions-box', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.2), 1);
+        changeCss('.popover.bottom>.arrow', 'border-bottom-color:' + changeOpacity(theme.centerChannelColor, 0.25), 1);
+        changeCss('.popover.right>.arrow', 'border-right-color:' + changeOpacity(theme.centerChannelColor, 0.25), 1);
+        changeCss('.popover.left>.arrow', 'border-left-color:' + changeOpacity(theme.centerChannelColor, 0.25), 1);
+        changeCss('.popover.top>.arrow', 'border-top-color:' + changeOpacity(theme.centerChannelColor, 0.25), 1);
+        changeCss('.command-name, .popover .popover-title', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.2), 1);
+        changeCss('.dropdown-menu .divider', 'background:' + theme.centerChannelColor, 1);
+        changeCss('.custom-textarea', 'color:' + theme.centerChannelColor, 1);
+        changeCss('.post-image__column', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.2), 2);
+        changeCss('.post-image__column .post-image__details', 'color:' + theme.centerChannelColor, 2);
+        changeCss('.post-image__column a, .post-image__column a:hover, .post-image__column a:focus', 'color:' + theme.centerChannelColor, 1);
+        changeCss('.search-bar__container .search__form .search-bar, .form-control', 'color:' + theme.centerChannelColor, 2);
+        changeCss('@media(max-width: 768px){.search-bar__container .search__form .search-bar', 'background:' + changeOpacity(theme.centerChannelColor, 0.2) + '; color: inherit;', 1);
+        changeCss('.input-group-addon, .search-bar__container .search__form, .form-control', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.2), 1);
+        changeCss('.form-control:focus', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.3), 1);
+        changeCss('.channel-intro .channel-intro__content', 'background:' + changeOpacity(theme.centerChannelColor, 0.05), 1);
+        changeCss('.date-separator .separator__text', 'color:' + theme.centerChannelColor, 2);
+        changeCss('.date-separator .separator__hr, .modal-footer, .modal .custom-textarea, .post-right__container .post.post--root hr, .search-item-container', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.2), 1);
+        changeCss('.modal .custom-textarea:focus', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.3), 1);
+        changeCss('.channel-intro, .settings-modal .settings-table .settings-content .divider-dark, hr, .settings-modal .settings-table .settings-links', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.2), 1);
+        changeCss('.post.current--user .post-body, .post.post--comment.other--root.current--user .post-comment, pre', 'background:' + changeOpacity(theme.centerChannelColor, 0.07), 1);
+        changeCss('.post.current--user .post-body, .post.post--comment.other--root.current--user .post-comment, .post.post--comment.other--root .post-comment, .post.same--root .post-body, .modal .more-table tbody>tr td, .member-div:first-child, .member-div, .access-history__table .access__report, .activity-log__table', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.1), 2);
+        changeCss('@media(max-width: 1440px){.post.same--root', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.07), 2);
+        changeCss('@media(max-width: 1440px){.post.same--root', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.07), 2);
+        changeCss('@media(max-width: 1800px){.inner__wrap.move--left .post.post--comment.same--root', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.07), 2);
+        changeCss('.post:hover, .modal .more-table tbody>tr:hover td, .sidebar--right .sidebar--right__header, .settings-modal .settings-table .settings-content .section-min:hover', 'background:' + changeOpacity(theme.centerChannelColor, 0.07), 1);
+        changeCss('.date-separator.hovered--before:after, .date-separator.hovered--after:before, .new-separator.hovered--after:before, .new-separator.hovered--before:after', 'background:' + changeOpacity(theme.centerChannelColor, 0.07), 1);
+        changeCss('.command-name:hover, .mentions-name:hover, .mentions-focus, .dropdown-menu>li>a:focus, .dropdown-menu>li>a:hover', 'background:' + changeOpacity(theme.centerChannelColor, 0.15), 1);
+        changeCss('code', 'background:' + changeOpacity(theme.centerChannelColor, 0.1), 1);
+        changeCss('.post.current--user:hover .post-body ', 'background: none;', 1);
+        changeCss('.sidebar--right', 'color:' + theme.centerChannelColor, 2);
+    }
+
+    if (theme.newMessageSeparator) {
+        changeCss('.new-separator .separator__text', 'color:' + theme.newMessageSeparator, 1);
+        changeCss('.new-separator .separator__hr', 'border-color:' + changeOpacity(theme.newMessageSeparator, 0.5), 1);
+    }
+
+    if (theme.linkColor) {
+        changeCss('a, a:focus, a:hover, .btn, .btn:focus, .btn:hover', 'color:' + theme.linkColor, 1);
+        changeCss('.post .comment-icon__container', 'fill:' + theme.linkColor, 1);
+    }
+
+    if (theme.buttonBg) {
+        changeCss('.btn.btn-primary', 'background:' + theme.buttonBg, 1);
+        changeCss('.btn.btn-primary:hover, .btn.btn-primary:active, .btn.btn-primary:focus', 'background:' + changeColor(theme.buttonBg, -0.25), 1);
+    }
+
+    if (theme.buttonColor) {
+        changeCss('.btn.btn-primary', 'color:' + theme.buttonColor, 2);
+    }
+
+    if (theme.mentionHighlightBg) {
+        changeCss('.mention-highlight, .search-highlight', 'background:' + theme.mentionHighlightBg, 1);
+    }
+
+    if (theme.mentionHighlightLink) {
+        changeCss('.mention-highlight .mention-link', 'color:' + theme.mentionHighlightLink, 1);
+    }
+}
+export function changeCss(className, classValue, classRepeat) {
     // we need invisible container to store additional css definitions
     var cssMainContainer = $('#css-modifier-container');
     if (cssMainContainer.length === 0) {
@@ -552,9 +568,9 @@ export function changeCss(className, classValue) {
     }
 
     // and we need one div for each class
-    var classContainer = cssMainContainer.find('div[data-class="' + className + '"]');
+    var classContainer = cssMainContainer.find('div[data-class="' + className + classRepeat + '"]');
     if (classContainer.length === 0) {
-        classContainer = $('<div data-class="' + className + '"></div>');
+        classContainer = $('<div data-class="' + className + classRepeat + '"></div>');
         classContainer.appendTo(cssMainContainer);
     }
 
@@ -652,7 +668,7 @@ export function isValidUsername(name) {
         error = 'Must be between 3 and 15 characters';
     } else if (!(/^[a-z0-9\.\-\_]+$/).test(name)) {
         error = "Must contain only letters, numbers, and the symbols '.', '-', and '_'.";
-    } else if (!(/[a-z]/).test(name.charAt(0))) {
+    } else if (!(/[a-z]/).test(name.charAt(0))) { //eslint-disable-line no-negated-condition
         error = 'First character must be a letter.';
     } else {
         for (var i = 0; i < Constants.RESERVED_USERNAMES.length; i++) {
@@ -666,16 +682,12 @@ export function isValidUsername(name) {
     return error;
 }
 
-export function updateTabTitle(name) {
-    document.title = name + ' ' + document.title.substring(document.title.lastIndexOf('-'));
-}
-
 export function updateAddressBar(channelName) {
     var teamURL = window.location.href.split('/channels')[0];
     history.replaceState('data', '', teamURL + '/channels/' + channelName);
 }
 
-export function switchChannel(channel, teammateName) {
+export function switchChannel(channel) {
     AppDispatcher.handleViewAction({
         type: ActionTypes.CLICK_CHANNEL,
         name: channel.name,
@@ -683,12 +695,6 @@ export function switchChannel(channel, teammateName) {
     });
 
     updateAddressBar(channel.name);
-
-    if (channel.type === 'D' && teammateName) {
-        updateTabTitle(teammateName);
-    } else {
-        updateTabTitle(channel.display_name);
-    }
 
     AsyncClient.getChannels(true, true, true);
     AsyncClient.getChannelExtraInfo(true);
@@ -760,57 +766,47 @@ Image.prototype.load = function imageLoad(url, progressCallback) {
 Image.prototype.completedPercentage = 0;
 
 export function changeColor(colourIn, amt) {
-    var usePound = false;
-    var col = colourIn;
+    var hex = colourIn;
+    var lum = amt;
 
-    if (col[0] === '#') {
-        col = col.slice(1);
-        usePound = true;
+    // validate hex string
+    hex = String(hex).replace(/[^0-9a-f]/gi, '');
+    if (hex.length < 6) {
+        hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    }
+    lum = lum || 0;
+
+    // convert to decimal and change luminosity
+    var rgb = '#';
+    var c;
+    var i;
+    for (i = 0; i < 3; i++) {
+        c = parseInt(hex.substr(i * 2, 2), 16);
+        c = Math.round(Math.min(Math.max(0, c + (c * lum)), 255)).toString(16);
+        rgb += ('00' + c).substr(c.length);
     }
 
-    var num = parseInt(col, 16);
-
-    var r = (num >> 16) + amt;
-
-    if (r > 255) {
-        r = 255;
-    } else if (r < 0) {
-        r = 0;
-    }
-
-    var b = ((num >> 8) & 0x00FF) + amt;
-
-    if (b > 255) {
-        b = 255;
-    } else if (b < 0) {
-        b = 0;
-    }
-
-    var g = (num & 0x0000FF) + amt;
-
-    if (g > 255) {
-        g = 255;
-    } else if (g < 0) {
-        g = 0;
-    }
-
-    var pound = '#';
-    if (!usePound) {
-        pound = '';
-    }
-
-    return pound + String('000000' + (g | (b << 8) | (r << 16)).toString(16)).slice(-6);
+    return rgb;
 }
 
 export function changeOpacity(oldColor, opacity) {
-    var col = oldColor;
-    if (col[0] === '#') {
-        col = col.slice(1);
+    var color = oldColor;
+    if (color[0] === '#') {
+        color = color.slice(1);
     }
 
-    var r = parseInt(col.substring(0, 2), 16);
-    var g = parseInt(col.substring(2, 4), 16);
-    var b = parseInt(col.substring(4, 6), 16);
+    if (color.length === 3) {
+        const tempColor = color;
+        color = '';
+
+        color += tempColor[0] + tempColor[0];
+        color += tempColor[1] + tempColor[1];
+        color += tempColor[2] + tempColor[2];
+    }
+
+    var r = parseInt(color.substring(0, 2), 16);
+    var g = parseInt(color.substring(2, 4), 16);
+    var b = parseInt(color.substring(4, 6), 16);
 
     return 'rgba(' + r + ',' + g + ',' + b + ',' + opacity + ')';
 }
@@ -927,6 +923,18 @@ export function isBrowserEdge() {
     return window.naviagtor && navigator.userAgent && navigator.userAgent.toLowerCase().indexOf('edge') > -1;
 }
 
+export function getDirectChannelName(id, otherId) {
+    let handle;
+
+    if (otherId > id) {
+        handle = id + '__' + otherId;
+    } else {
+        handle = otherId + '__' + id;
+    }
+
+    return handle;
+}
+
 // Used to get the id of the other user from a DM channel
 export function getUserIdFromChannelName(channel) {
     var ids = channel.name.split('__');
@@ -955,7 +963,16 @@ export function getTeamURLFromAddressBar() {
 
 export function getShortenedTeamURL() {
     const teamURL = getTeamURLFromAddressBar();
-    if (teamURL.length > 24) {
+    if (teamURL.length > 35) {
         return teamURL.substring(0, 10) + '...' + teamURL.substring(teamURL.length - 12, teamURL.length) + '/';
     }
+    return teamURL + '/';
+}
+
+export function windowWidth() {
+    return $(window).width();
+}
+
+export function windowHeight() {
+    return $(window).height();
 }

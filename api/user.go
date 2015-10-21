@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -8,13 +8,13 @@ import (
 	l4g "code.google.com/p/log4go"
 	b64 "encoding/base64"
 	"fmt"
+	"github.com/disintegration/imaging"
 	"github.com/golang/freetype"
 	"github.com/gorilla/mux"
 	"github.com/mattermost/platform/model"
 	"github.com/mattermost/platform/store"
 	"github.com/mattermost/platform/utils"
 	"github.com/mssola/user_agent"
-	"github.com/nfnt/resize"
 	"hash/fnv"
 	"image"
 	"image/color"
@@ -54,6 +54,7 @@ func InitUser(r *mux.Router) {
 	sr.Handle("/me", ApiAppHandler(getMe)).Methods("GET")
 	sr.Handle("/status", ApiUserRequiredActivity(getStatuses, false)).Methods("GET")
 	sr.Handle("/profiles", ApiUserRequired(getProfiles)).Methods("GET")
+	sr.Handle("/profiles/{id:[A-Za-z0-9]+}", ApiUserRequired(getProfiles)).Methods("GET")
 	sr.Handle("/{id:[A-Za-z0-9]+}", ApiUserRequired(getUser)).Methods("GET")
 	sr.Handle("/{id:[A-Za-z0-9]+}/sessions", ApiUserRequired(getSessions)).Methods("GET")
 	sr.Handle("/{id:[A-Za-z0-9]+}/audits", ApiUserRequired(getAudits)).Methods("GET")
@@ -153,7 +154,7 @@ func publishLastCall(lastCall *model.CallDetail, user *model.User) *model.AppErr
 }
 
 func createUser(c *Context, w http.ResponseWriter, r *http.Request) {
-	if utils.Cfg.ServiceSettings.DisableEmailSignUp {
+	if !utils.Cfg.EmailSettings.EnableSignUpWithEmail {
 		c.Err = model.NewAppError("signupTeam", "User sign-up with email is disabled.", "")
 		c.Err.StatusCode = http.StatusNotImplemented
 		return
@@ -185,7 +186,7 @@ func createUser(c *Context, w http.ResponseWriter, r *http.Request) {
 		data := r.URL.Query().Get("d")
 		props := model.MapFromJson(strings.NewReader(data))
 
-		if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", data, utils.Cfg.ServiceSettings.InviteSalt)) {
+		if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", data, utils.Cfg.EmailSettings.InviteSalt)) {
 			c.Err = model.NewAppError("createUser", "The signup link does not appear to be valid", "")
 			return
 		}
@@ -250,31 +251,35 @@ func IsVerifyHashRequired(user *model.User, team *model.Team, hash string) bool 
 	return shouldVerifyHash
 }
 
-func CreateValet(c *Context, team *model.Team) *model.User {
-	valet := &model.User{}
-	valet.TeamId = team.Id
-	valet.Email = utils.Cfg.EmailSettings.FeedbackEmail
-	valet.EmailVerified = true
-	valet.Username = model.BOT_USERNAME
-	valet.Password = model.NewId()
-
-	return CreateUser(c, team, valet)
-}
-
 func CreateUser(c *Context, team *model.Team, user *model.User) *model.User {
+
+	if !utils.Cfg.TeamSettings.EnableUserCreation {
+		c.Err = model.NewAppError("CreateUser", "User creation has been disabled. Please ask your systems administrator for details.", "")
+		return nil
+	}
 
 	channelRole := ""
 	if team.Email == user.Email {
 		user.Roles = model.ROLE_TEAM_ADMIN
 		channelRole = model.CHANNEL_ROLE_ADMIN
+
+		// Below is a speical case where the first user in the entire
+		// system is granted the system_admin role instead of admin
+		if result := <-Srv.Store.User().GetTotalUsersCount(); result.Err != nil {
+			c.Err = result.Err
+			return nil
+		} else {
+			count := result.Data.(int64)
+			if count <= 0 {
+				user.Roles = model.ROLE_SYSTEM_ADMIN
+			}
+		}
+
 	} else {
 		user.Roles = ""
 	}
 
 	user.MakeNonNil()
-	if len(user.Props["theme"]) == 0 {
-		user.AddProp("theme", utils.Cfg.TeamSettings.DefaultThemeColor)
-	}
 
 	if result := <-Srv.Store.User().Save(user); result.Err != nil {
 		c.Err = result.Err
@@ -288,13 +293,14 @@ func CreateUser(c *Context, team *model.Team, user *model.User) *model.User {
 			l4g.Error("Encountered an issue joining default channels user_id=%s, team_id=%s, err=%v", ruser.Id, ruser.TeamId, err)
 		}
 
-		//fireAndForgetWelcomeEmail(ruser.FirstName, ruser.Email, team.Name, c.TeamURL+"/channels/town-square")
+		sendWelcomeEmailAndForget(ruser.Id, ruser.Email, team.Name, team.DisplayName, c.GetSiteURL(), c.GetTeamURLFromTeam(team), user.EmailVerified)
+
+		addDirectChannelsAndForget(ruser)
+
 		if user.EmailVerified {
 			if cresult := <-Srv.Store.User().VerifyEmail(ruser.Id); cresult.Err != nil {
 				l4g.Error("Failed to set email verified err=%v", cresult.Err)
 			}
-		} else {
-			FireAndForgetVerifyEmail(result.Data.(*model.User).Id, ruser.Email, team.Name, team.DisplayName, c.GetSiteURL(), c.GetTeamURLFromTeam(team))
 		}
 
 		ruser.Sanitize(map[string]bool{})
@@ -308,26 +314,66 @@ func CreateUser(c *Context, team *model.Team, user *model.User) *model.User {
 	}
 }
 
-func fireAndForgetWelcomeEmail(name, email, teamDisplayName, link, siteURL string) {
+func sendWelcomeEmailAndForget(userId, email, teamName, teamDisplayName, siteURL, teamURL string, verified bool) {
 	go func() {
 
 		subjectPage := NewServerTemplatePage("welcome_subject")
-		subjectPage.Props["SiteURL"] = siteURL
+		subjectPage.Props["TeamDisplayName"] = teamDisplayName
 		bodyPage := NewServerTemplatePage("welcome_body")
 		bodyPage.Props["SiteURL"] = siteURL
-		bodyPage.Props["Nickname"] = name
-		bodyPage.Props["TeamDisplayName"] = teamDisplayName
-		bodyPage.Props["FeedbackName"] = utils.Cfg.EmailSettings.FeedbackName
-		bodyPage.Props["TeamURL"] = link
+		bodyPage.Props["TeamURL"] = teamURL
+
+		if !verified {
+			link := fmt.Sprintf("%s/verify_email?uid=%s&hid=%s&teamname=%s&email=%s", siteURL, userId, model.HashPassword(userId), teamName, email)
+			bodyPage.Props["VerifyUrl"] = link
+		}
 
 		if err := utils.SendMail(email, subjectPage.Render(), bodyPage.Render()); err != nil {
 			l4g.Error("Failed to send welcome email successfully err=%v", err)
 		}
-
 	}()
 }
 
-func FireAndForgetVerifyEmail(userId, userEmail, teamName, teamDisplayName, siteURL, teamURL string) {
+func addDirectChannelsAndForget(user *model.User) {
+	go func() {
+		var profiles map[string]*model.User
+		if result := <-Srv.Store.User().GetProfiles(user.TeamId); result.Err != nil {
+			l4g.Error("Failed to add direct channel preferences for user user_id=%s, team_id=%s, err=%v", user.Id, user.TeamId, result.Err.Error())
+			return
+		} else {
+			profiles = result.Data.(map[string]*model.User)
+		}
+
+		var preferences model.Preferences
+
+		for id := range profiles {
+			if id == user.Id {
+				continue
+			}
+
+			profile := profiles[id]
+
+			preference := model.Preference{
+				UserId:   user.Id,
+				Category: model.PREFERENCE_CATEGORY_DIRECT_CHANNEL_SHOW,
+				Name:     profile.Id,
+				Value:    "true",
+			}
+
+			preferences = append(preferences, preference)
+
+			if len(preferences) >= 10 {
+				break
+			}
+		}
+
+		if result := <-Srv.Store.Preference().Save(&preferences); result.Err != nil {
+			l4g.Error("Failed to add direct channel preferences for new user user_id=%s, eam_id=%s, err=%v", user.Id, user.TeamId, result.Err.Error())
+		}
+	}()
+}
+
+func SendVerifyEmailAndForget(userId, userEmail, teamName, teamDisplayName, siteURL, teamURL string) {
 	go func() {
 
 		link := fmt.Sprintf("%s/verify_email?uid=%s&hid=%s&teamname=%s&email=%s", siteURL, userId, model.HashPassword(userId), teamName, userEmail)
@@ -388,7 +434,7 @@ func LoginByEmail(c *Context, w http.ResponseWriter, r *http.Request, email, nam
 
 func checkUserPassword(c *Context, user *model.User, password string) bool {
 
-	if user.FailedAttempts >= utils.Cfg.ServiceSettings.AllowedLoginAttempts {
+	if user.FailedAttempts >= utils.Cfg.ServiceSettings.MaximumLoginAttempts {
 		c.LogAuditWithUserId(user.Id, "fail")
 		c.Err = model.NewAppError("checkUserPassword", "Your account is locked because of too many failed password attempts. Please reset your password.", "user_id="+user.Id)
 		c.Err.StatusCode = http.StatusForbidden
@@ -419,7 +465,7 @@ func checkUserPassword(c *Context, user *model.User, password string) bool {
 func Login(c *Context, w http.ResponseWriter, r *http.Request, user *model.User, deviceId string) {
 	c.LogAuditWithUserId(user.Id, "attempt")
 
-	if !user.EmailVerified && !utils.Cfg.EmailSettings.ByPassEmail {
+	if !user.EmailVerified && utils.Cfg.EmailSettings.RequireEmailVerification {
 		c.Err = model.NewAppError("Login", "Login failed because email address has not been verified", "user_id="+user.Id)
 		c.Err.StatusCode = http.StatusForbidden
 		return
@@ -486,6 +532,41 @@ func Login(c *Context, w http.ResponseWriter, r *http.Request, user *model.User,
 	}
 
 	http.SetCookie(w, sessionCookie)
+
+	multiToken := ""
+	if originalMultiSessionCookie, err := r.Cookie(model.MULTI_SESSION_TOKEN); err == nil {
+		multiToken = originalMultiSessionCookie.Value
+	}
+
+	// Attempt to clean all the old tokens or duplicate tokens
+	if len(multiToken) > 0 {
+		tokens := strings.Split(multiToken, " ")
+
+		multiToken = ""
+		seen := make(map[string]string)
+		seen[session.TeamId] = session.TeamId
+		for _, token := range tokens {
+			if sr := <-Srv.Store.Session().Get(token); sr.Err == nil {
+				s := sr.Data.(*model.Session)
+				if !s.IsExpired() && seen[s.TeamId] == "" {
+					multiToken += " " + token
+					seen[s.TeamId] = s.TeamId
+				}
+			}
+		}
+	}
+
+	multiToken = strings.TrimSpace(session.Token + " " + multiToken)
+
+	multiSessionCookie := &http.Cookie{
+		Name:     model.MULTI_SESSION_TOKEN,
+		Value:    multiToken,
+		Path:     "/",
+		MaxAge:   maxAge,
+		HttpOnly: true,
+	}
+
+	http.SetCookie(w, multiSessionCookie)
 
 	c.Session = *session
 	c.LogAuditWithUserId(user.Id, "success")
@@ -560,10 +641,14 @@ func RevokeAllSession(c *Context, userId string) {
 
 		for _, session := range sessions {
 			c.LogAuditWithUserId(userId, "session_id="+session.Id)
-			sessionCache.Remove(session.Token)
-			if result := <-Srv.Store.Session().Remove(session.Id); result.Err != nil {
-				c.Err = result.Err
-				return
+			if session.IsOAuth {
+				RevokeAccessToken(session.Token)
+			} else {
+				sessionCache.Remove(session.Token)
+				if result := <-Srv.Store.Session().Remove(session.Id); result.Err != nil {
+					c.Err = result.Err
+					return
+				}
 			}
 		}
 	}
@@ -603,7 +688,7 @@ func logout(c *Context, w http.ResponseWriter, r *http.Request) {
 
 func Logout(c *Context, w http.ResponseWriter, r *http.Request) {
 	c.LogAudit("")
-	c.RemoveSessionCookie(w)
+	c.RemoveSessionCookie(w, r)
 	if result := <-Srv.Store.Session().Remove(c.Session.Id); result.Err != nil {
 		c.Err = result.Err
 		return
@@ -618,7 +703,7 @@ func getMe(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	if result := <-Srv.Store.User().Get(c.Session.UserId); result.Err != nil {
 		c.Err = result.Err
-		c.RemoveSessionCookie(w)
+		c.RemoveSessionCookie(w, r)
 		l4g.Error("Error in getting users profile for id=%v forcing logout", c.Session.UserId)
 		return
 	} else if HandleEtag(result.Data.(*model.User).Etag(), w, r) {
@@ -654,13 +739,26 @@ func getUser(c *Context, w http.ResponseWriter, r *http.Request) {
 }
 
 func getProfiles(c *Context, w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	id, ok := params["id"]
+	if ok {
+		// You must be system admin to access another team
+		if id != c.Session.TeamId {
+			if !c.HasSystemAdminPermissions("getProfiles") {
+				return
+			}
+		}
 
-	etag := (<-Srv.Store.User().GetEtagForProfiles(c.Session.TeamId)).Data.(string)
+	} else {
+		id = c.Session.TeamId
+	}
+
+	etag := (<-Srv.Store.User().GetEtagForProfiles(id)).Data.(string)
 	if HandleEtag(etag, w, r) {
 		return
 	}
 
-	if result := <-Srv.Store.User().GetProfiles(c.Session.TeamId); result.Err != nil {
+	if result := <-Srv.Store.User().GetProfiles(id); result.Err != nil {
 		c.Err = result.Err
 		return
 	} else {
@@ -750,7 +848,7 @@ func createProfileImage(username string, userId string) ([]byte, *model.AppError
 
 	initial := string(strings.ToUpper(username)[0])
 
-	fontBytes, err := ioutil.ReadFile(utils.FindDir("web/static/fonts") + utils.Cfg.ImageSettings.InitialFont)
+	fontBytes, err := ioutil.ReadFile(utils.FindDir("web/static/fonts") + utils.Cfg.FileSettings.InitialFont)
 	if err != nil {
 		return nil, model.NewAppError("createProfileImage", "Could not create default profile image font", err.Error())
 	}
@@ -759,8 +857,8 @@ func createProfileImage(username string, userId string) ([]byte, *model.AppError
 		return nil, model.NewAppError("createProfileImage", "Could not create default profile image font", err.Error())
 	}
 
-	width := int(utils.Cfg.ImageSettings.ProfileWidth)
-	height := int(utils.Cfg.ImageSettings.ProfileHeight)
+	width := int(utils.Cfg.FileSettings.ProfileWidth)
+	height := int(utils.Cfg.FileSettings.ProfileHeight)
 	color := colors[int64(seed)%int64(len(colors))]
 	dstImg := image.NewRGBA(image.Rect(0, 0, width, height))
 	srcImg := image.White
@@ -799,7 +897,7 @@ func getProfileImage(c *Context, w http.ResponseWriter, r *http.Request) {
 	} else {
 		var img []byte
 
-		if !utils.IsS3Configured() && !utils.Cfg.ServiceSettings.UseLocalStorage {
+		if len(utils.Cfg.FileSettings.DriverName) == 0 {
 			var err *model.AppError
 			if img, err = createProfileImage(result.Data.(*model.User).Username, id); err != nil {
 				c.Err = err
@@ -836,8 +934,8 @@ func getProfileImage(c *Context, w http.ResponseWriter, r *http.Request) {
 }
 
 func uploadProfileImage(c *Context, w http.ResponseWriter, r *http.Request) {
-	if !utils.IsS3Configured() && !utils.Cfg.ServiceSettings.UseLocalStorage {
-		c.Err = model.NewAppError("uploadProfileImage", "Unable to upload file. Amazon S3 not configured and local server storage turned off. ", "")
+	if len(utils.Cfg.FileSettings.DriverName) == 0 {
+		c.Err = model.NewAppError("uploadProfileImage", "Unable to upload file. Image storage is not configured.", "")
 		c.Err.StatusCode = http.StatusNotImplemented
 		return
 	}
@@ -879,7 +977,7 @@ func uploadProfileImage(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Scale profile image
-	img = resize.Resize(utils.Cfg.ImageSettings.ProfileWidth, utils.Cfg.ImageSettings.ProfileHeight, img, resize.Lanczos3)
+	img = imaging.Resize(img, utils.Cfg.FileSettings.ProfileWidth, utils.Cfg.FileSettings.ProfileHeight, imaging.Lanczos)
 
 	buf := new(bytes.Buffer)
 	err = png.Encode(buf, img)
@@ -898,6 +996,9 @@ func uploadProfileImage(c *Context, w http.ResponseWriter, r *http.Request) {
 	Srv.Store.User().UpdateLastPictureUpdate(c.Session.UserId)
 
 	c.LogAudit("")
+
+	// write something as the response since jQuery expects a json response
+	w.Write([]byte("true"))
 }
 
 func updateUser(c *Context, w http.ResponseWriter, r *http.Request) {
@@ -925,7 +1026,11 @@ func updateUser(c *Context, w http.ResponseWriter, r *http.Request) {
 				l4g.Error(tresult.Err.Message)
 			} else {
 				team := tresult.Data.(*model.Team)
-				fireAndForgetEmailChangeEmail(rusers[1].Email, team.DisplayName, c.GetTeamURLFromTeam(team), c.GetSiteURL())
+				sendEmailChangeEmailAndForget(rusers[1].Email, rusers[0].Email, team.DisplayName, c.GetTeamURLFromTeam(team), c.GetSiteURL())
+
+				if utils.Cfg.EmailSettings.RequireEmailVerification {
+					SendEmailChangeVerifyEmailAndForget(rusers[0].Id, rusers[0].Email, team.Name, team.DisplayName, c.GetSiteURL(), c.GetTeamURLFromTeam(team))
+				}
 			}
 		}
 
@@ -1004,7 +1109,7 @@ func updatePassword(c *Context, w http.ResponseWriter, r *http.Request) {
 			l4g.Error(tresult.Err.Message)
 		} else {
 			team := tresult.Data.(*model.Team)
-			fireAndForgetPasswordChangeEmail(user.Email, team.DisplayName, c.GetTeamURLFromTeam(team), c.GetSiteURL(), "using the settings menu")
+			sendPasswordChangeEmailAndForget(user.Email, team.DisplayName, c.GetTeamURLFromTeam(team), c.GetSiteURL(), "using the settings menu")
 		}
 
 		data := make(map[string]string)
@@ -1028,8 +1133,8 @@ func updateRoles(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if model.IsInRole(new_roles, model.ROLE_SYSTEM_ADMIN) {
-		c.Err = model.NewAppError("updateRoles", "The system_admin role can only be set from the command line", "")
+	if model.IsInRole(new_roles, model.ROLE_SYSTEM_ADMIN) && !c.IsSystemAdmin() {
+		c.Err = model.NewAppError("updateRoles", "The system admin role can only be set by another system admin", "")
 		c.Err.StatusCode = http.StatusForbidden
 		return
 	}
@@ -1046,8 +1151,14 @@ func updateRoles(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !model.IsInRole(c.Session.Roles, model.ROLE_TEAM_ADMIN) && !c.IsSystemAdmin() {
+	if !c.IsTeamAdmin() {
 		c.Err = model.NewAppError("updateRoles", "You do not have the appropriate permissions", "userId="+user_id)
+		c.Err.StatusCode = http.StatusForbidden
+		return
+	}
+
+	if user.IsInRole(model.ROLE_SYSTEM_ADMIN) && !c.IsSystemAdmin() {
+		c.Err = model.NewAppError("updateRoles", "The system admin role can only by modified by another system admin", "")
 		c.Err.StatusCode = http.StatusForbidden
 		return
 	}
@@ -1071,7 +1182,7 @@ func updateRoles(c *Context, w http.ResponseWriter, r *http.Request) {
 	} else {
 		sessions := result.Data.([]*model.Session)
 		for _, s := range sessions {
-			sessionCache.Remove(s.Id)
+			sessionCache.Remove(s.Token)
 		}
 	}
 
@@ -1143,7 +1254,7 @@ func updateActive(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !model.IsInRole(c.Session.Roles, model.ROLE_TEAM_ADMIN) && !c.IsSystemAdmin() {
+	if !c.IsTeamAdmin() {
 		c.Err = model.NewAppError("updateActive", "You do not have the appropriate permissions", "userId="+user_id)
 		c.Err.StatusCode = http.StatusForbidden
 		return
@@ -1230,7 +1341,7 @@ func sendPasswordReset(c *Context, w http.ResponseWriter, r *http.Request) {
 	newProps["time"] = fmt.Sprintf("%v", model.GetMillis())
 
 	data := model.MapToJson(newProps)
-	hash := model.HashPassword(fmt.Sprintf("%v:%v", data, utils.Cfg.ServiceSettings.ResetSalt))
+	hash := model.HashPassword(fmt.Sprintf("%v:%v", data, utils.Cfg.EmailSettings.PasswordResetSalt))
 
 	link := fmt.Sprintf("%s/reset_password?d=%s&h=%s", c.GetTeamURLFromTeam(team), url.QueryEscape(data), url.QueryEscape(hash))
 
@@ -1259,29 +1370,35 @@ func resetPassword(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := props["hash"]
-	if len(hash) == 0 {
-		c.SetInvalidParam("resetPassword", "hash")
-		return
-	}
-
-	data := model.MapFromJson(strings.NewReader(props["data"]))
-
-	userId := data["user_id"]
-	if len(userId) != 26 {
-		c.SetInvalidParam("resetPassword", "data:user_id")
-		return
-	}
-
-	timeStr := data["time"]
-	if len(timeStr) == 0 {
-		c.SetInvalidParam("resetPassword", "data:time")
-		return
-	}
-
 	name := props["name"]
 	if len(name) == 0 {
 		c.SetInvalidParam("resetPassword", "name")
+		return
+	}
+
+	userId := props["user_id"]
+	hash := props["hash"]
+	timeStr := ""
+
+	if !c.IsSystemAdmin() {
+		if len(hash) == 0 {
+			c.SetInvalidParam("resetPassword", "hash")
+			return
+		}
+
+		data := model.MapFromJson(strings.NewReader(props["data"]))
+
+		userId = data["user_id"]
+
+		timeStr = data["time"]
+		if len(timeStr) == 0 {
+			c.SetInvalidParam("resetPassword", "data:time")
+			return
+		}
+	}
+
+	if len(userId) != 26 {
+		c.SetInvalidParam("resetPassword", "user_id")
 		return
 	}
 
@@ -1309,15 +1426,17 @@ func resetPassword(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", props["data"], utils.Cfg.ServiceSettings.ResetSalt)) {
-		c.Err = model.NewAppError("resetPassword", "The reset password link does not appear to be valid", "")
-		return
-	}
+	if !c.IsSystemAdmin() {
+		if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", props["data"], utils.Cfg.EmailSettings.PasswordResetSalt)) {
+			c.Err = model.NewAppError("resetPassword", "The reset password link does not appear to be valid", "")
+			return
+		}
 
-	t, err := strconv.ParseInt(timeStr, 10, 64)
-	if err != nil || model.GetMillis()-t > 1000*60*60 { // one hour
-		c.Err = model.NewAppError("resetPassword", "The reset link has expired", "")
-		return
+		t, err := strconv.ParseInt(timeStr, 10, 64)
+		if err != nil || model.GetMillis()-t > 1000*60*60 { // one hour
+			c.Err = model.NewAppError("resetPassword", "The reset link has expired", "")
+			return
+		}
 	}
 
 	if result := <-Srv.Store.User().UpdatePassword(userId, model.HashPassword(newPassword)); result.Err != nil {
@@ -1327,13 +1446,13 @@ func resetPassword(c *Context, w http.ResponseWriter, r *http.Request) {
 		c.LogAuditWithUserId(userId, "success")
 	}
 
-	fireAndForgetPasswordChangeEmail(user.Email, team.DisplayName, c.GetTeamURLFromTeam(team), c.GetSiteURL(), "using a reset password link")
+	sendPasswordChangeEmailAndForget(user.Email, team.DisplayName, c.GetTeamURLFromTeam(team), c.GetSiteURL(), "using a reset password link")
 
 	props["new_password"] = ""
 	w.Write([]byte(model.MapToJson(props)))
 }
 
-func fireAndForgetPasswordChangeEmail(email, teamDisplayName, teamURL, siteURL, method string) {
+func sendPasswordChangeEmailAndForget(email, teamDisplayName, teamURL, siteURL, method string) {
 	go func() {
 
 		subjectPage := NewServerTemplatePage("password_change_subject")
@@ -1352,7 +1471,7 @@ func fireAndForgetPasswordChangeEmail(email, teamDisplayName, teamURL, siteURL, 
 	}()
 }
 
-func fireAndForgetEmailChangeEmail(email, teamDisplayName, teamURL, siteURL string) {
+func sendEmailChangeEmailAndForget(oldEmail, newEmail, teamDisplayName, teamURL, siteURL string) {
 	go func() {
 
 		subjectPage := NewServerTemplatePage("email_change_subject")
@@ -1362,11 +1481,31 @@ func fireAndForgetEmailChangeEmail(email, teamDisplayName, teamURL, siteURL stri
 		bodyPage.Props["SiteURL"] = siteURL
 		bodyPage.Props["TeamDisplayName"] = teamDisplayName
 		bodyPage.Props["TeamURL"] = teamURL
+		bodyPage.Props["NewEmail"] = newEmail
 
-		if err := utils.SendMail(email, subjectPage.Render(), bodyPage.Render()); err != nil {
-			l4g.Error("Failed to send update password email successfully err=%v", err)
+		if err := utils.SendMail(oldEmail, subjectPage.Render(), bodyPage.Render()); err != nil {
+			l4g.Error("Failed to send email change notification email successfully err=%v", err)
 		}
 
+	}()
+}
+
+func SendEmailChangeVerifyEmailAndForget(userId, newUserEmail, teamName, teamDisplayName, siteURL, teamURL string) {
+	go func() {
+
+		link := fmt.Sprintf("%s/verify_email?uid=%s&hid=%s&teamname=%s&email=%s", siteURL, userId, model.HashPassword(userId), teamName, newUserEmail)
+
+		subjectPage := NewServerTemplatePage("email_change_verify_subject")
+		subjectPage.Props["SiteURL"] = siteURL
+		subjectPage.Props["TeamDisplayName"] = teamDisplayName
+		bodyPage := NewServerTemplatePage("email_change_verify_body")
+		bodyPage.Props["SiteURL"] = siteURL
+		bodyPage.Props["TeamDisplayName"] = teamDisplayName
+		bodyPage.Props["VerifyUrl"] = link
+
+		if err := utils.SendMail(newUserEmail, subjectPage.Render(), bodyPage.Render()); err != nil {
+			l4g.Error("Failed to send email change verification email successfully err=%v", err)
+		}
 	}()
 }
 
@@ -1457,15 +1596,16 @@ func getStatuses(c *Context, w http.ResponseWriter, r *http.Request) {
 
 func GetAuthorizationCode(c *Context, w http.ResponseWriter, r *http.Request, teamName, service, redirectUri, loginHint string) {
 
-	if s, ok := utils.Cfg.SSOSettings[service]; !ok || !s.Allow {
+	sso := utils.Cfg.GetSSOService(service)
+	if sso != nil && !sso.Enable {
 		c.Err = model.NewAppError("GetAuthorizationCode", "Unsupported OAuth service provider", "service="+service)
 		c.Err.StatusCode = http.StatusBadRequest
 		return
 	}
 
-	clientId := utils.Cfg.SSOSettings[service].Id
-	endpoint := utils.Cfg.SSOSettings[service].AuthEndpoint
-	scope := utils.Cfg.SSOSettings[service].Scope
+	clientId := sso.Id
+	endpoint := sso.AuthEndpoint
+	scope := sso.Scope
 
 	stateProps := map[string]string{"team": teamName, "hash": model.HashPassword(clientId)}
 	state := b64.StdEncoding.EncodeToString([]byte(model.MapToJson(stateProps)))
@@ -1484,7 +1624,8 @@ func GetAuthorizationCode(c *Context, w http.ResponseWriter, r *http.Request, te
 }
 
 func AuthorizeOAuthUser(service, code, state, redirectUri string) (io.ReadCloser, *model.Team, *model.AppError) {
-	if s, ok := utils.Cfg.SSOSettings[service]; !ok || !s.Allow {
+	sso := utils.Cfg.GetSSOService(service)
+	if sso == nil || !sso.Enable {
 		return nil, nil, model.NewAppError("AuthorizeOAuthUser", "Unsupported OAuth service provider", "service="+service)
 	}
 
@@ -1497,7 +1638,7 @@ func AuthorizeOAuthUser(service, code, state, redirectUri string) (io.ReadCloser
 
 	stateProps := model.MapFromJson(strings.NewReader(stateStr))
 
-	if !model.ComparePassword(stateProps["hash"], utils.Cfg.SSOSettings[service].Id) {
+	if !model.ComparePassword(stateProps["hash"], sso.Id) {
 		return nil, nil, model.NewAppError("AuthorizeOAuthUser", "Invalid state", "")
 	}
 
@@ -1509,14 +1650,14 @@ func AuthorizeOAuthUser(service, code, state, redirectUri string) (io.ReadCloser
 	tchan := Srv.Store.Team().GetByName(teamName)
 
 	p := url.Values{}
-	p.Set("client_id", utils.Cfg.SSOSettings[service].Id)
-	p.Set("client_secret", utils.Cfg.SSOSettings[service].Secret)
+	p.Set("client_id", sso.Id)
+	p.Set("client_secret", sso.Secret)
 	p.Set("code", code)
 	p.Set("grant_type", model.ACCESS_TOKEN_GRANT_TYPE)
 	p.Set("redirect_uri", redirectUri)
 
 	client := &http.Client{}
-	req, _ := http.NewRequest("POST", utils.Cfg.SSOSettings[service].TokenEndpoint, strings.NewReader(p.Encode()))
+	req, _ := http.NewRequest("POST", sso.TokenEndpoint, strings.NewReader(p.Encode()))
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
@@ -1526,6 +1667,9 @@ func AuthorizeOAuthUser(service, code, state, redirectUri string) (io.ReadCloser
 		return nil, nil, model.NewAppError("AuthorizeOAuthUser", "Token request failed", err.Error())
 	} else {
 		ar = model.AccessResponseFromJson(resp.Body)
+		if ar == nil {
+			return nil, nil, model.NewAppError("AuthorizeOAuthUser", "Bad response from token request", "")
+		}
 	}
 
 	if strings.ToLower(ar.TokenType) != model.ACCESS_TOKEN_TYPE {
@@ -1538,7 +1682,7 @@ func AuthorizeOAuthUser(service, code, state, redirectUri string) (io.ReadCloser
 
 	p = url.Values{}
 	p.Set("access_token", ar.AccessToken)
-	req, _ = http.NewRequest("GET", utils.Cfg.SSOSettings[service].UserApiEndpoint, strings.NewReader(""))
+	req, _ = http.NewRequest("GET", sso.UserApiEndpoint, strings.NewReader(""))
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")

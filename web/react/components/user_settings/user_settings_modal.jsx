@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var SettingsSidebar = require('../settings_sidebar.jsx');
@@ -38,9 +38,10 @@ export default class UserSettingsModal extends React.Component {
         if (global.window.config.EnableOAuthServiceProvider === 'true') {
             tabs.push({name: 'developer', uiName: 'Developer', icon: 'glyphicon glyphicon-th'});
         }
-        if (global.window.config.AllowIncomingWebhooks === 'true') {
+        if (global.window.config.EnableIncomingWebhooks === 'true' || global.window.config.EnableOutgoingWebhooks === 'true') {
             tabs.push({name: 'integrations', uiName: 'Integrations', icon: 'glyphicon glyphicon-transfer'});
         }
+        tabs.push({name: 'display', uiName: 'Display', icon: 'glyphicon glyphicon-eye-open'});
 
         return (
             <div
@@ -60,7 +61,7 @@ export default class UserSettingsModal extends React.Component {
                         data-dismiss='modal'
                         aria-label='Close'
                     >
-                        <span aria-hidden='true'>{'x'}</span>
+                        <span aria-hidden='true'>{'×'}</span>
                     </button>
                     <h4
                         className='modal-title'

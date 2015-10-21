@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var Utils = require('../utils/utils.jsx');
@@ -6,10 +6,29 @@ var client = require('../utils/client.jsx');
 var UserStore = require('../stores/user_store.jsx');
 var TeamStore = require('../stores/team_store.jsx');
 
+var AboutBuildModal = require('./about_build_modal.jsx');
+
 var Constants = require('../utils/constants.jsx');
 
 function getStateFromStores() {
-    return {teams: UserStore.getTeams(), currentTeam: TeamStore.getCurrent()};
+    let teams = [];
+    let teamsObject = UserStore.getTeams();
+    for (let teamId in teamsObject) {
+        if (teamsObject.hasOwnProperty(teamId)) {
+            teams.push(teamsObject[teamId]);
+        }
+    }
+    teams.sort(function sortByDisplayName(teamA, teamB) {
+        let teamADisplayName = teamA.display_name.toLowerCase();
+        let teamBDisplayName = teamB.display_name.toLowerCase();
+        if (teamADisplayName < teamBDisplayName) {
+            return -1;
+        } else if (teamADisplayName > teamBDisplayName) {
+            return 1;
+        }
+        return 0;
+    });
+    return {teams};
 }
 
 export default class NavbarDropdown extends React.Component {
@@ -18,7 +37,9 @@ export default class NavbarDropdown extends React.Component {
         this.blockToggle = false;
 
         this.handleLogoutClick = this.handleLogoutClick.bind(this);
+        this.handleAboutModal = this.handleAboutModal.bind(this);
         this.onListenerChange = this.onListenerChange.bind(this);
+        this.aboutModalDismissed = this.aboutModalDismissed.bind(this);
 
         this.state = getStateFromStores();
     }
@@ -26,11 +47,17 @@ export default class NavbarDropdown extends React.Component {
         e.preventDefault();
         client.logout();
     }
+    handleAboutModal() {
+        this.setState({showAboutModal: true});
+    }
+    aboutModalDismissed() {
+        this.setState({showAboutModal: false});
+    }
     componentDidMount() {
         UserStore.addTeamsChangeListener(this.onListenerChange);
         TeamStore.addChangeListener(this.onListenerChange);
 
-        $(React.findDOMNode(this.refs.dropdown)).on('hide.bs.dropdown', () => {
+        $(ReactDOM.findDOMNode(this.refs.dropdown)).on('hide.bs.dropdown', () => {
             this.blockToggle = true;
             setTimeout(() => {
                 this.blockToggle = false;
@@ -41,7 +68,7 @@ export default class NavbarDropdown extends React.Component {
         UserStore.removeTeamsChangeListener(this.onListenerChange);
         TeamStore.removeChangeListener(this.onListenerChange);
 
-        $(React.findDOMNode(this.refs.dropdown)).off('hide.bs.dropdown');
+        $(ReactDOM.findDOMNode(this.refs.dropdown)).off('hide.bs.dropdown');
     }
     onListenerChange() {
         var newState = getStateFromStores();
@@ -62,7 +89,7 @@ export default class NavbarDropdown extends React.Component {
 
         if (currentUser != null) {
             isAdmin = Utils.isAdmin(currentUser.roles);
-            isSystemAdmin = Utils.isInRole(currentUser.roles, 'system_admin');
+            isSystemAdmin = Utils.isSystemAdmin(currentUser.roles);
 
             inviteLink = (
                 <li>
@@ -101,7 +128,7 @@ export default class NavbarDropdown extends React.Component {
                         data-toggle='modal'
                         data-target='#team_members'
                     >
-                        {'Manage Team'}
+                        {'Manage Members'}
                     </a>
                 </li>
             );
@@ -135,30 +162,35 @@ export default class NavbarDropdown extends React.Component {
 
         var teams = [];
 
-        teams.push(
-            <li
-                className='divider'
-                key='div'
-            >
-            </li>
-        );
-        if (this.state.teams.length > 1 && this.state.currentTeam) {
-            var curTeamName = this.state.currentTeam.name;
-            this.state.teams.forEach((teamName) => {
-                if (teamName !== curTeamName) {
-                    teams.push(<li key={teamName}><a href={Utils.getWindowLocationOrigin() + '/' + teamName}>{'Switch to ' + teamName}</a></li>);
+        if (this.state.teams.length > 1) {
+            teams.push(
+                <li
+                    className='divider'
+                    key='div'
+                >
+                </li>
+            );
+
+            this.state.teams.forEach((team) => {
+                if (team.name !== this.props.teamName) {
+                    teams.push(<li key={team.name}><a href={Utils.getWindowLocationOrigin() + '/' + team.name}>{'Switch to ' + team.display_name}</a></li>);
                 }
             });
         }
-        teams.push(<li key='newTeam_li'>
-                        <a
-                            key='newTeam_a'
-                            target='_blank'
-                            href={Utils.getWindowLocationOrigin() + '/signup_team'}
-                        >
-                            {'Create a New Team'}
-                        </a>
-                    </li>);
+
+        if (global.window.config.EnableTeamCreation === 'true') {
+            teams.push(
+                <li key='newTeam_li'>
+                    <a
+                        key='newTeam_a'
+                        target='_blank'
+                        href={Utils.getWindowLocationOrigin() + '/signup_team'}
+                    >
+                        {'Create a New Team'}
+                    </a>
+                </li>
+            );
+        }
 
         return (
             <ul className='nav navbar-nav navbar-right'>
@@ -223,6 +255,18 @@ export default class NavbarDropdown extends React.Component {
                                 {'Report a Problem'}
                             </a>
                         </li>
+                        <li>
+                            <a
+                                href='#'
+                                onClick={this.handleAboutModal}
+                            >
+                                {'About Mattermost'}
+                            </a>
+                        </li>
+                        <AboutBuildModal
+                            show={this.state.showAboutModal}
+                            onModalDismissed={this.aboutModalDismissed}
+                        />
                     </ul>
                 </li>
             </ul>
@@ -234,5 +278,7 @@ NavbarDropdown.defaultProps = {
     teamType: ''
 };
 NavbarDropdown.propTypes = {
-    teamType: React.PropTypes.string
+    teamType: React.PropTypes.string,
+    teamDisplayName: React.PropTypes.string,
+    teamName: React.PropTypes.string
 };

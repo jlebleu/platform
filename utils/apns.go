@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package utils
@@ -10,7 +10,7 @@ import (
 	"github.com/mattermost/platform/model"
 )
 
-func FireAndForgetSendAppleNotify(deviceId string, message string, badge int) {
+func SendAppleNotifyAndForget(deviceId string, message string, badge int) {
 	go func() {
 		if err := SendAppleNotify(deviceId, message, badge); err != nil {
 			l4g.Error(fmt.Sprintf("%v %v", err.Message, err.DetailedError))

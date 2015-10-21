@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -10,6 +10,7 @@ import (
 
 const (
 	SESSION_TOKEN               = "MMSID"
+	MULTI_SESSION_TOKEN         = "MMSIDMU"
 	SESSION_TIME_WEB_IN_DAYS    = 30
 	SESSION_TIME_WEB_IN_SECS    = 60 * 60 * 24 * SESSION_TIME_WEB_IN_DAYS
 	SESSION_TIME_MOBILE_IN_DAYS = 30

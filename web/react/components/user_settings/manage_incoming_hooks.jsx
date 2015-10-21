@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var Client = require('../../utils/client.jsx');
@@ -21,7 +21,7 @@ export default class ManageIncomingHooks extends React.Component {
         this.getHooks();
     }
     addNewHook() {
-        let hook = {}; //eslint-disable-line prefer-const
+        const hook = {};
         hook.channel_id = this.state.channelId;
 
         Client.addIncomingHook(
@@ -40,13 +40,13 @@ export default class ManageIncomingHooks extends React.Component {
         );
     }
     removeHook(id) {
-        let data = {}; //eslint-disable-line prefer-const
+        const data = {};
         data.id = id;
 
         Client.deleteIncomingHook(
             data,
             () => {
-                let hooks = this.state.hooks; //eslint-disable-line prefer-const
+                const hooks = this.state.hooks;
                 let index = -1;
                 for (let i = 0; i < hooks.length; i++) {
                     if (hooks[i].id === id) {
@@ -69,7 +69,7 @@ export default class ManageIncomingHooks extends React.Component {
     getHooks() {
         Client.listIncomingHooks(
             (data) => {
-                let state = this.state; //eslint-disable-line prefer-const
+                const state = this.state;
 
                 if (data) {
                     state.hooks = data;
@@ -93,9 +93,11 @@ export default class ManageIncomingHooks extends React.Component {
         }
 
         const channels = ChannelStore.getAll();
-        let options = []; //eslint-disable-line prefer-const
+        const options = [];
         channels.forEach((channel) => {
-            options.push(<option value={channel.id}>{channel.name}</option>);
+            if (channel.type !== Constants.DM_CHANNEL) {
+                options.push(<option value={channel.id}>{channel.name}</option>);
+            }
         });
 
         let disableButton = '';
@@ -103,27 +105,27 @@ export default class ManageIncomingHooks extends React.Component {
             disableButton = ' disable';
         }
 
-        let hooks = []; //eslint-disable-line prefer-const
+        const hooks = [];
         this.state.hooks.forEach((hook) => {
             const c = ChannelStore.get(hook.channel_id);
             hooks.push(
-                <div>
-                    <div className='divider-light'></div>
-                    <span>
-                        <strong>{'URL: '}</strong>{Utils.getWindowLocationOrigin() + '/hooks/' + hook.id}
-                    </span>
-                    <br/>
-                    <span>
+                <div className='font--small'>
+                    <div className='padding-top x2 divider-light'></div>
+                    <div className='padding-top x2'>
+                        <strong>{'URL: '}</strong><span className='word-break--all'>{Utils.getWindowLocationOrigin() + '/hooks/' + hook.id}</span>
+                    </div>
+                    <div className='padding-top'>
                         <strong>{'Channel: '}</strong>{c.name}
-                    </span>
-                    <br/>
-                    <a
-                        className={'btn btn-sm btn-primary'}
-                        href='#'
-                        onClick={this.removeHook.bind(this, hook.id)}
-                    >
-                        {'Remove'}
-                    </a>
+                    </div>
+                    <div className='padding-top'>
+                        <a
+                            className={'text-danger'}
+                            href='#'
+                            onClick={this.removeHook.bind(this, hook.id)}
+                        >
+                            {'Remove'}
+                        </a>
+                    </div>
                 </div>
             );
         });
@@ -134,41 +136,41 @@ export default class ManageIncomingHooks extends React.Component {
         } else if (hooks.length > 0) {
             displayHooks = hooks;
         } else {
-            displayHooks = <label>{'None'}</label>;
+            displayHooks = <label>{': None'}</label>;
         }
 
         const existingHooks = (
-            <div>
-                <label className='control-label'>{'Existing incoming webhooks'}</label>
-                <br/>
+            <div className='padding-top x2'>
+                <label className='control-label padding-top x2'>{'Existing incoming webhooks'}</label>
                 {displayHooks}
             </div>
         );
 
         return (
-            <div
-                key='addIncomingHook'
-                className='form-group'
-            >
-                <label className='control-label'>{'Add a new incoming webhook'}</label>
+            <div key='addIncomingHook'>
+                {'Create webhook URLs for use in external integrations. Please see '}<a href='http://mattermost.org/webhooks'>{'http://mattermost.org/webhooks'}</a> {' to learn more.'}
                 <br/>
-                <div>
+                <br/>
+                <label className='control-label'>{'Add a new incoming webhook'}</label>
+                <div className='padding-top'>
                     <select
                         ref='channelName'
+                        className='form-control'
                         value={this.state.channelId}
                         onChange={this.updateChannelId}
                     >
                         {options}
                     </select>
-                    <br/>
                     {serverError}
-                    <a
-                        className={'btn btn-sm btn-primary' + disableButton}
-                        href='#'
-                        onClick={this.addNewHook}
-                    >
-                        {'Add'}
-                    </a>
+                    <div className='padding-top'>
+                        <a
+                            className={'btn btn-sm btn-primary' + disableButton}
+                            href='#'
+                            onClick={this.addNewHook}
+                        >
+                            {'Add'}
+                        </a>
+                    </div>
                 </div>
                 {existingHooks}
             </div>

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 export default class SettingPicture extends React.Component {
@@ -12,7 +12,7 @@ export default class SettingPicture extends React.Component {
         if (file) {
             var reader = new FileReader();
 
-            var img = React.findDOMNode(this.refs.image);
+            var img = ReactDOM.findDOMNode(this.refs.image);
             reader.onload = function load(e) {
                 $(img).attr('src', e.target.result);
             };

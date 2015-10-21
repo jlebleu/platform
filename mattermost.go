@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package main
@@ -6,8 +6,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -57,9 +62,11 @@ func main() {
 		api.StartServer()
 
 		// If we allow testing then listen for manual testing URL hits
-		if utils.Cfg.ServiceSettings.AllowTesting {
+		if utils.Cfg.ServiceSettings.EnableTesting {
 			manualtesting.InitManualTesting()
 		}
+
+		runSecurityAndDiagnosticsJobAndForget()
 
 		// wait for kill signal before attempting to gracefully shutdown
 		// the running service
@@ -69,6 +76,103 @@ func main() {
 
 		api.StopServer()
 	}
+}
+
+func runSecurityAndDiagnosticsJobAndForget() {
+	go func() {
+		for {
+			if *utils.Cfg.ServiceSettings.EnableSecurityFixAlert {
+				if result := <-api.Srv.Store.System().Get(); result.Err == nil {
+					props := result.Data.(model.StringMap)
+					lastSecurityTime, _ := strconv.ParseInt(props[model.SYSTEM_LAST_SECURITY_TIME], 10, 0)
+					currentTime := model.GetMillis()
+
+					if (currentTime - lastSecurityTime) > 1000*60*60*24*1 {
+						l4g.Debug("Checking for security update from Mattermost")
+
+						id := props[model.SYSTEM_DIAGNOSTIC_ID]
+						if len(id) == 0 {
+							id = model.NewId()
+							systemId := &model.System{Name: model.SYSTEM_DIAGNOSTIC_ID, Value: id}
+							<-api.Srv.Store.System().Save(systemId)
+						}
+
+						v := url.Values{}
+						v.Set(utils.PROP_DIAGNOSTIC_ID, id)
+						v.Set(utils.PROP_DIAGNOSTIC_BUILD, model.CurrentVersion+"."+model.BuildNumber)
+						v.Set(utils.PROP_DIAGNOSTIC_DATABASE, utils.Cfg.SqlSettings.DriverName)
+						v.Set(utils.PROP_DIAGNOSTIC_OS, runtime.GOOS)
+						v.Set(utils.PROP_DIAGNOSTIC_CATEGORY, utils.VAL_DIAGNOSTIC_CATEGORY_DEFAULT)
+
+						if len(props[model.SYSTEM_RAN_UNIT_TESTS]) > 0 {
+							v.Set(utils.PROP_DIAGNOSTIC_UNIT_TESTS, "1")
+						} else {
+							v.Set(utils.PROP_DIAGNOSTIC_UNIT_TESTS, "0")
+						}
+
+						systemSecurityLastTime := &model.System{Name: model.SYSTEM_LAST_SECURITY_TIME, Value: strconv.FormatInt(currentTime, 10)}
+						if lastSecurityTime == 0 {
+							<-api.Srv.Store.System().Save(systemSecurityLastTime)
+						} else {
+							<-api.Srv.Store.System().Update(systemSecurityLastTime)
+						}
+
+						if ucr := <-api.Srv.Store.User().GetTotalUsersCount(); ucr.Err == nil {
+							v.Set(utils.PROP_DIAGNOSTIC_USER_COUNT, strconv.FormatInt(ucr.Data.(int64), 10))
+						}
+
+						if ucr := <-api.Srv.Store.User().GetTotalActiveUsersCount(); ucr.Err == nil {
+							v.Set(utils.PROP_DIAGNOSTIC_ACTIVE_USER_COUNT, strconv.FormatInt(ucr.Data.(int64), 10))
+						}
+
+						res, err := http.Get(utils.DIAGNOSTIC_URL + "/security?" + v.Encode())
+						if err != nil {
+							l4g.Error("Failed to get security update information from Mattermost.")
+							return
+						}
+
+						bulletins := model.SecurityBulletinsFromJson(res.Body)
+
+						for _, bulletin := range bulletins {
+							if bulletin.AppliesToVersion == model.CurrentVersion {
+								if props["SecurityBulletin_"+bulletin.Id] == "" {
+									if results := <-api.Srv.Store.User().GetSystemAdminProfiles(); results.Err != nil {
+										l4g.Error("Failed to get system admins for security update information from Mattermost.")
+										return
+									} else {
+										users := results.Data.(map[string]*model.User)
+
+										resBody, err := http.Get(utils.DIAGNOSTIC_URL + "/bulletins/" + bulletin.Id)
+										if err != nil {
+											l4g.Error("Failed to get security bulletin details")
+											return
+										}
+
+										body, err := ioutil.ReadAll(resBody.Body)
+										res.Body.Close()
+										if err != nil || resBody.StatusCode != 200 {
+											l4g.Error("Failed to read security bulletin details")
+											return
+										}
+
+										for _, user := range users {
+											l4g.Info("Sending security bulletin for " + bulletin.Id + " to " + user.Email)
+											utils.SendMail(user.Email, "Mattermost Security Bulletin", string(body))
+										}
+									}
+
+									bulletinSeen := &model.System{Name: "SecurityBulletin_" + bulletin.Id, Value: bulletin.Id}
+									<-api.Srv.Store.System().Save(bulletinSeen)
+								}
+							}
+						}
+					}
+				}
+			}
+
+			time.Sleep(time.Hour * 4)
+		}
+	}()
 }
 
 func parseCmds() {
@@ -325,10 +429,10 @@ Usage:
 
     -role="admin"                     The role used in other commands
                                       valid values are
-                                        "" - The empty role is basic user 
+                                        "" - The empty role is basic user
                                            permissions
                                         "admin" - Represents a team admin and
-                                           is used to help adminsiter one team.
+                                           is used to help administer one team.
                                         "system_admin" - Represents a system
                                            admin who has access to all teams
                                            and configuration settings.  This
@@ -355,7 +459,7 @@ Usage:
     -reset_password                   Resets the password for a user.  It requires the
                                       -team_name, -email and -password flag.
         Example:
-            platform -reset_password -team_name="name" -email="user@example.com" -paossword="newpassword"
+            platform -reset_password -team_name="name" -email="user@example.com" -password="newpassword"
 
 
 `

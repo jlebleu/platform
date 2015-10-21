@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var PostStore = require('../stores/post_store.jsx');
@@ -47,13 +47,8 @@ export default class SearchResultsItem extends React.Component {
         );
 
         var postChannel = ChannelStore.get(this.props.post.channel_id);
-        var teammate = '';
 
-        if (postChannel.type === 'D') {
-            teammate = utils.getDirectTeammate(this.props.post.channel_id).username;
-        }
-
-        utils.switchChannel(postChannel, teammate);
+        utils.switchChannel(postChannel);
     }
 
     render() {
@@ -64,7 +59,7 @@ export default class SearchResultsItem extends React.Component {
         if (channel) {
             channelName = channel.display_name;
             if (channel.type === 'D') {
-                channelName = 'Private Message';
+                channelName = 'Direct Message';
             }
         }
 

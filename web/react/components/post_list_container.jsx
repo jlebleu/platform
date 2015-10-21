@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 const PostList = require('./post_list.jsx');
@@ -49,6 +49,7 @@ export default class PostListContainer extends React.Component {
         for (let i = 0; i <= this.state.postLists.length - 1; i++) {
             postListCtls.push(
                 <PostList
+                    key={'postlistkey' + i}
                     channelId={postLists[i]}
                     isActive={postLists[i] === channelId}
                 />

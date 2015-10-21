@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var utils = require('../utils/utils.jsx');
@@ -17,7 +17,7 @@ export default class FindTeam extends React.Component {
 
         var state = { };
 
-        var email = React.findDOMNode(this.refs.email).value.trim().toLowerCase();
+        var email = ReactDOM.findDOMNode(this.refs.email).value.trim().toLowerCase();
         if (!email || !utils.isEmail(email)) {
             state.email_error = 'Please enter a valid email address';
             this.setState(state);
@@ -70,6 +70,7 @@ export default class FindTeam extends React.Component {
                                 className='form-control'
                                 placeholder='you@domain.com'
                                 maxLength='128'
+                                spellCheck='false'
                             />
                             {emailError}
                         </div>

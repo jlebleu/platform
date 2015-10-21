@@ -1,21 +1,17 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var UserStore = require('../stores/user_store.jsx');
 var utils = require('../utils/utils.jsx');
 
 var Constants = require('../utils/constants.jsx');
+var Tooltip = ReactBootstrap.Tooltip;
+var OverlayTrigger = ReactBootstrap.OverlayTrigger;
 
 export default class PostInfo extends React.Component {
     constructor(props) {
         super(props);
         this.state = {};
-    }
-    shouldShowComment(state, type, isOwner) {
-        if (state === Constants.POST_FAILED || state === Constants.POST_LOADING) {
-            return false;
-        }
-        return isOwner || (this.props.allowReply === 'true' && type !== 'Comment');
     }
     createDropdown() {
         var post = this.props.post;
@@ -29,10 +25,6 @@ export default class PostInfo extends React.Component {
         var type = 'Post';
         if (post.root_id && post.root_id.length > 0) {
             type = 'Comment';
-        }
-
-        if (!this.shouldShowComment(post.state, type, isOwner)) {
-            return '';
         }
 
         var dropdownContents = [];
@@ -104,6 +96,10 @@ export default class PostInfo extends React.Component {
             );
         }
 
+        if (dropdownContents.length === 0) {
+            return '';
+        }
+
         return (
             <div>
                 <a
@@ -148,15 +144,21 @@ export default class PostInfo extends React.Component {
 
         var dropdown = this.createDropdown();
 
+        let tooltip = <Tooltip id={post.id + 'tooltip'}>{`${utils.displayDate(post.create_at)} at ${utils.displayTime(post.create_at)}`}</Tooltip>;
+
         return (
             <ul className='post-header post-info'>
                 <li className='post-header-col'>
-                    <time
-                        className='post-profile-time'
-                        title={new Date(post.create_at).toString()}
+                    <OverlayTrigger
+                        delayShow={500}
+                        container={this}
+                        placement='top'
+                        overlay={tooltip}
                     >
-                        {utils.displayDateTime(post.create_at)}
-                    </time>
+                        <time className='post-profile-time'>
+                            {utils.displayDateTime(post.create_at)}
+                        </time>
+                    </OverlayTrigger>
                 </li>
                 <li className='post-header-col post-header__reply'>
                     <div className='dropdown'>

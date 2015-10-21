@@ -37,8 +37,8 @@
 		&.description {
 			overflow: hidden;
 			text-overflow: ellipsis;
-			color: #888;
 			margin-top: 2px;
+			max-height: 45px;
 		}
 		&.popover {
 			white-space: normal;
@@ -113,23 +113,6 @@
 				}
 			}
 		}
-		&.theme--black {
-			&:hover {
-				&:before {
-					background: rgba(white, 0.2);
-				}
-			}
-		}
-		&.theme--gray {
-			&:hover {
-				&:before {
-					background: rgba(white, 0.1);
-				}
-			}
-		}
-		a {
-			color: #fff;
-		}
 		.navbar-right {
 			font-size: 0.85em;
 			position: absolute;
@@ -144,7 +127,6 @@
 			.dropdown-menu {
 				li a {
 					padding: 3px 20px;
-					color: #555;
 					text-overflow: ellipsis;
 					overflow: hidden;
 				}
@@ -165,7 +147,8 @@
 		}
 		.header__info {
 			color: #fff;
-			padding-left: 4px;
+			@include clearfix;
+			padding-left: 2px;
 			z-index: 1;
 			position: relative;
 		}
@@ -173,7 +156,7 @@
 			display: block;
 			font-weight: 600;
 			font-size: 16px;
-			max-width: 80%;
+			max-width: 85%;
 			overflow: hidden;
 			white-space: nowrap;
 			text-overflow: ellipsis;
@@ -231,6 +214,10 @@
 		width: 45px;
 		color: #999;
 		cursor: pointer;
+		.fa {
+			margin-left: 3px;
+			font-size: 16px;
+		}
 	}
 	&.alt {
 		margin: 0;
@@ -304,11 +291,6 @@
 	display: inline-block;
 	width: 15px;
 	margin: 9px 6px 3px 0;
-	&:hover {
-		svg {
-			fill: #777;
-		}
-	}
 	a {
 		height: 100%;
 		display: block;
@@ -316,6 +298,6 @@
 	svg {
 		vertical-align: top;
 		margin-top: 8px;
-		fill: #aaa;
+		fill: inherit;
 	}
 }

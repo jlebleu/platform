@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var client = require('../utils/client.jsx');
@@ -86,7 +86,7 @@ export default class FileUpload extends React.Component {
     }
 
     handleChange() {
-        var element = $(React.findDOMNode(this.refs.fileInput));
+        var element = $(ReactDOM.findDOMNode(this.refs.fileInput));
 
         this.uploadFiles(element.prop('files'));
 
@@ -97,7 +97,7 @@ export default class FileUpload extends React.Component {
                 element[0].type = 'text';
                 element[0].type = 'file';
             }
-        } catch(e) {
+        } catch (e) {
             // Do nothing
         }
     }
@@ -110,12 +110,12 @@ export default class FileUpload extends React.Component {
         if (typeof files !== 'string' && files.length) {
             this.uploadFiles(files);
         } else {
-            this.props.onUploadError('Invalid file upload', -1);
+            this.props.onTextDrop(e.originalEvent.dataTransfer.getData('Text'));
         }
     }
 
     componentDidMount() {
-        var inputDiv = React.findDOMNode(this.refs.input);
+        var inputDiv = ReactDOM.findDOMNode(this.refs.input);
         var self = this;
 
         if (this.props.postType === 'post') {
@@ -266,6 +266,7 @@ FileUpload.propTypes = {
     getFileCount: React.PropTypes.func,
     onFileUpload: React.PropTypes.func,
     onUploadStart: React.PropTypes.func,
+    onTextDrop: React.PropTypes.func,
     channelId: React.PropTypes.string,
     postType: React.PropTypes.string
 };

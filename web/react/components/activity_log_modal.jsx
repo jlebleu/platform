@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 const UserStore = require('../stores/user_store.jsx');
@@ -14,9 +14,13 @@ export default class ActivityLogModal extends React.Component {
         this.submitRevoke = this.submitRevoke.bind(this);
         this.onListenerChange = this.onListenerChange.bind(this);
         this.handleMoreInfo = this.handleMoreInfo.bind(this);
+        this.onHide = this.onHide.bind(this);
+        this.onShow = this.onShow.bind(this);
 
-        this.state = this.getStateFromStores();
-        this.state.moreInfo = [];
+        let state = this.getStateFromStores();
+        state.moreInfo = [];
+
+        this.state = state;
     }
     getStateFromStores() {
         return {
@@ -25,7 +29,13 @@ export default class ActivityLogModal extends React.Component {
             clientError: null
         };
     }
-    submitRevoke(altId) {
+    submitRevoke(altId, e) {
+        e.preventDefault();
+        var modalContent = $(e.target).closest('.modal-content');
+        modalContent.addClass('animation--highlight');
+        setTimeout(() => {
+            modalContent.removeClass('animation--highlight');
+        }, 1500);
         Client.revokeSession(altId,
             function handleRevokeSuccess() {
                 AsyncClient.getSessions();
@@ -37,16 +47,18 @@ export default class ActivityLogModal extends React.Component {
             }.bind(this)
         );
     }
+    onShow() {
+        AsyncClient.getSessions();
+    }
+    onHide() {
+        $('#user_settings').modal('show');
+        this.setState({moreInfo: []});
+    }
     componentDidMount() {
         UserStore.addSessionsChangeListener(this.onListenerChange);
-        $(React.findDOMNode(this.refs.modal)).on('shown.bs.modal', function handleShow() {
-            AsyncClient.getSessions();
-        });
+        $(ReactDOM.findDOMNode(this.refs.modal)).on('shown.bs.modal', this.onShow);
 
-        $(React.findDOMNode(this.refs.modal)).on('hidden.bs.modal', function handleHide() {
-            $('#user_settings').modal('show');
-            this.setState({moreInfo: []});
-        }.bind(this));
+        $(ReactDOM.findDOMNode(this.refs.modal)).on('hidden.bs.modal', this.onHide);
     }
     componentWillUnmount() {
         UserStore.removeSessionsChangeListener(this.onListenerChange);
@@ -69,6 +81,7 @@ export default class ActivityLogModal extends React.Component {
             const currentSession = this.state.sessions[i];
             const lastAccessTime = new Date(currentSession.last_activity_at);
             const firstAccessTime = new Date(currentSession.create_at);
+            let devicePlatform = currentSession.props.platform;
             let devicePicture = '';
 
             if (currentSession.props.platform === 'Windows') {
@@ -76,7 +89,12 @@ export default class ActivityLogModal extends React.Component {
             } else if (currentSession.props.platform === 'Macintosh' || currentSession.props.platform === 'iPhone') {
                 devicePicture = 'fa fa-apple';
             } else if (currentSession.props.platform === 'Linux') {
-                devicePicture = 'fa fa-linux';
+                if (currentSession.props.os.indexOf('Android') >= 0) {
+                    devicePlatform = 'Android';
+                    devicePicture = 'fa fa-android';
+                } else {
+                    devicePicture = 'fa fa-linux';
+                }
             }
 
             let moreInfo;
@@ -86,7 +104,7 @@ export default class ActivityLogModal extends React.Component {
                         <div>{`First time active: ${firstAccessTime.toDateString()}, ${lastAccessTime.toLocaleTimeString()}`}</div>
                         <div>{`OS: ${currentSession.props.os}`}</div>
                         <div>{`Browser: ${currentSession.props.browser}`}</div>
-                        <div>{`Session ID: ${currentSession.alt_id}`}</div>
+                        <div>{`Session ID: ${currentSession.id}`}</div>
                     </div>
                 );
             } else {
@@ -107,7 +125,7 @@ export default class ActivityLogModal extends React.Component {
                     className='activity-log__table'
                 >
                     <div className='activity-log__report'>
-                        <div className='report__platform'><i className={devicePicture} />{currentSession.props.platform}</div>
+                        <div className='report__platform'><i className={devicePicture} />{devicePlatform}</div>
                         <div className='report__info'>
                             <div>{`Last activity: ${lastAccessTime.toDateString()}, ${lastAccessTime.toLocaleTimeString()}`}</div>
                             {moreInfo}
@@ -115,7 +133,7 @@ export default class ActivityLogModal extends React.Component {
                     </div>
                     <div className='activity-log__action'>
                         <button
-                            onClick={this.submitRevoke.bind(this, currentSession.alt_id)}
+                            onClick={this.submitRevoke.bind(this, currentSession.id)}
                             className='btn btn-primary'
                         >
                             Logout

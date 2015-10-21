@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var ChannelStore = require('../stores/channel_store.jsx');
@@ -15,7 +15,7 @@ export default class CommandList extends React.Component {
     componentDidMount() {
         var self = this;
         if (this.refs.modal) {
-            $(React.findDOMNode(this.refs.modal)).on('show.bs.modal', function show(e) {
+            $(ReactDOM.findDOMNode(this.refs.modal)).on('show.bs.modal', function show(e) {
                 var button = e.relatedTarget;
                 self.setState({channel_id: $(button).attr('data-channelid')});
             });

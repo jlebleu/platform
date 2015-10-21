@@ -1,19 +1,24 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
-var PostStore = require('../stores/post_store.jsx');
-var ChannelStore = require('../stores/channel_store.jsx');
-var UserStore = require('../stores/user_store.jsx');
-var UserProfile = require('./user_profile.jsx');
-var AsyncClient = require('../utils/async_client.jsx');
-var Post = require('./post.jsx');
-var LoadingScreen = require('./loading_screen.jsx');
-var SocketStore = require('../stores/socket_store.jsx');
-var utils = require('../utils/utils.jsx');
-var Client = require('../utils/client.jsx');
-var AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
-var Constants = require('../utils/constants.jsx');
-var ActionTypes = Constants.ActionTypes;
+const Post = require('./post.jsx');
+const UserProfile = require('./user_profile.jsx');
+const AsyncClient = require('../utils/async_client.jsx');
+const LoadingScreen = require('./loading_screen.jsx');
+
+const PostStore = require('../stores/post_store.jsx');
+const ChannelStore = require('../stores/channel_store.jsx');
+const UserStore = require('../stores/user_store.jsx');
+const SocketStore = require('../stores/socket_store.jsx');
+const PreferenceStore = require('../stores/preference_store.jsx');
+
+const utils = require('../utils/utils.jsx');
+const Client = require('../utils/client.jsx');
+const Constants = require('../utils/constants.jsx');
+const ActionTypes = Constants.ActionTypes;
+const SocketEvents = Constants.SocketEvents;
+
+const AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
 
 export default class PostList extends React.Component {
     constructor(props) {
@@ -37,9 +42,11 @@ export default class PostList extends React.Component {
         this.deactivate = this.deactivate.bind(this);
         this.resize = this.resize.bind(this);
 
-        this.state = this.getStateFromStores(props.channelId);
-        this.state.numToDisplay = Constants.POST_CHUNK_SIZE;
-        this.state.isFirstLoadComplete = false;
+        const state = this.getStateFromStores(props.channelId);
+        state.numToDisplay = Constants.POST_CHUNK_SIZE;
+        state.isFirstLoadComplete = false;
+
+        this.state = state;
     }
     getStateFromStores(id) {
         var postList = PostStore.getPosts(id);
@@ -55,7 +62,7 @@ export default class PostList extends React.Component {
                     }
                 }
 
-                postList.order.sort(function postSort(a, b) {
+                postList.order.sort((a, b) => {
                     if (postList.posts[a].create_at > postList.posts[b].create_at) {
                         return -1;
                     }
@@ -79,7 +86,7 @@ export default class PostList extends React.Component {
         }
 
         return {
-            postList: postList
+            postList
         };
     }
     componentDidMount() {
@@ -103,20 +110,21 @@ export default class PostList extends React.Component {
         PostStore.clearUnseenDeletedPosts(this.props.channelId);
         PostStore.addChangeListener(this.onChange);
         UserStore.addStatusesChangeListener(this.onTimeChange);
+        PreferenceStore.addChangeListener(this.onTimeChange);
         SocketStore.addChangeListener(this.onSocketChange);
 
-        var postHolder = $(React.findDOMNode(this.refs.postlist));
+        const postHolder = $(ReactDOM.findDOMNode(this.refs.postlist));
 
-        $(window).on('resize.' + this.props.channelId, function resize() {
+        $(window).resize(() => {
             this.resize();
             if (!this.scrolled) {
                 this.scrollToBottom();
             }
-        }.bind(this));
+        });
 
-        postHolder.on('scroll', function scroll() {
-            var position = postHolder.scrollTop() + postHolder.height() + 14;
-            var bottom = postHolder[0].scrollHeight;
+        postHolder.on('scroll', () => {
+            const position = postHolder.scrollTop() + postHolder.height() + 14;
+            const bottom = postHolder[0].scrollHeight;
 
             if (position >= bottom) {
                 this.scrolled = false;
@@ -128,7 +136,16 @@ export default class PostList extends React.Component {
                 this.userHasSeenNew = true;
             }
             this.isUserScroll = true;
-        }.bind(this));
+
+            $('.top-visible-post').removeClass('top-visible-post');
+
+            $(ReactDOM.findDOMNode(this.refs.postlistcontent)).children().each(function select() {
+                if ($(this).position().top + $(this).height() / 2 > 0) {
+                    $(this).addClass('top-visible-post');
+                    return false;
+                }
+            });
+        });
 
         $('.post-list__content div .post').removeClass('post--last');
         $('.post-list__content div:last-child .post').addClass('post--last');
@@ -145,9 +162,10 @@ export default class PostList extends React.Component {
         PostStore.removeChangeListener(this.onChange);
         UserStore.removeStatusesChangeListener(this.onTimeChange);
         SocketStore.removeChangeListener(this.onSocketChange);
+        PreferenceStore.removeChangeListener(this.onTimeChange);
         $('body').off('click.userpopover');
-        $(window).off('resize.' + this.props.channelId);
-        var postHolder = $(React.findDOMNode(this.refs.postlist));
+        $(window).off('resize');
+        var postHolder = $(ReactDOM.findDOMNode(this.refs.postlist));
         postHolder.off('scroll');
     }
     componentDidUpdate(prevProps, prevState) {
@@ -203,7 +221,7 @@ export default class PostList extends React.Component {
         }
     }
     componentWillUpdate() {
-        var postHolder = $(React.findDOMNode(this.refs.postlist));
+        var postHolder = $(ReactDOM.findDOMNode(this.refs.postlist));
         this.prevScrollTop = postHolder.scrollTop();
     }
     componentWillReceiveProps(nextProps) {
@@ -214,7 +232,7 @@ export default class PostList extends React.Component {
         }
     }
     resize() {
-        const postHolder = $(React.findDOMNode(this.refs.postlist));
+        const postHolder = $(ReactDOM.findDOMNode(this.refs.postlist));
         if ($('#create_post').length > 0) {
             const height = $(window).height() - $('#create_post').height() - $('#error_bar').outerHeight() - 50;
             postHolder.css('height', height + 'px');
@@ -222,12 +240,12 @@ export default class PostList extends React.Component {
     }
     scrollTo(val) {
         this.isUserScroll = false;
-        var postHolder = $(React.findDOMNode(this.refs.postlist));
+        var postHolder = $(ReactDOM.findDOMNode(this.refs.postlist));
         postHolder[0].scrollTop = val;
     }
     scrollToBottom(force) {
         this.isUserScroll = false;
-        var postHolder = $(React.findDOMNode(this.refs.postlist));
+        var postHolder = $(ReactDOM.findDOMNode(this.refs.postlist));
         if ($('#new_message_' + this.props.channelId)[0] && !this.userHasSeenNew && !force) {
             $('#new_message_' + this.props.channelId)[0].scrollIntoView();
         } else {
@@ -249,14 +267,14 @@ export default class PostList extends React.Component {
         Client.getPosts(
             id,
             PostStore.getLatestUpdate(id),
-            function success() {
+            () => {
                 this.loadInProgress = false;
                 this.setState({isFirstLoadComplete: true});
-            }.bind(this),
-            function fail() {
+            },
+            () => {
                 this.loadInProgress = false;
                 this.setState({isFirstLoadComplete: true});
-            }.bind(this)
+            }
         );
     }
     onChange() {
@@ -267,28 +285,16 @@ export default class PostList extends React.Component {
         }
     }
     onSocketChange(msg) {
-        var post;
-        if (msg.action === 'posted' || msg.action === 'post_edited') {
-            post = JSON.parse(msg.props.post);
-            PostStore.storePost(post);
-        } else if (msg.action === 'post_deleted') {
+        if (msg.action === SocketEvents.POST_DELETED) {
             var activeRoot = $(document.activeElement).closest('.comment-create-body')[0];
             var activeRootPostId = '';
             if (activeRoot && activeRoot.id.length > 0) {
                 activeRootPostId = activeRoot.id;
             }
 
-            post = JSON.parse(msg.props.post);
-
-            PostStore.storeUnseenDeletedPost(post);
-            PostStore.removePost(post, true);
-            PostStore.emitChange();
-
             if (activeRootPostId === msg.props.post_id && UserStore.getCurrentId() !== msg.user_id) {
                 $('#post_deleted').modal('show');
             }
-        } else if (msg.action === 'new_user') {
-            AsyncClient.getProfiles();
         }
     }
     onTimeChange() {
@@ -326,8 +332,8 @@ export default class PostList extends React.Component {
                         <strong><UserProfile userId={teammate.id} /></strong>
                     </div>
                     <p className='channel-intro-text'>
-                        {'This is the start of your private message history with ' + teammateName + '.'}<br/>
-                        {'Private messages and files shared here are not shown to people outside this area.'}
+                        {'This is the start of your direct message history with ' + teammateName + '.'}<br/>
+                        {'Direct messages and files shared here are not shown to people outside this area.'}
                     </p>
                     <a
                         className='intro-links'
@@ -338,7 +344,7 @@ export default class PostList extends React.Component {
                         data-title={channel.display_name}
                         data-channelid={channel.id}
                     >
-                        <i className='fa fa-pencil'></i>Set a description
+                        <i className='fa fa-pencil'></i>{'Set a description'}
                     </a>
                 </div>
             );
@@ -346,7 +352,7 @@ export default class PostList extends React.Component {
 
         return (
             <div className='channel-intro'>
-                <p className='channel-intro-text'>{'This is the start of your private message history with this teammate. Private messages and files shared here are not shown to people outside this area.'}</p>
+                <p className='channel-intro-text'>{'This is the start of your direct message history with this teammate. Direct messages and files shared here are not shown to people outside this area.'}</p>
             </div>
         );
     }
@@ -368,13 +374,9 @@ export default class PostList extends React.Component {
                 <p className='channel-intro__content'>
                     Welcome to {channel.display_name}!
                     <br/><br/>
-                    This is the first channel teammates see when they
-                    <br/>
-                    sign up - use it for posting updates everyone needs to know.
+                    This is the first channel teammates see when they sign up - use it for posting updates everyone needs to know.
                     <br/><br/>
-                    To create a new channel or join an existing one, go to
-                    <br/>
-                    the Left Hand Sidebar under “Channels” and click “More…”.
+                    To create a new channel or join an existing one, go to the Left Sidebar under “Channels” and click “More…”.
                     <br/>
                 </p>
             </div>
@@ -440,10 +442,10 @@ export default class PostList extends React.Component {
         }
 
         var createMessage;
-        if (creatorName !== '') {
-            createMessage = (<span>This is the start of the <strong>{uiName}</strong> {uiType}, created by <strong>{creatorName}</strong> on <strong>{utils.displayDate(channel.create_at)}</strong></span>);
-        } else {
+        if (creatorName === '') {
             createMessage = 'This is the start of the ' + uiName + ' ' + uiType + ', created on ' + utils.displayDate(channel.create_at) + '.';
+        } else {
+            createMessage = (<span>This is the start of the <strong>{uiName}</strong> {uiType}, created by <strong>{creatorName}</strong> on <strong>{utils.displayDate(channel.create_at)}</strong></span>);
         }
 
         return (
@@ -507,8 +509,19 @@ export default class PostList extends React.Component {
 
                 sameRoot = utils.isComment(post) && (prevPost.id === post.root_id || prevPost.root_id === post.root_id);
 
-                // we only hide the profile pic if the previous post is not a comment, the current post is not a comment, and the previous post was made by the same user as the current post
-                hideProfilePic = (prevPost.user_id === post.user_id) && !utils.isComment(prevPost) && !utils.isComment(post);
+                // hide the profile pic if:
+                //     the previous post was made by the same user as the current post,
+                //     the previous post is not a comment,
+                //     the current post is not a comment,
+                //     the current post is not from a webhook
+                //     and the previous post is not from a webhook
+                if ((prevPost.user_id === post.user_id) &&
+                        !utils.isComment(prevPost) &&
+                        !utils.isComment(post) &&
+                        (!post.props || !post.props.from_webhook) &&
+                        (!prevPost.props || !prevPost.props.from_webhook)) {
+                    hideProfilePic = true;
+                }
             }
 
             // check if it's the last comment in a consecutive string of comments on the same post
@@ -578,14 +591,14 @@ export default class PostList extends React.Component {
         var order = this.state.postList.order;
         var channelId = this.props.channelId;
 
-        $(React.findDOMNode(this.refs.loadmore)).text('Retrieving more messages...');
+        $(ReactDOM.findDOMNode(this.refs.loadmore)).text('Retrieving more messages...');
 
         Client.getPostsPage(
             channelId,
             order.length,
             Constants.POST_CHUNK_SIZE,
             function success(data) {
-                $(React.findDOMNode(this.refs.loadmore)).text('Load more messages');
+                $(ReactDOM.findDOMNode(this.refs.loadmore)).text('Load more messages');
                 this.gotMorePosts = true;
                 this.setState({numToDisplay: this.state.numToDisplay + Constants.POST_CHUNK_SIZE});
 
@@ -610,7 +623,7 @@ export default class PostList extends React.Component {
                 Client.getProfiles();
             }.bind(this),
             function fail(err) {
-                $(React.findDOMNode(this.refs.loadmore)).text('Load more messages');
+                $(ReactDOM.findDOMNode(this.refs.loadmore)).text('Load more messages');
                 AsyncClient.dispatchError(err, 'getPosts');
             }.bind(this)
         );
@@ -665,7 +678,10 @@ export default class PostList extends React.Component {
                 className={'post-list-holder-by-time ' + activeClass}
             >
                 <div className='post-list__table'>
-                    <div className='post-list__content'>
+                    <div
+                        ref='postlistcontent'
+                        className='post-list__content'
+                    >
                         {moreMessages}
                         {postCtls}
                     </div>

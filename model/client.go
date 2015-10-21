@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -21,6 +21,7 @@ const (
 	HEADER_ETAG_SERVER     = "ETag"
 	HEADER_ETAG_CLIENT     = "If-None-Match"
 	HEADER_FORWARDED       = "X-Forwarded-For"
+	HEADER_REAL_IP         = "X-Real-IP"
 	HEADER_FORWARDED_PROTO = "X-Forwarded-Proto"
 	HEADER_TOKEN           = "token"
 	HEADER_BEARER          = "BEARER"
@@ -149,6 +150,16 @@ func (c *Client) CreateTeam(team *Team) (*Result, *AppError) {
 	}
 }
 
+func (c *Client) GetAllTeams() (*Result, *AppError) {
+	if r, err := c.DoApiGet("/teams/all", "", ""); err != nil {
+		return nil, err
+	} else {
+
+		return &Result{r.Header.Get(HEADER_REQUEST_ID),
+			r.Header.Get(HEADER_ETAG_SERVER), TeamMapFromJson(r.Body)}, nil
+	}
+}
+
 func (c *Client) FindTeamByName(name string, allServers bool) (*Result, *AppError) {
 	m := make(map[string]string)
 	m["name"] = name
@@ -174,7 +185,7 @@ func (c *Client) FindTeams(email string) (*Result, *AppError) {
 	} else {
 
 		return &Result{r.Header.Get(HEADER_REQUEST_ID),
-			r.Header.Get(HEADER_ETAG_SERVER), ArrayFromJson(r.Body)}, nil
+			r.Header.Get(HEADER_ETAG_SERVER), TeamMapFromJson(r.Body)}, nil
 	}
 }
 
@@ -200,15 +211,6 @@ func (c *Client) InviteMembers(invites *Invites) (*Result, *AppError) {
 
 func (c *Client) UpdateTeamDisplayName(data map[string]string) (*Result, *AppError) {
 	if r, err := c.DoApiPost("/teams/update_name", MapToJson(data)); err != nil {
-		return nil, err
-	} else {
-		return &Result{r.Header.Get(HEADER_REQUEST_ID),
-			r.Header.Get(HEADER_ETAG_SERVER), MapFromJson(r.Body)}, nil
-	}
-}
-
-func (c *Client) UpdateValetFeature(data map[string]string) (*Result, *AppError) {
-	if r, err := c.DoApiPost("/teams/update_valet_feature", MapToJson(data)); err != nil {
 		return nil, err
 	} else {
 		return &Result{r.Header.Get(HEADER_REQUEST_ID),
@@ -253,7 +255,7 @@ func (c *Client) GetMe(etag string) (*Result, *AppError) {
 }
 
 func (c *Client) GetProfiles(teamId string, etag string) (*Result, *AppError) {
-	if r, err := c.DoApiGet("/users/profiles", "", etag); err != nil {
+	if r, err := c.DoApiGet("/users/profiles/"+teamId, "", etag); err != nil {
 		return nil, err
 	} else {
 		return &Result{r.Header.Get(HEADER_REQUEST_ID),
@@ -403,6 +405,15 @@ func (c *Client) SaveConfig(config *Config) (*Result, *AppError) {
 	}
 }
 
+func (c *Client) TestEmail(config *Config) (*Result, *AppError) {
+	if r, err := c.DoApiPost("/admin/test_email", config.ToJson()); err != nil {
+		return nil, err
+	} else {
+		return &Result{r.Header.Get(HEADER_REQUEST_ID),
+			r.Header.Get(HEADER_ETAG_SERVER), MapFromJson(r.Body)}, nil
+	}
+}
+
 func (c *Client) CreateChannel(channel *Channel) (*Result, *AppError) {
 	if r, err := c.DoApiPost("/channels/create", channel.ToJson()); err != nil {
 		return nil, err
@@ -439,8 +450,8 @@ func (c *Client) UpdateChannelDesc(data map[string]string) (*Result, *AppError) 
 	}
 }
 
-func (c *Client) UpdateNotifyLevel(data map[string]string) (*Result, *AppError) {
-	if r, err := c.DoApiPost("/channels/update_notify_level", MapToJson(data)); err != nil {
+func (c *Client) UpdateNotifyProps(data map[string]string) (*Result, *AppError) {
+	if r, err := c.DoApiPost("/channels/update_notify_props", MapToJson(data)); err != nil {
 		return nil, err
 	} else {
 		return &Result{r.Header.Get(HEADER_REQUEST_ID),
@@ -553,15 +564,6 @@ func (c *Client) GetChannelExtraInfo(id string, etag string) (*Result, *AppError
 
 func (c *Client) CreatePost(post *Post) (*Result, *AppError) {
 	if r, err := c.DoApiPost("/channels/"+post.ChannelId+"/create", post.ToJson()); err != nil {
-		return nil, err
-	} else {
-		return &Result{r.Header.Get(HEADER_REQUEST_ID),
-			r.Header.Get(HEADER_ETAG_SERVER), PostFromJson(r.Body)}, nil
-	}
-}
-
-func (c *Client) CreateValetPost(post *Post) (*Result, *AppError) {
-	if r, err := c.DoApiPost("/channels/"+post.ChannelId+"/valet_create", post.ToJson()); err != nil {
 		return nil, err
 	} else {
 		return &Result{r.Header.Get(HEADER_REQUEST_ID),
@@ -839,6 +841,77 @@ func (c *Client) ListIncomingWebhooks() (*Result, *AppError) {
 	} else {
 		return &Result{r.Header.Get(HEADER_REQUEST_ID),
 			r.Header.Get(HEADER_ETAG_SERVER), IncomingWebhookListFromJson(r.Body)}, nil
+	}
+}
+
+func (c *Client) GetAllPreferences() (*Result, *AppError) {
+	if r, err := c.DoApiGet("/preferences/", "", ""); err != nil {
+		return nil, err
+	} else {
+		preferences, _ := PreferencesFromJson(r.Body)
+		return &Result{r.Header.Get(HEADER_REQUEST_ID), r.Header.Get(HEADER_ETAG_SERVER), preferences}, nil
+	}
+}
+
+func (c *Client) SetPreferences(preferences *Preferences) (*Result, *AppError) {
+	if r, err := c.DoApiPost("/preferences/save", preferences.ToJson()); err != nil {
+		return nil, err
+	} else {
+		return &Result{r.Header.Get(HEADER_REQUEST_ID),
+			r.Header.Get(HEADER_ETAG_SERVER), preferences}, nil
+	}
+}
+
+func (c *Client) GetPreference(category string, name string) (*Result, *AppError) {
+	if r, err := c.DoApiGet("/preferences/"+category+"/"+name, "", ""); err != nil {
+		return nil, err
+	} else {
+		return &Result{r.Header.Get(HEADER_REQUEST_ID), r.Header.Get(HEADER_ETAG_SERVER), PreferenceFromJson(r.Body)}, nil
+	}
+}
+
+func (c *Client) GetPreferenceCategory(category string) (*Result, *AppError) {
+	if r, err := c.DoApiGet("/preferences/"+category, "", ""); err != nil {
+		return nil, err
+	} else {
+		preferences, _ := PreferencesFromJson(r.Body)
+		return &Result{r.Header.Get(HEADER_REQUEST_ID), r.Header.Get(HEADER_ETAG_SERVER), preferences}, nil
+	}
+}
+
+func (c *Client) CreateOutgoingWebhook(hook *OutgoingWebhook) (*Result, *AppError) {
+	if r, err := c.DoApiPost("/hooks/outgoing/create", hook.ToJson()); err != nil {
+		return nil, err
+	} else {
+		return &Result{r.Header.Get(HEADER_REQUEST_ID),
+			r.Header.Get(HEADER_ETAG_SERVER), OutgoingWebhookFromJson(r.Body)}, nil
+	}
+}
+
+func (c *Client) DeleteOutgoingWebhook(data map[string]string) (*Result, *AppError) {
+	if r, err := c.DoApiPost("/hooks/outgoing/delete", MapToJson(data)); err != nil {
+		return nil, err
+	} else {
+		return &Result{r.Header.Get(HEADER_REQUEST_ID),
+			r.Header.Get(HEADER_ETAG_SERVER), MapFromJson(r.Body)}, nil
+	}
+}
+
+func (c *Client) ListOutgoingWebhooks() (*Result, *AppError) {
+	if r, err := c.DoApiGet("/hooks/outgoing/list", "", ""); err != nil {
+		return nil, err
+	} else {
+		return &Result{r.Header.Get(HEADER_REQUEST_ID),
+			r.Header.Get(HEADER_ETAG_SERVER), OutgoingWebhookListFromJson(r.Body)}, nil
+	}
+}
+
+func (c *Client) RegenOutgoingWebhookToken(data map[string]string) (*Result, *AppError) {
+	if r, err := c.DoApiPost("/hooks/outgoing/regen_token", MapToJson(data)); err != nil {
+		return nil, err
+	} else {
+		return &Result{r.Header.Get(HEADER_REQUEST_ID),
+			r.Header.Get(HEADER_ETAG_SERVER), OutgoingWebhookFromJson(r.Body)}, nil
 	}
 }
 

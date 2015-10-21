@@ -1,19 +1,19 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
 
 import (
 	"bytes"
-	"code.google.com/p/graphics-go/graphics"
 	l4g "code.google.com/p/log4go"
 	"fmt"
+	"github.com/disintegration/imaging"
 	"github.com/goamz/goamz/aws"
 	"github.com/goamz/goamz/s3"
 	"github.com/gorilla/mux"
 	"github.com/mattermost/platform/model"
 	"github.com/mattermost/platform/utils"
-	"github.com/nfnt/resize"
+	"github.com/mssola/user_agent"
 	"github.com/rwcarlsen/goexif/exif"
 	_ "golang.org/x/image/bmp"
 	"image"
@@ -23,8 +23,6 @@ import (
 	"image/jpeg"
 	"io"
 	"io/ioutil"
-	"math"
-	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -69,8 +67,8 @@ func InitFile(r *mux.Router) {
 }
 
 func uploadFile(c *Context, w http.ResponseWriter, r *http.Request) {
-	if !utils.IsS3Configured() && !utils.Cfg.ServiceSettings.UseLocalStorage {
-		c.Err = model.NewAppError("uploadFile", "Unable to upload file. Amazon S3 not configured and local server storage turned off. ", "")
+	if len(utils.Cfg.FileSettings.DriverName) == 0 {
+		c.Err = model.NewAppError("uploadFile", "Unable to upload file. Image storage is not configured.", "")
 		c.Err.StatusCode = http.StatusNotImplemented
 		return
 	}
@@ -148,12 +146,12 @@ func uploadFile(c *Context, w http.ResponseWriter, r *http.Request) {
 		resStruct.ClientIds = append(resStruct.ClientIds, clientId)
 	}
 
-	fireAndForgetHandleImages(imageNameList, imageDataList, c.Session.TeamId, channelId, c.Session.UserId)
+	handleImagesAndForget(imageNameList, imageDataList, c.Session.TeamId, channelId, c.Session.UserId)
 
 	w.Write([]byte(resStruct.ToJson()))
 }
 
-func fireAndForgetHandleImages(filenames []string, fileData [][]byte, teamId, channelId, userId string) {
+func handleImagesAndForget(filenames []string, fileData [][]byte, teamId, channelId, userId string) {
 
 	go func() {
 		dest := "teams/" + teamId + "/channels/" + channelId + "/users/" + userId + "/"
@@ -162,7 +160,7 @@ func fireAndForgetHandleImages(filenames []string, fileData [][]byte, teamId, ch
 			name := filename[:strings.LastIndex(filename, ".")]
 			go func() {
 				// Decode image bytes into Image object
-				img, _, err := image.Decode(bytes.NewReader(fileData[i]))
+				img, imgType, err := image.Decode(bytes.NewReader(fileData[i]))
 				if err != nil {
 					l4g.Error("Unable to decode image channelId=%v userId=%v filename=%v err=%v", channelId, userId, filename, err)
 					return
@@ -174,51 +172,34 @@ func fireAndForgetHandleImages(filenames []string, fileData [][]byte, teamId, ch
 				// Get the image's orientation and ignore any errors since not all images will have orientation data
 				orientation, _ := getImageOrientation(fileData[i])
 
-				// Create a temporary image that will be manipulated and then used to make the thumbnail and preview image
-				var temp *image.RGBA
-				switch orientation {
-				case Upright, UprightMirrored, UpsideDown, UpsideDownMirrored:
-					temp = image.NewRGBA(img.Bounds())
-				case RotatedCCW, RotatedCCWMirrored, RotatedCW, RotatedCWMirrored:
-					bounds := img.Bounds()
-					temp = image.NewRGBA(image.Rect(bounds.Min.Y, bounds.Min.X, bounds.Max.Y, bounds.Max.X))
-
-					width, height = height, width
+				if imgType == "png" {
+					dst := image.NewRGBA(img.Bounds())
+					draw.Draw(dst, dst.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+					draw.Draw(dst, dst.Bounds(), img, img.Bounds().Min, draw.Over)
+					img = dst
 				}
 
-				// Draw a white background since JPEGs lack transparency
-				draw.Draw(temp, temp.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
-
-				// Copy the original image onto the temporary one while rotating it as necessary
 				switch orientation {
-				case UpsideDown, UpsideDownMirrored:
-					// rotate 180 degrees
-					err := graphics.Rotate(temp, img, &graphics.RotateOptions{Angle: math.Pi})
-					if err != nil {
-						l4g.Error("Unable to rotate image")
-					}
-				case RotatedCW, RotatedCWMirrored:
-					// rotate 90 degrees CCW
-					graphics.Rotate(temp, img, &graphics.RotateOptions{Angle: 3 * math.Pi / 2})
-					if err != nil {
-						l4g.Error("Unable to rotate image")
-					}
-				case RotatedCCW, RotatedCCWMirrored:
-					// rotate 90 degrees CW
-					graphics.Rotate(temp, img, &graphics.RotateOptions{Angle: math.Pi / 2})
-					if err != nil {
-						l4g.Error("Unable to rotate image")
-					}
-				case Upright, UprightMirrored:
-					draw.Draw(temp, temp.Bounds(), img, img.Bounds().Min, draw.Over)
+				case UprightMirrored:
+					img = imaging.FlipH(img)
+				case UpsideDown:
+					img = imaging.Rotate180(img)
+				case UpsideDownMirrored:
+					img = imaging.FlipV(img)
+				case RotatedCWMirrored:
+					img = imaging.Transpose(img)
+				case RotatedCCW:
+					img = imaging.Rotate270(img)
+				case RotatedCCWMirrored:
+					img = imaging.Transverse(img)
+				case RotatedCW:
+					img = imaging.Rotate90(img)
 				}
-
-				img = temp
 
 				// Create thumbnail
 				go func() {
-					thumbWidth := float64(utils.Cfg.ImageSettings.ThumbnailWidth)
-					thumbHeight := float64(utils.Cfg.ImageSettings.ThumbnailHeight)
+					thumbWidth := float64(utils.Cfg.FileSettings.ThumbnailWidth)
+					thumbHeight := float64(utils.Cfg.FileSettings.ThumbnailHeight)
 					imgWidth := float64(width)
 					imgHeight := float64(height)
 
@@ -226,9 +207,9 @@ func fireAndForgetHandleImages(filenames []string, fileData [][]byte, teamId, ch
 					if imgHeight < thumbHeight && imgWidth < thumbWidth {
 						thumbnail = img
 					} else if imgHeight/imgWidth < thumbHeight/thumbWidth {
-						thumbnail = resize.Resize(0, utils.Cfg.ImageSettings.ThumbnailHeight, img, resize.Lanczos3)
+						thumbnail = imaging.Resize(img, 0, utils.Cfg.FileSettings.ThumbnailHeight, imaging.Lanczos)
 					} else {
-						thumbnail = resize.Resize(utils.Cfg.ImageSettings.ThumbnailWidth, 0, img, resize.Lanczos3)
+						thumbnail = imaging.Resize(img, utils.Cfg.FileSettings.ThumbnailWidth, 0, imaging.Lanczos)
 					}
 
 					buf := new(bytes.Buffer)
@@ -247,8 +228,8 @@ func fireAndForgetHandleImages(filenames []string, fileData [][]byte, teamId, ch
 				// Create preview
 				go func() {
 					var preview image.Image
-					if width > int(utils.Cfg.ImageSettings.PreviewWidth) {
-						preview = resize.Resize(utils.Cfg.ImageSettings.PreviewWidth, utils.Cfg.ImageSettings.PreviewHeight, img, resize.Lanczos3)
+					if width > int(utils.Cfg.FileSettings.PreviewWidth) {
+						preview = imaging.Resize(img, utils.Cfg.FileSettings.PreviewWidth, utils.Cfg.FileSettings.PreviewHeight, imaging.Lanczos)
 					} else {
 						preview = img
 					}
@@ -294,8 +275,8 @@ type ImageGetResult struct {
 }
 
 func getFileInfo(c *Context, w http.ResponseWriter, r *http.Request) {
-	if !utils.IsS3Configured() && !utils.Cfg.ServiceSettings.UseLocalStorage {
-		c.Err = model.NewAppError("getFileInfo", "Unable to get file info. Amazon S3 not configured and local server storage turned off. ", "")
+	if len(utils.Cfg.FileSettings.DriverName) == 0 {
+		c.Err = model.NewAppError("uploadFile", "Unable to get file info. Image storage is not configured.", "")
 		c.Err.StatusCode = http.StatusNotImplemented
 		return
 	}
@@ -330,7 +311,7 @@ func getFileInfo(c *Context, w http.ResponseWriter, r *http.Request) {
 	} else {
 
 		fileData := make(chan []byte)
-		asyncGetFile(path, fileData)
+		getFileAndForget(path, fileData)
 
 		f := <-fileData
 
@@ -357,8 +338,8 @@ func getFileInfo(c *Context, w http.ResponseWriter, r *http.Request) {
 }
 
 func getFile(c *Context, w http.ResponseWriter, r *http.Request) {
-	if !utils.IsS3Configured() && !utils.Cfg.ServiceSettings.UseLocalStorage {
-		c.Err = model.NewAppError("getFile", "Unable to get file. Amazon S3 not configured and local server storage turned off. ", "")
+	if len(utils.Cfg.FileSettings.DriverName) == 0 {
+		c.Err = model.NewAppError("uploadFile", "Unable to get file. Image storage is not configured.", "")
 		c.Err.StatusCode = http.StatusNotImplemented
 		return
 	}
@@ -397,10 +378,10 @@ func getFile(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileData := make(chan []byte)
-	asyncGetFile(path, fileData)
+	getFileAndForget(path, fileData)
 
 	if len(hash) > 0 && len(data) > 0 && len(teamId) == 26 {
-		if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", data, utils.Cfg.ServiceSettings.PublicLinkSalt)) {
+		if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", data, utils.Cfg.FileSettings.PublicLinkSalt)) {
 			c.Err = model.NewAppError("getFile", "The public link does not appear to be valid", "")
 			return
 		}
@@ -425,11 +406,24 @@ func getFile(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Cache-Control", "max-age=2592000, public")
 	w.Header().Set("Content-Length", strconv.Itoa(len(f)))
-	w.Header().Set("Content-Type", mime.TypeByExtension(filepath.Ext(filename)))
+	w.Header().Del("Content-Type") // Content-Type will be set automatically by the http writer
+
+	// attach extra headers to trigger a download on IE, Edge, and Safari
+	ua := user_agent.New(r.UserAgent())
+	bname, _ := ua.Browser()
+
+	if bname == "Edge" || bname == "Internet Explorer" || bname == "Safari" {
+		// trim off anything before the final / so we just get the file's name
+		parts := strings.Split(filename, "/")
+
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", "attachment;filename=\""+parts[len(parts)-1]+"\"")
+	}
+
 	w.Write(f)
 }
 
-func asyncGetFile(path string, fileData chan []byte) {
+func getFileAndForget(path string, fileData chan []byte) {
 	go func() {
 		data, getErr := readFile(path)
 		if getErr != nil {
@@ -442,15 +436,15 @@ func asyncGetFile(path string, fileData chan []byte) {
 }
 
 func getPublicLink(c *Context, w http.ResponseWriter, r *http.Request) {
-	if !utils.Cfg.TeamSettings.AllowPublicLink {
-		c.Err = model.NewAppError("getPublicLink", "Public links have been disabled", "")
-		c.Err.StatusCode = http.StatusForbidden
-	}
-
-	if !utils.IsS3Configured() && !utils.Cfg.ServiceSettings.UseLocalStorage {
-		c.Err = model.NewAppError("getPublicLink", "Unable to upload file. Amazon S3 not configured and local server storage turned off. ", "")
+	if len(utils.Cfg.FileSettings.DriverName) == 0 {
+		c.Err = model.NewAppError("uploadFile", "Unable to get link. Image storage is not configured.", "")
 		c.Err.StatusCode = http.StatusNotImplemented
 		return
+	}
+
+	if !utils.Cfg.FileSettings.EnablePublicLink {
+		c.Err = model.NewAppError("getPublicLink", "Public links have been disabled", "")
+		c.Err.StatusCode = http.StatusForbidden
 	}
 
 	props := model.MapFromJson(r.Body)
@@ -478,7 +472,7 @@ func getPublicLink(c *Context, w http.ResponseWriter, r *http.Request) {
 	newProps["time"] = fmt.Sprintf("%v", model.GetMillis())
 
 	data := model.MapToJson(newProps)
-	hash := model.HashPassword(fmt.Sprintf("%v:%v", data, utils.Cfg.ServiceSettings.PublicLinkSalt))
+	hash := model.HashPassword(fmt.Sprintf("%v:%v", data, utils.Cfg.FileSettings.PublicLinkSalt))
 
 	url := fmt.Sprintf("%s/api/v1/files/get/%s/%s/%s?d=%s&h=%s&t=%s", c.GetSiteURL(), channelId, userId, filename, url.QueryEscape(data), url.QueryEscape(hash), c.Session.TeamId)
 
@@ -493,7 +487,7 @@ func getPublicLink(c *Context, w http.ResponseWriter, r *http.Request) {
 }
 
 func getExport(c *Context, w http.ResponseWriter, r *http.Request) {
-	if !c.HasPermissionsToTeam(c.Session.TeamId, "export") || !c.IsTeamAdmin(c.Session.UserId) {
+	if !c.HasPermissionsToTeam(c.Session.TeamId, "export") || !c.IsTeamAdmin() {
 		c.Err = model.NewAppError("getExport", "Only a team admin can retrieve exported data.", "userId="+c.Session.UserId)
 		c.Err.StatusCode = http.StatusForbidden
 		return
@@ -511,13 +505,13 @@ func getExport(c *Context, w http.ResponseWriter, r *http.Request) {
 
 func writeFile(f []byte, path string) *model.AppError {
 
-	if utils.IsS3Configured() && !utils.Cfg.ServiceSettings.UseLocalStorage {
+	if utils.Cfg.FileSettings.DriverName == model.IMAGE_DRIVER_S3 {
 		var auth aws.Auth
-		auth.AccessKey = utils.Cfg.AWSSettings.S3AccessKeyId
-		auth.SecretKey = utils.Cfg.AWSSettings.S3SecretAccessKey
+		auth.AccessKey = utils.Cfg.FileSettings.AmazonS3AccessKeyId
+		auth.SecretKey = utils.Cfg.FileSettings.AmazonS3SecretAccessKey
 
-		s := s3.New(auth, aws.Regions[utils.Cfg.AWSSettings.S3Region])
-		bucket := s.Bucket(utils.Cfg.AWSSettings.S3Bucket)
+		s := s3.New(auth, aws.Regions[utils.Cfg.FileSettings.AmazonS3Region])
+		bucket := s.Bucket(utils.Cfg.FileSettings.AmazonS3Bucket)
 
 		ext := filepath.Ext(path)
 
@@ -534,12 +528,12 @@ func writeFile(f []byte, path string) *model.AppError {
 		if err != nil {
 			return model.NewAppError("writeFile", "Encountered an error writing to S3", err.Error())
 		}
-	} else if utils.Cfg.ServiceSettings.UseLocalStorage && len(utils.Cfg.ServiceSettings.StorageDirectory) > 0 {
-		if err := os.MkdirAll(filepath.Dir(utils.Cfg.ServiceSettings.StorageDirectory+path), 0774); err != nil {
+	} else if utils.Cfg.FileSettings.DriverName == model.IMAGE_DRIVER_LOCAL {
+		if err := os.MkdirAll(filepath.Dir(utils.Cfg.FileSettings.Directory+path), 0774); err != nil {
 			return model.NewAppError("writeFile", "Encountered an error creating the directory for the new file", err.Error())
 		}
 
-		if err := ioutil.WriteFile(utils.Cfg.ServiceSettings.StorageDirectory+path, f, 0644); err != nil {
+		if err := ioutil.WriteFile(utils.Cfg.FileSettings.Directory+path, f, 0644); err != nil {
 			return model.NewAppError("writeFile", "Encountered an error writing to local server storage", err.Error())
 		}
 	} else {
@@ -551,13 +545,13 @@ func writeFile(f []byte, path string) *model.AppError {
 
 func readFile(path string) ([]byte, *model.AppError) {
 
-	if utils.IsS3Configured() && !utils.Cfg.ServiceSettings.UseLocalStorage {
+	if utils.Cfg.FileSettings.DriverName == model.IMAGE_DRIVER_S3 {
 		var auth aws.Auth
-		auth.AccessKey = utils.Cfg.AWSSettings.S3AccessKeyId
-		auth.SecretKey = utils.Cfg.AWSSettings.S3SecretAccessKey
+		auth.AccessKey = utils.Cfg.FileSettings.AmazonS3AccessKeyId
+		auth.SecretKey = utils.Cfg.FileSettings.AmazonS3SecretAccessKey
 
-		s := s3.New(auth, aws.Regions[utils.Cfg.AWSSettings.S3Region])
-		bucket := s.Bucket(utils.Cfg.AWSSettings.S3Bucket)
+		s := s3.New(auth, aws.Regions[utils.Cfg.FileSettings.AmazonS3Region])
+		bucket := s.Bucket(utils.Cfg.FileSettings.AmazonS3Bucket)
 
 		// try to get the file from S3 with some basic retry logic
 		tries := 0
@@ -573,8 +567,8 @@ func readFile(path string) ([]byte, *model.AppError) {
 			}
 			time.Sleep(3000 * time.Millisecond)
 		}
-	} else if utils.Cfg.ServiceSettings.UseLocalStorage && len(utils.Cfg.ServiceSettings.StorageDirectory) > 0 {
-		if f, err := ioutil.ReadFile(utils.Cfg.ServiceSettings.StorageDirectory + path); err != nil {
+	} else if utils.Cfg.FileSettings.DriverName == model.IMAGE_DRIVER_LOCAL {
+		if f, err := ioutil.ReadFile(utils.Cfg.FileSettings.Directory + path); err != nil {
 			return nil, model.NewAppError("readFile", "Encountered an error reading from local server storage", err.Error())
 		} else {
 			return f, nil
@@ -585,14 +579,14 @@ func readFile(path string) ([]byte, *model.AppError) {
 }
 
 func openFileWriteStream(path string) (io.Writer, *model.AppError) {
-	if utils.IsS3Configured() && !utils.Cfg.ServiceSettings.UseLocalStorage {
+	if utils.Cfg.FileSettings.DriverName == model.IMAGE_DRIVER_S3 {
 		return nil, model.NewAppError("openFileWriteStream", "S3 is not supported.", "")
-	} else if utils.Cfg.ServiceSettings.UseLocalStorage && len(utils.Cfg.ServiceSettings.StorageDirectory) > 0 {
-		if err := os.MkdirAll(filepath.Dir(utils.Cfg.ServiceSettings.StorageDirectory+path), 0774); err != nil {
+	} else if utils.Cfg.FileSettings.DriverName == model.IMAGE_DRIVER_LOCAL {
+		if err := os.MkdirAll(filepath.Dir(utils.Cfg.FileSettings.Directory+path), 0774); err != nil {
 			return nil, model.NewAppError("openFileWriteStream", "Encountered an error creating the directory for the new file", err.Error())
 		}
 
-		if fileHandle, err := os.Create(utils.Cfg.ServiceSettings.StorageDirectory + path); err != nil {
+		if fileHandle, err := os.Create(utils.Cfg.FileSettings.Directory + path); err != nil {
 			return nil, model.NewAppError("openFileWriteStream", "Encountered an error writing to local server storage", err.Error())
 		} else {
 			fileHandle.Chmod(0644)

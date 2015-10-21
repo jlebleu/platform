@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var utils = require('../utils/utils.jsx');
@@ -21,7 +21,7 @@ export default class InviteMemberModal extends React.Component {
             emailErrors: {},
             firstNameErrors: {},
             lastNameErrors: {},
-            emailEnabled: !global.window.config.ByPassEmail
+            emailEnabled: global.window.config.SendEmailNotifications === 'true'
         };
     }
 
@@ -36,7 +36,7 @@ export default class InviteMemberModal extends React.Component {
             var notEmpty = false;
             for (var i = 0; i < self.state.inviteIds.length; i++) {
                 var index = self.state.inviteIds[i];
-                if (React.findDOMNode(self.refs['email' + index]).value.trim() !== '') {
+                if (ReactDOM.findDOMNode(self.refs['email' + index]).value.trim() !== '') {
                     notEmpty = true;
                     break;
                 }
@@ -69,7 +69,7 @@ export default class InviteMemberModal extends React.Component {
         for (var i = 0; i < count; i++) {
             var index = inviteIds[i];
             var invite = {};
-            invite.email = React.findDOMNode(this.refs['email' + index]).value.trim();
+            invite.email = ReactDOM.findDOMNode(this.refs['email' + index]).value.trim();
             if (!invite.email || !utils.isEmail(invite.email)) {
                 emailErrors[index] = 'Please enter a valid email address';
                 valid = false;
@@ -77,9 +77,9 @@ export default class InviteMemberModal extends React.Component {
                 emailErrors[index] = '';
             }
 
-            invite.firstName = React.findDOMNode(this.refs['first_name' + index]).value.trim();
+            invite.firstName = ReactDOM.findDOMNode(this.refs['first_name' + index]).value.trim();
 
-            invite.lastName = React.findDOMNode(this.refs['last_name' + index]).value.trim();
+            invite.lastName = ReactDOM.findDOMNode(this.refs['last_name' + index]).value.trim();
 
             invites.push(invite);
         }
@@ -95,8 +95,8 @@ export default class InviteMemberModal extends React.Component {
 
         Client.inviteMembers(data,
             function success() {
-                $(React.findDOMNode(this.refs.modal)).attr('data-confirm', 'true');
-                $(React.findDOMNode(this.refs.modal)).modal('hide');
+                $(ReactDOM.findDOMNode(this.refs.modal)).attr('data-confirm', 'true');
+                $(ReactDOM.findDOMNode(this.refs.modal)).modal('hide');
             }.bind(this),
             function fail(err) {
                 if (err.message === 'This person is already on your team') {
@@ -110,8 +110,8 @@ export default class InviteMemberModal extends React.Component {
     }
 
     componentDidUpdate() {
-        $(React.findDOMNode(this.refs.modalBody)).css('max-height', $(window).height() - 200);
-        $(React.findDOMNode(this.refs.modalBody)).css('overflow-y', 'scroll');
+        $(ReactDOM.findDOMNode(this.refs.modalBody)).css('max-height', $(window).height() - 200);
+        $(ReactDOM.findDOMNode(this.refs.modalBody)).css('overflow-y', 'scroll');
     }
 
     addInviteFields() {
@@ -126,9 +126,9 @@ export default class InviteMemberModal extends React.Component {
 
         for (var i = 0; i < inviteIds.length; i++) {
             var index = inviteIds[i];
-            React.findDOMNode(this.refs['email' + index]).value = '';
-            React.findDOMNode(this.refs['first_name' + index]).value = '';
-            React.findDOMNode(this.refs['last_name' + index]).value = '';
+            ReactDOM.findDOMNode(this.refs['email' + index]).value = '';
+            ReactDOM.findDOMNode(this.refs['first_name' + index]).value = '';
+            ReactDOM.findDOMNode(this.refs['last_name' + index]).value = '';
         }
 
         this.setState({
@@ -211,6 +211,7 @@ export default class InviteMemberModal extends React.Component {
                                             placeholder='First name'
                                             maxLength='64'
                                             disabled={!this.state.emailEnabled}
+                                            spellCheck='false'
                                         />
                                         {firstNameError}
                                     </div>
@@ -224,6 +225,7 @@ export default class InviteMemberModal extends React.Component {
                                             placeholder='Last name'
                                             maxLength='64'
                                             disabled={!this.state.emailEnabled}
+                                            spellCheck='false'
                                         />
                                         {lastNameError}
                                     </div>
@@ -242,6 +244,7 @@ export default class InviteMemberModal extends React.Component {
                             placeholder='email@domain.com'
                             maxLength='64'
                             disabled={!this.state.emailEnabled}
+                            spellCheck='false'
                         />
                         {emailError}
                     </div>

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -120,98 +120,6 @@ func TestCreatePost(t *testing.T) {
 
 	if _, err = Client.DoApiPost("/channels/"+channel3.Id+"/create", "garbage"); err == nil {
 		t.Fatal("should have been an error")
-	}
-}
-
-func TestCreateValetPost(t *testing.T) {
-	Setup()
-
-	team := &model.Team{DisplayName: "Name", Name: "z-z-" + model.NewId() + "a", Email: "test@nowhere.com", Type: model.TEAM_OPEN}
-	team = Client.Must(Client.CreateTeam(team)).Data.(*model.Team)
-
-	team2 := &model.Team{DisplayName: "Name Team 2", Name: "z-z-" + model.NewId() + "a", Email: "test@nowhere.com", Type: model.TEAM_OPEN}
-	team2 = Client.Must(Client.CreateTeam(team2)).Data.(*model.Team)
-
-	user1 := &model.User{TeamId: team.Id, Email: model.NewId() + "corey@test.com", Nickname: "Corey Hulen", Password: "pwd"}
-	user1 = Client.Must(Client.CreateUser(user1, "")).Data.(*model.User)
-	store.Must(Srv.Store.User().VerifyEmail(user1.Id))
-
-	user2 := &model.User{TeamId: team.Id, Email: model.NewId() + "corey@test.com", Nickname: "Corey Hulen", Password: "pwd"}
-	user2 = Client.Must(Client.CreateUser(user2, "")).Data.(*model.User)
-	store.Must(Srv.Store.User().VerifyEmail(user2.Id))
-
-	Client.LoginByEmail(team.Name, user1.Email, "pwd")
-
-	channel1 := &model.Channel{DisplayName: "Test API Name", Name: "a" + model.NewId() + "a", Type: model.CHANNEL_OPEN, TeamId: team.Id}
-	channel1 = Client.Must(Client.CreateChannel(channel1)).Data.(*model.Channel)
-
-	channel2 := &model.Channel{DisplayName: "Test API Name", Name: "a" + model.NewId() + "a", Type: model.CHANNEL_OPEN, TeamId: team.Id}
-	channel2 = Client.Must(Client.CreateChannel(channel2)).Data.(*model.Channel)
-
-	if utils.Cfg.TeamSettings.AllowValetDefault {
-		post1 := &model.Post{ChannelId: channel1.Id, Message: "#hashtag a" + model.NewId() + "a"}
-		rpost1, err := Client.CreateValetPost(post1)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if rpost1.Data.(*model.Post).Message != post1.Message {
-			t.Fatal("message didn't match")
-		}
-
-		if rpost1.Data.(*model.Post).Hashtags != "#hashtag" {
-			t.Fatal("hashtag didn't match")
-		}
-
-		post2 := &model.Post{ChannelId: channel1.Id, Message: "a" + model.NewId() + "a", RootId: rpost1.Data.(*model.Post).Id}
-		rpost2, err := Client.CreateValetPost(post2)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		post3 := &model.Post{ChannelId: channel1.Id, Message: "a" + model.NewId() + "a", RootId: rpost1.Data.(*model.Post).Id, ParentId: rpost2.Data.(*model.Post).Id}
-		_, err = Client.CreateValetPost(post3)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		post4 := &model.Post{ChannelId: "junk", Message: "a" + model.NewId() + "a"}
-		_, err = Client.CreateValetPost(post4)
-		if err.StatusCode != http.StatusForbidden {
-			t.Fatal("Should have been forbidden")
-		}
-
-		Client.LoginByEmail(team.Name, user2.Email, "pwd")
-		post5 := &model.Post{ChannelId: channel1.Id, Message: "a" + model.NewId() + "a"}
-		_, err = Client.CreateValetPost(post5)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		user3 := &model.User{TeamId: team2.Id, Email: model.NewId() + "corey@test.com", Nickname: "Corey Hulen", Password: "pwd"}
-		user3 = Client.Must(Client.CreateUser(user3, "")).Data.(*model.User)
-		store.Must(Srv.Store.User().VerifyEmail(user3.Id))
-
-		Client.LoginByEmail(team2.Name, user3.Email, "pwd")
-
-		channel3 := &model.Channel{DisplayName: "Test API Name", Name: "a" + model.NewId() + "a", Type: model.CHANNEL_OPEN, TeamId: team2.Id}
-		channel3 = Client.Must(Client.CreateChannel(channel3)).Data.(*model.Channel)
-
-		post6 := &model.Post{ChannelId: channel1.Id, Message: "a" + model.NewId() + "a"}
-		_, err = Client.CreateValetPost(post6)
-		if err.StatusCode != http.StatusForbidden {
-			t.Fatal("Should have been forbidden")
-		}
-
-		if _, err = Client.DoApiPost("/channels/"+channel3.Id+"/create", "garbage"); err == nil {
-			t.Fatal("should have been an error")
-		}
-	} else {
-		post1 := &model.Post{ChannelId: channel1.Id, Message: "#hashtag a" + model.NewId() + "a"}
-		_, err := Client.CreateValetPost(post1)
-		if err.StatusCode != http.StatusNotImplemented {
-			t.Fatal("Should have failed with 501 - Not Implemented")
-		}
 	}
 }
 
@@ -495,6 +403,128 @@ func TestSearchHashtagPosts(t *testing.T) {
 
 	if len(r1.Order) != 2 {
 		t.Fatal("wrong search")
+	}
+}
+
+func TestSearchPostsInChannel(t *testing.T) {
+	Setup()
+
+	team := &model.Team{DisplayName: "Name", Name: "z-z-" + model.NewId() + "a", Email: "test@nowhere.com", Type: model.TEAM_OPEN}
+	team = Client.Must(Client.CreateTeam(team)).Data.(*model.Team)
+
+	user1 := &model.User{TeamId: team.Id, Email: model.NewId() + "corey@test.com", Nickname: "Corey Hulen", Password: "pwd"}
+	user1 = Client.Must(Client.CreateUser(user1, "")).Data.(*model.User)
+	store.Must(Srv.Store.User().VerifyEmail(user1.Id))
+
+	Client.LoginByEmail(team.Name, user1.Email, "pwd")
+
+	channel1 := &model.Channel{DisplayName: "TestGetPosts", Name: "a" + model.NewId() + "a", Type: model.CHANNEL_OPEN, TeamId: team.Id}
+	channel1 = Client.Must(Client.CreateChannel(channel1)).Data.(*model.Channel)
+
+	post1 := &model.Post{ChannelId: channel1.Id, Message: "sgtitlereview with space"}
+	post1 = Client.Must(Client.CreatePost(post1)).Data.(*model.Post)
+
+	channel2 := &model.Channel{DisplayName: "TestGetPosts", Name: "a" + model.NewId() + "a", Type: model.CHANNEL_OPEN, TeamId: team.Id}
+	channel2 = Client.Must(Client.CreateChannel(channel2)).Data.(*model.Channel)
+
+	post2 := &model.Post{ChannelId: channel2.Id, Message: "sgtitlereview\n with return"}
+	post2 = Client.Must(Client.CreatePost(post2)).Data.(*model.Post)
+
+	post3 := &model.Post{ChannelId: channel2.Id, Message: "other message with no return"}
+	post3 = Client.Must(Client.CreatePost(post3)).Data.(*model.Post)
+
+	if result := Client.Must(Client.SearchPosts("channel:")).Data.(*model.PostList); len(result.Order) != 0 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+
+	if result := Client.Must(Client.SearchPosts("in:")).Data.(*model.PostList); len(result.Order) != 0 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+
+	if result := Client.Must(Client.SearchPosts("channel:" + channel1.Name)).Data.(*model.PostList); len(result.Order) != 1 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+
+	if result := Client.Must(Client.SearchPosts("in: " + channel2.Name)).Data.(*model.PostList); len(result.Order) != 2 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+
+	if result := Client.Must(Client.SearchPosts("channel: " + channel2.Name)).Data.(*model.PostList); len(result.Order) != 2 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+
+	if result := Client.Must(Client.SearchPosts("ChAnNeL: " + channel2.Name)).Data.(*model.PostList); len(result.Order) != 2 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+
+	if result := Client.Must(Client.SearchPosts("sgtitlereview")).Data.(*model.PostList); len(result.Order) != 2 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+
+	if result := Client.Must(Client.SearchPosts("sgtitlereview in:")).Data.(*model.PostList); len(result.Order) != 2 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+
+	if result := Client.Must(Client.SearchPosts("sgtitlereview channel:" + channel1.Name)).Data.(*model.PostList); len(result.Order) != 1 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+
+	if result := Client.Must(Client.SearchPosts("sgtitlereview in: " + channel2.Name)).Data.(*model.PostList); len(result.Order) != 1 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+
+	if result := Client.Must(Client.SearchPosts("sgtitlereview channel: " + channel2.Name)).Data.(*model.PostList); len(result.Order) != 1 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+}
+
+func TestSearchPostsFromUser(t *testing.T) {
+	Setup()
+
+	team := &model.Team{DisplayName: "Name", Name: "z-z-" + model.NewId() + "a", Email: "test@nowhere.com", Type: model.TEAM_OPEN}
+	team = Client.Must(Client.CreateTeam(team)).Data.(*model.Team)
+
+	user1 := &model.User{TeamId: team.Id, Email: model.NewId() + "corey@test.com", Nickname: "Corey Hulen", Password: "pwd"}
+	user1 = Client.Must(Client.CreateUser(user1, "")).Data.(*model.User)
+	store.Must(Srv.Store.User().VerifyEmail(user1.Id))
+
+	Client.LoginByEmail(team.Name, user1.Email, "pwd")
+
+	channel1 := &model.Channel{DisplayName: "TestGetPosts", Name: "a" + model.NewId() + "a", Type: model.CHANNEL_OPEN, TeamId: team.Id}
+	channel1 = Client.Must(Client.CreateChannel(channel1)).Data.(*model.Channel)
+
+	channel2 := &model.Channel{DisplayName: "TestGetPosts", Name: "a" + model.NewId() + "a", Type: model.CHANNEL_OPEN, TeamId: team.Id}
+	channel2 = Client.Must(Client.CreateChannel(channel2)).Data.(*model.Channel)
+
+	post1 := &model.Post{ChannelId: channel1.Id, Message: "sgtitlereview with space"}
+	post1 = Client.Must(Client.CreatePost(post1)).Data.(*model.Post)
+
+	user2 := &model.User{TeamId: team.Id, Email: model.NewId() + "corey@test.com", Nickname: "Corey Hulen", Password: "pwd"}
+	user2 = Client.Must(Client.CreateUser(user2, "")).Data.(*model.User)
+	store.Must(Srv.Store.User().VerifyEmail(user2.Id))
+
+	Client.LoginByEmail(team.Name, user2.Email, "pwd")
+	Client.Must(Client.JoinChannel(channel1.Id))
+	Client.Must(Client.JoinChannel(channel2.Id))
+
+	post2 := &model.Post{ChannelId: channel2.Id, Message: "sgtitlereview\n with return"}
+	post2 = Client.Must(Client.CreatePost(post2)).Data.(*model.Post)
+
+	if result := Client.Must(Client.SearchPosts("from: " + user1.Username)).Data.(*model.PostList); len(result.Order) != 1 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+
+	// note that this includes the "User2 has joined the channel" system messages
+	if result := Client.Must(Client.SearchPosts("from: " + user2.Username)).Data.(*model.PostList); len(result.Order) != 3 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+
+	if result := Client.Must(Client.SearchPosts("from: " + user2.Username + " sgtitlereview")).Data.(*model.PostList); len(result.Order) != 1 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
+	}
+
+	if result := Client.Must(Client.SearchPosts("from: " + user2.Username + " in:" + channel1.Name)).Data.(*model.PostList); len(result.Order) != 1 {
+		t.Fatalf("wrong number of posts returned %v", len(result.Order))
 	}
 }
 

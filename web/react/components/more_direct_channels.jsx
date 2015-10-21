@@ -1,136 +1,290 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
-var ChannelStore = require('../stores/channel_store.jsx');
-var TeamStore = require('../stores/team_store.jsx');
-var Client = require('../utils/client.jsx');
-var AsyncClient = require('../utils/async_client.jsx');
-var utils = require('../utils/utils.jsx');
+const AsyncClient = require('../utils/async_client.jsx');
+const ChannelStore = require('../stores/channel_store.jsx');
+const Constants = require('../utils/constants.jsx');
+const Client = require('../utils/client.jsx');
+const Modal = ReactBootstrap.Modal;
+const PreferenceStore = require('../stores/preference_store.jsx');
+const TeamStore = require('../stores/team_store.jsx');
+const UserStore = require('../stores/user_store.jsx');
+const Utils = require('../utils/utils.jsx');
 
 export default class MoreDirectChannels extends React.Component {
     constructor(props) {
         super(props);
 
-        this.state = {channels: [], loadingDMChannel: -1};
+        this.handleFilterChange = this.handleFilterChange.bind(this);
+        this.handleHide = this.handleHide.bind(this);
+        this.handleShowDirectChannel = this.handleShowDirectChannel.bind(this);
+        this.handleUserChange = this.handleUserChange.bind(this);
+
+        this.createRowForUser = this.createRowForUser.bind(this);
+
+        this.state = {
+            users: this.getUsersFromStore(),
+            filter: '',
+            loadingDMChannel: -1
+        };
+    }
+
+    getUsersFromStore() {
+        const currentId = UserStore.getCurrentId();
+        const profiles = UserStore.getProfiles();
+        const users = [];
+
+        for (const id in profiles) {
+            if (id !== currentId) {
+                users.push(profiles[id]);
+            }
+        }
+
+        users.sort((a, b) => a.username.localeCompare(b.username));
+
+        return users;
     }
 
     componentDidMount() {
-        var self = this;
-        $(React.findDOMNode(this.refs.modal)).on('show.bs.modal', function showModal(e) {
-            var button = e.relatedTarget;
-            self.setState({channels: $(button).data('channels')});
-        });
+        UserStore.addChangeListener(this.handleUserChange);
+    }
+
+    componentWillUnmount() {
+        UserStore.addChangeListener(this.handleUserChange);
+    }
+
+    handleFilterChange() {
+        const filter = ReactDOM.findDOMNode(this.refs.filter).value;
+
+        if (filter !== this.state.filter) {
+            this.setState({filter});
+        }
+    }
+
+    handleHide() {
+        if (this.props.onModalDismissed) {
+            this.props.onModalDismissed();
+        }
+
+        this.setState({filter: ''});
+    }
+
+    handleShowDirectChannel(teammate, e) {
+        if (this.state.loadingDMChannel !== -1) {
+            return;
+        }
+
+        e.preventDefault();
+
+        const channelName = Utils.getDirectChannelName(UserStore.getCurrentId(), teammate.id);
+        let channel = ChannelStore.getByName(channelName);
+
+        const preference = PreferenceStore.setPreference(Constants.Preferences.CATEGORY_DIRECT_CHANNEL_SHOW, teammate.id, 'true');
+        AsyncClient.savePreferences([preference]);
+
+        if (channel) {
+            Utils.switchChannel(channel);
+
+            this.handleHide();
+        } else {
+            this.setState({loadingDMChannel: teammate.id});
+
+            channel = {
+                name: channelName,
+                last_post_at: 0,
+                total_msg_count: 0,
+                type: 'D',
+                display_name: teammate.username,
+                teammate_id: teammate.id,
+                status: UserStore.getStatus(teammate.id)
+            };
+
+            Client.createDirectChannel(
+                channel,
+                teammate.id,
+                (data) => {
+                    this.setState({loadingDMChannel: -1});
+
+                    AsyncClient.getChannel(data.id);
+                    Utils.switchChannel(data);
+
+                    this.handleHide();
+                },
+                () => {
+                    this.setState({loadingDMChannel: -1});
+                    window.location.href = TeamStore.getCurrentTeamUrl() + '/channels/' + channelName;
+                }
+            );
+        }
+    }
+
+    handleUserChange() {
+        this.setState({users: this.getUsersFromStore()});
+    }
+
+    createRowForUser(user) {
+        const details = [];
+
+        const fullName = Utils.getFullName(user);
+        if (fullName) {
+            details.push(
+                <span
+                    key={`${user.id}__full-name`}
+                    className='full-name'
+                >
+                    {fullName}
+                </span>
+            );
+        }
+
+        if (user.nickname) {
+            const separator = fullName ? ' - ' : '';
+            details.push(
+                <span
+                    key={`${user.nickname}__nickname`}
+                >
+                    {separator + user.nickname}
+                </span>
+            );
+        }
+
+        let joinButton;
+        if (this.state.loadingDMChannel === user.id) {
+            joinButton = (
+                <img
+                    className='channel-loading-gif'
+                    src='/static/images/load.gif'
+                />
+            );
+        } else {
+            joinButton = (
+                <button
+                    type='button'
+                    className='btn btn-primary btn-message'
+                    onClick={this.handleShowDirectChannel.bind(this, user)}
+                >
+                    {'Message'}
+                </button>
+            );
+        }
+
+        return (
+            <tr>
+                <td
+                    key={user.id}
+                    className='direct-channel'
+                >
+                    <img
+                        className='profile-img pull-left'
+                        width='38'
+                        height='38'
+                        src={`/api/v1/users/${user.id}/image?time=${user.update_at}`}
+                    />
+                    <div className='more-name'>
+                        {user.username}
+                    </div>
+                    <div className='more-description'>
+                        {details}
+                    </div>
+                </td>
+                <td className='td--action lg'>
+                    {joinButton}
+                </td>
+            </tr>
+        );
+    }
+
+    componentDidUpdate(prevProps) {
+        if (!prevProps.show && this.props.show) {
+            $(ReactDOM.findDOMNode(this.refs.userList)).css('max-height', $(window).height() - 300);
+            if ($(window).width() > 768) {
+                $(ReactDOM.findDOMNode(this.refs.userList)).perfectScrollbar();
+            }
+        }
     }
 
     render() {
-        var self = this;
+        if (!this.props.show) {
+            return null;
+        }
 
-        var directMessageItems = this.state.channels.map(function mapActivityToChannel(channel, index) {
-            var badge = '';
-            var titleClass = '';
-            var active = '';
-            var handleClick = null;
+        let users = this.state.users;
+        if (this.state.filter !== '') {
+            users = users.filter((user) => {
+                return user.username.indexOf(this.state.filter) !== -1 ||
+                    user.first_name.indexOf(this.state.filter) !== -1 ||
+                    user.last_name.indexOf(this.state.filter) !== -1 ||
+                    user.nickname.indexOf(this.state.filter) !== -1;
+            });
+        }
 
-            if (!channel.fake) {
-                if (channel.id === ChannelStore.getCurrentId()) {
-                    active = 'active';
-                }
+        const userEntries = users.map(this.createRowForUser);
 
-                if (channel.unread) {
-                    badge = <span className='badge pull-right small'>{channel.unread}</span>;
-                    titleClass = 'unread-title';
-                }
+        if (userEntries.length === 0) {
+            userEntries.push(<tr key='no-users-found'><td>{'No users found :('}</td></tr>);
+        }
 
-                handleClick = function clickHandler(e) {
-                    e.preventDefault();
-                    utils.switchChannel(channel, channel.teammate_username);
-                    $(React.findDOMNode(self.refs.modal)).modal('hide');
-                };
-            } else {
-                // It's a direct message channel that doesn't exist yet so let's create it now
-                var otherUserId = utils.getUserIdFromChannelName(channel);
+        let memberString = 'Member';
+        if (users.length !== 1) {
+            memberString += 's';
+        }
 
-                if (self.state.loadingDMChannel === index) {
-                    badge = (
-                        <img
-                            className='channel-loading-gif pull-right'
-                            src='/static/images/load.gif'
-                        />
-                    );
-                }
-
-                if (self.state.loadingDMChannel === -1) {
-                    handleClick = function clickHandler(e) {
-                        e.preventDefault();
-                        self.setState({loadingDMChannel: index});
-
-                        Client.createDirectChannel(channel, otherUserId,
-                            function success(data) {
-                                $(React.findDOMNode(self.refs.modal)).modal('hide');
-                                self.setState({loadingDMChannel: -1});
-                                AsyncClient.getChannel(data.id);
-                                utils.switchChannel(data);
-                            },
-                            function error() {
-                                self.setState({loadingDMChannel: -1});
-                                window.location.href = TeamStore.getCurrentTeamUrl() + '/channels/' + channel.name;
-                            }
-                        );
-                    };
-                }
-            }
-
-            return (
-                <li
-                    key={channel.name}
-                    className={active}
-                >
-                    <a
-                        className={'sidebar-channel ' + titleClass}
-                        href='#'
-                        onClick={handleClick}
-                    >{badge}{channel.display_name}</a>
-                </li>
-            );
-        });
+        let count;
+        if (users.length === this.state.users.length) {
+            count = `${users.length} ${memberString}`;
+        } else {
+            count = `${users.length} ${memberString} of ${this.state.users.length} Total`;
+        }
 
         return (
-            <div
-                className='modal fade'
-                id='more_direct_channels'
-                ref='modal'
-                tabIndex='-1'
-                role='dialog'
-                aria-hidden='true'
+            <Modal
+                className='modal-direct-channels'
+                show={this.props.show}
+                onHide={this.handleHide}
             >
-                <div className='modal-dialog'>
-                    <div className='modal-content'>
-                        <div className='modal-header'>
-                            <button
-                                type='button'
-                                className='close'
-                                data-dismiss='modal'
-                            >
-                                <span aria-hidden='true'>&times;</span>
-                                <span className='sr-only'>Close</span>
-                            </button>
-                            <h4 className='modal-title'>More Private Messages</h4>
+                <Modal.Header closeButton={true}>
+                    <Modal.Title>{'Direct Messages'}</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <div className='row filter-row'>
+                        <div className='col-sm-6'>
+                            <input
+                                ref='filter'
+                                className='form-control filter-textbox'
+                                placeholder='Search members'
+                                onInput={this.handleFilterChange}
+                            />
                         </div>
-                        <div className='modal-body'>
-                            <ul className='nav nav-pills nav-stacked'>
-                                {directMessageItems}
-                            </ul>
-                        </div>
-                        <div className='modal-footer'>
-                            <button
-                                type='button'
-                                className='btn btn-default'
-                                data-dismiss='modal'
-                            >Close</button>
+                        <div className='col-sm-6'>
+                            <span className='member-count'>{count}</span>
                         </div>
                     </div>
-                </div>
-            </div>
+                    <div
+                        ref='userList'
+                        className='user-list'
+                    >
+                        <table className='more-table table'>
+                            <tbody>
+                                {userEntries}
+                            </tbody>
+                        </table>
+                    </div>
+                </Modal.Body>
+                <Modal.Footer>
+                    <button
+                        type='button'
+                        className='btn btn-default'
+                        onClick={this.handleHide}
+                    >
+                        {'Close'}
+                    </button>
+                </Modal.Footer>
+            </Modal>
         );
     }
 }
+
+MoreDirectChannels.propTypes = {
+    show: React.PropTypes.bool.isRequired,
+    onModalDismissed: React.PropTypes.func
+};

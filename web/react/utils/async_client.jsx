@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var client = require('./client.jsx');
@@ -152,21 +152,23 @@ export function getChannel(id) {
 }
 
 export function updateLastViewedAt() {
-    if (isCallInProgress('updateLastViewed')) {
+    const channelId = ChannelStore.getCurrentId();
+
+    if (channelId === null) {
         return;
     }
 
-    if (ChannelStore.getCurrentId() == null) {
+    if (isCallInProgress(`updateLastViewed${channelId}`)) {
         return;
     }
 
-    callTracker.updateLastViewed = utils.getTimestamp();
+    callTracker[`updateLastViewed${channelId}`] = utils.getTimestamp();
     client.updateLastViewedAt(
-        ChannelStore.getCurrentId(),
-        function updateLastViewedAtSuccess() {
+        channelId,
+        () => {
             callTracker.updateLastViewed = 0;
         },
-        function updateLastViewdAtFailure(err) {
+        (err) => {
             callTracker.updateLastViewed = 0;
             dispatchError(err, 'updateLastViewedAt');
         }
@@ -367,6 +369,32 @@ export function getConfig() {
         (err) => {
             callTracker.getConfig = 0;
             dispatchError(err, 'getConfig');
+        }
+    );
+}
+
+export function getAllTeams() {
+    if (isCallInProgress('getAllTeams')) {
+        return;
+    }
+
+    callTracker.getAllTeams = utils.getTimestamp();
+    client.getAllTeams(
+        (data, textStatus, xhr) => {
+            callTracker.getAllTeams = 0;
+
+            if (xhr.status === 304 || !data) {
+                return;
+            }
+
+            AppDispatcher.handleServerAction({
+                type: ActionTypes.RECIEVED_ALL_TEAMS,
+                teams: data
+            });
+        },
+        (err) => {
+            callTracker.getAllTeams = 0;
+            dispatchError(err, 'getAllTeams');
         }
     );
 }
@@ -606,6 +634,57 @@ export function getMyTeam() {
         function getMyTeamFailure(err) {
             callTracker.getMyTeam = 0;
             dispatchError(err, 'getMyTeam');
+        }
+    );
+}
+
+export function getAllPreferences() {
+    if (isCallInProgress('getAllPreferences')) {
+        return;
+    }
+
+    callTracker.getAllPreferences = utils.getTimestamp();
+    client.getAllPreferences(
+        (data, textStatus, xhr) => {
+            callTracker.getAllPreferences = 0;
+
+            if (xhr.status === 304 || !data) {
+                return;
+            }
+
+            AppDispatcher.handleServerAction({
+                type: ActionTypes.RECIEVED_PREFERENCES,
+                preferences: data
+            });
+        },
+        (err) => {
+            callTracker.getAllPreferences = 0;
+            dispatchError(err, 'getAllPreferences');
+        }
+    );
+}
+
+export function savePreferences(preferences, success, error) {
+    client.savePreferences(
+        preferences,
+        (data, textStatus, xhr) => {
+            if (xhr.status !== 304) {
+                AppDispatcher.handleServerAction({
+                    type: ActionTypes.RECIEVED_PREFERENCES,
+                    preferences
+                });
+            }
+
+            if (success) {
+                success(data);
+            }
+        },
+        (err) => {
+            dispatchError(err, 'savePreferences');
+
+            if (error) {
+                error();
+            }
         }
     );
 }

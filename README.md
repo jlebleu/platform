@@ -26,35 +26,45 @@ Please see the [features pages of the Mattermost website](http://www.mattermost.
 - Attach sound, video and image files from mobile devices 
 - Define team-specific branding and color themes across your devices
 
+#### Self-Host Ready
+
+- Host and manage dozens of teams from a single Mattermost server 
+- Easily manage your Mattermost server using a web-based System Console
+- Script setup and maintenance using Mattermost command line tools 
+
 ## Learn More
 
 - [Product Vision and Target Audiences](http://www.mattermost.org/vision/) - What we're solving and for whom are we building
 - [Mattermost Forum](http://forum.mattermost.org/) - For technical questions and answers
 - [Issue Tracker](http://www.mattermost.org/filing-issues/) - For reporting bugs
 - [Feature Ideas Forum](http://www.mattermost.org/feature-requests/) - For sharing ideas for future versions 
-- [Contributuion Guidelines](http://www.mattermost.org/contribute-to-mattermost/) - For contributing code or feedback to the project
+- [Contribution Guidelines](http://www.mattermost.org/contribute-to-mattermost/) - For contributing code or feedback to the project
 
 Follow us on Twitter at [@MattermostHQ](https://twitter.com/mattermosthq).
 
 ## Installing Mattermost
 
-There are multiple ways to install Mattermost depending on your needs. 
+Latest stable release of Mattermost is available from http://www.mattermost.org/download/, including binary distribution, and from install guides below. 
+
+If you use Docker, you can [install Mattermost in a single-container preview in one line](https://github.com/mattermost/platform/blob/master/doc/install/Docker-Single-Container.md#one-line-docker-install). 
 
 #### Quick Start Install for Product Evaluation 
 
-- [Local Machine Install with Docker](doc/install/single-container-install.md) - Explore product functionality using a single-container Docker install on a local machine, including Mac OSX, Ubuntu, or Arch Linux). Optionally set up email and upgrade your instance using DockerHub. 
+- [Local Machine Install with Docker](http://docs.mattermost.org/install/Docker-Single-Container/index.html) - Explore product functionality using a single-container Docker install on a local machine, including Mac OSX, Ubuntu, or Arch Linux). Optionally set up email and upgrade your instance using DockerHub. 
 
-- [AWS EBS Install with Docker](doc/install/aws-ebs-setup.md) - Explore product functionality using a single-container Docker install for Amazon Web Services Elastic Beanstalk. Optionally set up email and upgrade your instance using DockerHub. 
+- [AWS EBS Install with Docker](http://docs.mattermost.org/install/Amazon-Elastic-Beanstalk/index.html) - Explore product functionality using a single-container Docker install for Amazon Web Services Elastic Beanstalk. Optionally set up email and upgrade your instance using DockerHub. 
 
 #### Development Install 
 
-- [Developer Machine Setup](doc/install/dev-setup.md) - Setup your local machine development environment using Docker on Mac OSX or Ubuntu. Pull the latest stable release or pull the latest code from our development build. 
+- [Developer Machine Setup](http://docs.mattermost.org/developer/Setup/index.html) - Setup your local machine development environment using Docker on Mac OSX or Ubuntu. Pull the latest stable release or pull the latest code from our development build. 
 
 [![Build Status](https://travis-ci.org/mattermost/platform.svg?branch=master)](https://travis-ci.org/mattermost/platform)
 
-#### Production Deployment (for Beta2 and later)
+#### Production Deployment
 
-Prior to production installation, please review [Mattermost system requirements](doc/install/requirements.md). 
+Prior to production installation, please review [Mattermost system requirements](http://docs.mattermost.org/install/Requirements/index.html). 
+
+- [Production Install on Ubuntu 14.04](https://github.com/mattermost/platform/blob/release-1.0.0/doc/install/prod-ubuntu.md) - Install Mattermost for production environments. 
 
 - [GitLab Mattermost Production Installation](https://gitlab.com/gitlab-org/gitlab-mattermost) - Install Mattermost for production environments bundled with GitLab, a leading open source Git repository, using an omnibus package for Ubuntu 12.04, Ubuntu 14.04, Debian 7, Debian 8, and CentOS 6 (and RedHat/Oracle/Scientific Linux 6), CentOS 7 (and RedHat/Oracle/Scientific Linux 7). 
 
@@ -88,7 +98,7 @@ Joining the Mattermost community is a great way to build relationships with othe
 #### Contribute
 
 - Share [feature ideas](http://www.mattermost.org/feature-requests/) with the Mattermost community
-- Review the [Mattermost Code Contribution Guidelines](doc/developer/code-contribution.md) to submit patches for the core product
+- Review the [Mattermost Code Contribution Guidelines](http://docs.mattermost.org/developer/Code-Contribution-Guidelines/index.html) to submit patches for the core product
 - Consider building tools that help developers and IT professionals manage Mattermost more effectively (API documentation coming in Beta2)
 
 #### Have other ideas or suggestions?

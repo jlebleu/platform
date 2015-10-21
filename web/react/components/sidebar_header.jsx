@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var NavbarDropdown = require('./navbar_dropdown.jsx');
@@ -52,6 +52,8 @@ export default class SidebarHeader extends React.Component {
                 <NavbarDropdown
                     ref='dropdown'
                     teamType={this.props.teamType}
+                    teamDisplayName={this.props.teamDisplayName}
+                    teamName={this.props.teamName}
                 />
             </div>
         );
@@ -64,5 +66,6 @@ SidebarHeader.defaultProps = {
 };
 SidebarHeader.propTypes = {
     teamDisplayName: React.PropTypes.string,
+    teamName: React.PropTypes.string,
     teamType: React.PropTypes.string
 };

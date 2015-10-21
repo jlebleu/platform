@@ -1,18 +1,18 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var Authorize = require('../components/authorize.jsx');
 
-function setupAuthorizePage(teamName, appName, responseType, clientId, redirectUri, scope, state) {
-    React.render(
+function setupAuthorizePage(props) {
+    ReactDOM.render(
         <Authorize
-            teamName={teamName}
-            appName={appName}
-            responseType={responseType}
-            clientId={clientId}
-            redirectUri={redirectUri}
-            scope={scope}
-            state={state}
+            teamName={props.TeamName}
+            appName={props.AppName}
+            responseType={props.ResponseType}
+            clientId={props.ClientId}
+            redirectUri={props.RedirectUri}
+            scope={props.Scope}
+            state={props.State}
         />,
         document.getElementById('authorize')
     );

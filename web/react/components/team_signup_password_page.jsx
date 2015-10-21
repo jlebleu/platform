@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var Client = require('../utils/client.jsx');
@@ -22,7 +22,7 @@ export default class TeamSignupPasswordPage extends React.Component {
     submitNext(e) {
         e.preventDefault();
 
-        var password = React.findDOMNode(this.refs.password).value.trim();
+        var password = ReactDOM.findDOMNode(this.refs.password).value.trim();
         if (!password || password.length < 5) {
             this.setState({passwordError: 'Please enter at least 5 characters'});
             return;
@@ -53,7 +53,7 @@ export default class TeamSignupPasswordPage extends React.Component {
                         props.state.wizard = 'finished';
                         props.updateParent(props.state, true);
 
-                        window.location.href = '/';
+                        window.location.href = '/' + teamSignup.team.name + '/channels/town-square';
                     }.bind(this),
                     function loginFail(err) {
                         if (err.message === 'Login failed because email address has not been verified') {
@@ -109,8 +109,9 @@ export default class TeamSignupPasswordPage extends React.Component {
                                         className='form-control'
                                         placeholder=''
                                         maxLength='128'
+                                        spellCheck='false'
                                     />
-                                    <div className='color--light form__hint'>Passwords must contain 5 to 50 characters. Your password will be strongest if it contains a mix of symbols, numbers, and upper and lowercase characters.</div>
+                                    <span className='color--light help-block'>Passwords must contain 5 to 50 characters. Your password will be strongest if it contains a mix of symbols, numbers, and upper and lowercase characters.</span>
                                 </div>
                             </div>
                             {passwordError}

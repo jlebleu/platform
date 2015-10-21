@@ -1,10 +1,12 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/mattermost/platform/model"
 	"github.com/mattermost/platform/store"
@@ -126,12 +128,12 @@ func TestJoinCommands(t *testing.T) {
 	}
 
 	rs5 := Client.Must(Client.Command("", "/join "+channel2.Name, false)).Data.(*model.Command)
-	if rs5.GotoLocation != "/channels/"+channel2.Name {
+	if !strings.HasSuffix(rs5.GotoLocation, "/"+team.Name+"/channels/"+channel2.Name) {
 		t.Fatal("failed to join channel")
 	}
 
 	rs6 := Client.Must(Client.Command("", "/join "+channel3.Name, false)).Data.(*model.Command)
-	if rs6.GotoLocation == "/channels/"+channel3.Name {
+	if strings.HasSuffix(rs6.GotoLocation, "/"+team.Name+"/channels/"+channel3.Name) {
 		t.Fatal("should not have joined direct message channel")
 	}
 
@@ -174,6 +176,8 @@ func TestEchoCommand(t *testing.T) {
 	if r1.Response != model.RESP_EXECUTED {
 		t.Fatal("Echo command failed to execute")
 	}
+
+	time.Sleep(100 * time.Millisecond)
 
 	p1 := Client.Must(Client.GetPosts(channel1.Id, 0, 2, "")).Data.(*model.PostList)
 	if len(p1.Order) != 1 {

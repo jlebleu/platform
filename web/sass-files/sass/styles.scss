@@ -10,6 +10,7 @@
 @import "partials/perfect-scrollbar";
 @import "partials/font-awesome";
 @import "partials/base";
+@import "partials/colorpicker";
 
 // Channel Css
 @import "partials/headers";
@@ -37,6 +38,10 @@
 @import "partials/loading";
 @import "partials/dialer";
 @import "partials/get-link";
+@import "partials/markdown";
 
 // Responsive Css
 @import "partials/responsive";
+
+// Standalone Css
+@import "partials/oauth";

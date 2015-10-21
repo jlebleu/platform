@@ -1,10 +1,10 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var SignupUserComplete = require('../components/signup_user_complete.jsx');
 
 function setupSignupUserCompletePage(props) {
-    React.render(
+    ReactDOM.render(
         <SignupUserComplete
             teamId={props.TeamId}
             teamName={props.TeamName}
@@ -12,7 +12,6 @@ function setupSignupUserCompletePage(props) {
             email={props.Email}
             hash={props.Hash}
             data={props.Data}
-            authServices={props.AuthServices}
         />,
         document.getElementById('signup-user-complete')
     );

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 const Utils = require('../utils/utils.jsx');
@@ -25,7 +25,7 @@ export default class NewChannelModal extends React.Component {
     handleSubmit(e) {
         e.preventDefault();
 
-        const displayName = React.findDOMNode(this.refs.display_name).value.trim();
+        const displayName = ReactDOM.findDOMNode(this.refs.display_name).value.trim();
         if (displayName.length < 1) {
             this.setState({displayNameError: 'This field is required'});
             return;
@@ -35,8 +35,8 @@ export default class NewChannelModal extends React.Component {
     }
     handleChange() {
         const newData = {
-            displayName: React.findDOMNode(this.refs.display_name).value,
-            description: React.findDOMNode(this.refs.channel_desc).value
+            displayName: ReactDOM.findDOMNode(this.refs.display_name).value,
+            description: ReactDOM.findDOMNode(this.refs.channel_desc).value
         };
         this.props.onDataChanged(newData);
     }
@@ -93,6 +93,7 @@ export default class NewChannelModal extends React.Component {
             <span>
                 <Modal
                     show={this.props.show}
+                    bsSize='large'
                     onHide={this.props.onModalDismissed}
                 >
                     <Modal.Header closeButton={true}>
@@ -122,7 +123,7 @@ export default class NewChannelModal extends React.Component {
                                     />
                                     {displayNameError}
                                     <p className='input__help dark'>
-                                        {'Channel URL: ' + prettyTeamURL + this.props.channelData.name + ' ('}
+                                        {'URL: ' + prettyTeamURL + this.props.channelData.name + ' ('}
                                         <a
                                             href='#'
                                             onClick={this.props.onChangeURLPressed}

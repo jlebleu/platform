@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -25,7 +26,6 @@ func InitPost(r *mux.Router) {
 
 	sr := r.PathPrefix("/channels/{id:[A-Za-z0-9]+}").Subrouter()
 	sr.Handle("/create", ApiUserRequired(createPost)).Methods("POST")
-	sr.Handle("/valet_create", ApiUserRequired(createValetPost)).Methods("POST")
 	sr.Handle("/update", ApiUserRequired(updatePost)).Methods("POST")
 	sr.Handle("/posts/{offset:[0-9]+}/{limit:[0-9]+}", ApiUserRequiredActivity(getPosts, false)).Methods("GET")
 	sr.Handle("/posts/{time:[0-9]+}", ApiUserRequiredActivity(getPostsSince, false)).Methods("GET")
@@ -56,80 +56,15 @@ func createPost(c *Context, w http.ResponseWriter, r *http.Request) {
 
 		return
 	} else {
+		if result := <-Srv.Store.Channel().UpdateLastViewedAt(post.ChannelId, c.Session.UserId); result.Err != nil {
+			l4g.Error("Encountered error updating last viewed, channel_id=%s, user_id=%s, err=%v", post.ChannelId, c.Session.UserId, result.Err)
+		}
+
 		w.Write([]byte(rp.ToJson()))
 	}
 }
 
-func createValetPost(c *Context, w http.ResponseWriter, r *http.Request) {
-	tchan := Srv.Store.Team().Get(c.Session.TeamId)
-
-	post := model.PostFromJson(r.Body)
-	if post == nil {
-		c.SetInvalidParam("createValetPost", "post")
-		return
-	}
-
-	cchan := Srv.Store.Channel().CheckOpenChannelPermissions(c.Session.TeamId, post.ChannelId)
-
-	// Any one with access to the team can post as valet to any open channel
-	if !c.HasPermissionsToChannel(cchan, "createValetPost") {
-		return
-	}
-
-	// Make sure this team has the valet feature enabled
-	if tResult := <-tchan; tResult.Err != nil {
-		c.Err = model.NewAppError("createValetPost", "Could not find the team for this session, team_id="+c.Session.TeamId, "")
-		return
-	} else {
-		if !tResult.Data.(*model.Team).AllowValet {
-			c.Err = model.NewAppError("createValetPost", "The valet feature is currently turned off. Please contact your team administrator for details.", "")
-			c.Err.StatusCode = http.StatusNotImplemented
-			return
-		}
-	}
-
-	if rp, err := CreateValetPost(c, post); err != nil {
-		c.Err = err
-
-		if strings.Contains(c.Err.Message, "parameter") {
-			c.Err.StatusCode = http.StatusBadRequest
-		}
-
-		return
-	} else {
-		w.Write([]byte(rp.ToJson()))
-	}
-}
-
-func CreateValetPost(c *Context, post *model.Post) (*model.Post, *model.AppError) {
-	post.Hashtags, _ = model.ParseHashtags(post.Message)
-
-	post.Filenames = []string{} // no files allowed in valet posts yet
-
-	if result := <-Srv.Store.User().GetByUsername(c.Session.TeamId, "valet"); result.Err != nil {
-		// if the bot doesn't exist, create it
-		if tresult := <-Srv.Store.Team().Get(c.Session.TeamId); tresult.Err != nil {
-			return nil, tresult.Err
-		} else {
-			post.UserId = (CreateValet(c, tresult.Data.(*model.Team))).Id
-		}
-	} else {
-		post.UserId = result.Data.(*model.User).Id
-	}
-
-	var rpost *model.Post
-	if result := <-Srv.Store.Post().Save(post); result.Err != nil {
-		return nil, result.Err
-	} else {
-		rpost = result.Data.(*model.Post)
-	}
-
-	fireAndForgetNotifications(rpost, c.Session.TeamId, c.GetSiteURL())
-
-	return rpost, nil
-}
-
-func CreatePost(c *Context, post *model.Post, doUpdateLastViewed bool) (*model.Post, *model.AppError) {
+func CreatePost(c *Context, post *model.Post, triggerWebhooks bool) (*model.Post, *model.AppError) {
 	var pchan store.StoreChannel
 	if len(post.RootId) > 0 {
 		pchan = Srv.Store.Post().Get(post.RootId)
@@ -157,6 +92,8 @@ func CreatePost(c *Context, post *model.Post, doUpdateLastViewed bool) (*model.P
 			}
 		}
 	}
+
+	post.CreateAt = 0
 
 	post.Hashtags, _ = model.ParseHashtags(post.Message)
 
@@ -198,50 +135,193 @@ func CreatePost(c *Context, post *model.Post, doUpdateLastViewed bool) (*model.P
 	var rpost *model.Post
 	if result := <-Srv.Store.Post().Save(post); result.Err != nil {
 		return nil, result.Err
-	} else if doUpdateLastViewed && (<-Srv.Store.Channel().UpdateLastViewedAt(post.ChannelId, c.Session.UserId)).Err != nil {
-		return nil, result.Err
 	} else {
 		rpost = result.Data.(*model.Post)
 
-		fireAndForgetNotifications(rpost, c.Session.TeamId, c.GetSiteURL())
+		handlePostEventsAndForget(c, rpost, triggerWebhooks)
 
 	}
 
 	return rpost, nil
 }
 
-func fireAndForgetNotifications(post *model.Post, teamId, siteURL string) {
+func CreateWebhookPost(c *Context, channelId, text, overrideUsername, overrideIconUrl string) (*model.Post, *model.AppError) {
+	// parse links into Markdown format
+	linkWithTextRegex := regexp.MustCompile(`<([^<\|]+)\|([^>]+)>`)
+	text = linkWithTextRegex.ReplaceAllString(text, "[${2}](${1})")
 
+	linkRegex := regexp.MustCompile(`<\s*(\S*)\s*>`)
+	text = linkRegex.ReplaceAllString(text, "${1}")
+
+	post := &model.Post{UserId: c.Session.UserId, ChannelId: channelId, Message: text}
+	post.AddProp("from_webhook", "true")
+
+	if utils.Cfg.ServiceSettings.EnablePostUsernameOverride {
+		if len(overrideUsername) != 0 {
+			post.AddProp("override_username", overrideUsername)
+		} else {
+			post.AddProp("override_username", model.DEFAULT_WEBHOOK_USERNAME)
+		}
+	}
+
+	if utils.Cfg.ServiceSettings.EnablePostIconOverride {
+		if len(overrideIconUrl) != 0 {
+			post.AddProp("override_icon_url", overrideIconUrl)
+		} else {
+			post.AddProp("override_icon_url", model.DEFAULT_WEBHOOK_ICON)
+		}
+	}
+
+	if _, err := CreatePost(c, post, false); err != nil {
+		return nil, model.NewAppError("CreateWebhookPost", "Error creating post", "err="+err.Message)
+	}
+
+	return post, nil
+}
+
+func handlePostEventsAndForget(c *Context, post *model.Post, triggerWebhooks bool) {
 	go func() {
-		// Get a list of user names (to be used as keywords) and ids for the given team
-		uchan := Srv.Store.User().GetProfiles(teamId)
-		echan := Srv.Store.Channel().GetMembers(post.ChannelId)
+		tchan := Srv.Store.Team().Get(c.Session.TeamId)
 		cchan := Srv.Store.Channel().Get(post.ChannelId)
-		tchan := Srv.Store.Team().Get(teamId)
+		uchan := Srv.Store.User().Get(post.UserId)
+
+		var team *model.Team
+		if result := <-tchan; result.Err != nil {
+			l4g.Error("Encountered error getting team, team_id=%s, err=%v", c.Session.TeamId, result.Err)
+			return
+		} else {
+			team = result.Data.(*model.Team)
+		}
 
 		var channel *model.Channel
-		var channelName string
-		var bodyText string
-		var subjectText string
 		if result := <-cchan; result.Err != nil {
-			l4g.Error("Failed to retrieve channel channel_id=%v, err=%v", post.ChannelId, result.Err)
+			l4g.Error("Encountered error getting channel, channel_id=%s, err=%v", post.ChannelId, result.Err)
 			return
 		} else {
 			channel = result.Data.(*model.Channel)
-			if channel.Type == model.CHANNEL_DIRECT {
-				bodyText = "You have one new message."
-				subjectText = "New Private Message"
-			} else {
-				bodyText = "You have one new mention."
-				subjectText = "New Mention"
-				channelName = channel.DisplayName
+		}
+
+		sendNotificationsAndForget(c, post, team, channel)
+
+		var user *model.User
+		if result := <-uchan; result.Err != nil {
+			l4g.Error("Encountered error getting user, user_id=%s, err=%v", post.UserId, result.Err)
+			return
+		} else {
+			user = result.Data.(*model.User)
+		}
+
+		if triggerWebhooks {
+			handleWebhookEventsAndForget(c, post, team, channel, user)
+		}
+	}()
+}
+
+func handleWebhookEventsAndForget(c *Context, post *model.Post, team *model.Team, channel *model.Channel, user *model.User) {
+	go func() {
+		hchan := Srv.Store.Webhook().GetOutgoingByTeam(c.Session.TeamId)
+
+		hooks := []*model.OutgoingWebhook{}
+
+		if result := <-hchan; result.Err != nil {
+			l4g.Error("Encountered error getting webhooks by team, err=%v", result.Err)
+			return
+		} else {
+			hooks = result.Data.([]*model.OutgoingWebhook)
+		}
+
+		if len(hooks) == 0 {
+			return
+		}
+
+		firstWord := strings.Split(post.Message, " ")[0]
+
+		relevantHooks := []*model.OutgoingWebhook{}
+
+		for _, hook := range hooks {
+			if hook.ChannelId == post.ChannelId {
+				if len(hook.TriggerWords) == 0 || hook.HasTriggerWord(firstWord) {
+					relevantHooks = append(relevantHooks, hook)
+				}
+			} else if len(hook.ChannelId) == 0 && hook.HasTriggerWord(firstWord) {
+				relevantHooks = append(relevantHooks, hook)
 			}
+		}
+
+		for _, hook := range relevantHooks {
+			go func() {
+				p := url.Values{}
+				p.Set("token", hook.Token)
+
+				p.Set("team_id", hook.TeamId)
+				p.Set("team_domain", team.Name)
+
+				p.Set("channel_id", post.ChannelId)
+				p.Set("channel_name", channel.Name)
+
+				p.Set("timestamp", strconv.FormatInt(post.CreateAt/1000, 10))
+
+				p.Set("user_id", post.UserId)
+				p.Set("user_name", user.Username)
+
+				p.Set("text", post.Message)
+				p.Set("trigger_word", firstWord)
+
+				client := &http.Client{}
+
+				for _, url := range hook.CallbackURLs {
+					go func() {
+						req, _ := http.NewRequest("POST", url, strings.NewReader(p.Encode()))
+						req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+						req.Header.Set("Accept", "application/json")
+						if resp, err := client.Do(req); err != nil {
+							l4g.Error("Event POST failed, err=%s", err.Error())
+						} else {
+							respProps := model.MapFromJson(resp.Body)
+
+							// copy the context and create a mock session for posting the message
+							mockSession := model.Session{UserId: hook.CreatorId, TeamId: hook.TeamId, IsOAuth: false}
+							newContext := &Context{mockSession, model.NewId(), "", c.Path, nil, c.teamURLValid, c.teamURL, c.siteURL}
+
+							if text, ok := respProps["text"]; ok {
+								if _, err := CreateWebhookPost(newContext, post.ChannelId, text, respProps["username"], respProps["icon_url"]); err != nil {
+									l4g.Error("Failed to create response post, err=%v", err)
+								}
+							}
+						}
+					}()
+				}
+
+			}()
+		}
+
+	}()
+
+}
+
+func sendNotificationsAndForget(c *Context, post *model.Post, team *model.Team, channel *model.Channel) {
+
+	go func() {
+		// Get a list of user names (to be used as keywords) and ids for the given team
+		uchan := Srv.Store.User().GetProfiles(c.Session.TeamId)
+		echan := Srv.Store.Channel().GetMembers(post.ChannelId)
+
+		var channelName string
+		var bodyText string
+		var subjectText string
+		if channel.Type == model.CHANNEL_DIRECT {
+			bodyText = "You have one new message."
+			subjectText = "New Direct Message"
+		} else {
+			bodyText = "You have one new mention."
+			subjectText = "New Mention"
+			channelName = channel.DisplayName
 		}
 
 		var mentionedUsers []string
 
 		if result := <-uchan; result.Err != nil {
-			l4g.Error("Failed to retrieve user profiles team_id=%v, err=%v", teamId, result.Err)
+			l4g.Error("Failed to retrieve user profiles team_id=%v, err=%v", c.Session.TeamId, result.Err)
 			return
 		} else {
 			profileMap := result.Data.(map[string]*model.User)
@@ -354,7 +434,7 @@ func fireAndForgetNotifications(post *model.Post, teamId, siteURL string) {
 				}
 
 				for id := range toEmailMap {
-					fireAndForgetMentionUpdate(post.ChannelId, id)
+					updateMentionCountAndForget(post.ChannelId, id)
 				}
 			}
 
@@ -364,23 +444,15 @@ func fireAndForgetNotifications(post *model.Post, teamId, siteURL string) {
 					mentionedUsers = append(mentionedUsers, k)
 				}
 
-				var teamDisplayName string
-				var teamURL string
-				if result := <-tchan; result.Err != nil {
-					l4g.Error("Failed to retrieve team team_id=%v, err=%v", teamId, result.Err)
-					return
-				} else {
-					teamDisplayName = result.Data.(*model.Team).DisplayName
-					teamURL = siteURL + "/" + result.Data.(*model.Team).Name
-				}
+				teamURL := c.GetSiteURL() + "/" + team.Name
 
 				// Build and send the emails
 				location, _ := time.LoadLocation("UTC")
 				tm := time.Unix(post.CreateAt/1000, 0).In(location)
 
 				subjectPage := NewServerTemplatePage("post_subject")
-				subjectPage.Props["SiteURL"] = siteURL
-				subjectPage.Props["TeamDisplayName"] = teamDisplayName
+				subjectPage.Props["SiteURL"] = c.GetSiteURL()
+				subjectPage.Props["TeamDisplayName"] = team.DisplayName
 				subjectPage.Props["SubjectText"] = subjectText
 				subjectPage.Props["Month"] = tm.Month().String()[:3]
 				subjectPage.Props["Day"] = fmt.Sprintf("%d", tm.Day())
@@ -398,9 +470,9 @@ func fireAndForgetNotifications(post *model.Post, teamId, siteURL string) {
 					}
 
 					bodyPage := NewServerTemplatePage("post_body")
-					bodyPage.Props["SiteURL"] = siteURL
+					bodyPage.Props["SiteURL"] = c.GetSiteURL()
 					bodyPage.Props["Nickname"] = profileMap[id].FirstName
-					bodyPage.Props["TeamDisplayName"] = teamDisplayName
+					bodyPage.Props["TeamDisplayName"] = team.DisplayName
 					bodyPage.Props["ChannelName"] = channelName
 					bodyPage.Props["BodyText"] = bodyText
 					bodyPage.Props["SenderName"] = senderName
@@ -458,7 +530,7 @@ func fireAndForgetNotifications(post *model.Post, teamId, siteURL string) {
 
 									alreadySeen[session.DeviceId] = session.DeviceId
 
-									utils.FireAndForgetSendAppleNotify(session.DeviceId, subjectPage.Render(), 1)
+									utils.SendAppleNotifyAndForget(session.DeviceId, subjectPage.Render(), 1)
 								}
 							}
 						}
@@ -467,7 +539,7 @@ func fireAndForgetNotifications(post *model.Post, teamId, siteURL string) {
 			}
 		}
 
-		message := model.NewMessage(teamId, post.ChannelId, post.UserId, model.ACTION_POSTED)
+		message := model.NewMessage(c.Session.TeamId, post.ChannelId, post.UserId, model.ACTION_POSTED)
 		message.Add("post", post.ToJson())
 
 		if len(post.Filenames) != 0 {
@@ -490,7 +562,7 @@ func fireAndForgetNotifications(post *model.Post, teamId, siteURL string) {
 	}()
 }
 
-func fireAndForgetMentionUpdate(channelId, userId string) {
+func updateMentionCountAndForget(channelId, userId string) {
 	go func() {
 		if result := <-Srv.Store.Channel().IncrementMentionCount(channelId, userId); result.Err != nil {
 			l4g.Error("Failed to update mention count for user_id=%v on channel_id=%v err=%v", userId, channelId, result.Err)
@@ -703,7 +775,7 @@ func deletePost(c *Context, w http.ResponseWriter, r *http.Request) {
 
 		post := result.Data.(*model.PostList).Posts[postId]
 
-		if !c.HasPermissionsToChannel(cchan, "deletePost") && !c.IsTeamAdmin(post.UserId) {
+		if !c.HasPermissionsToChannel(cchan, "deletePost") && !c.IsTeamAdmin() {
 			return
 		}
 
@@ -718,7 +790,7 @@ func deletePost(c *Context, w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if post.UserId != c.Session.UserId && !model.IsInRole(c.Session.Roles, model.ROLE_TEAM_ADMIN) {
+		if post.UserId != c.Session.UserId && !c.IsTeamAdmin() {
 			c.Err = model.NewAppError("deletePost", "You do not have the appropriate permissions", "")
 			c.Err.StatusCode = http.StatusForbidden
 			return
@@ -748,16 +820,16 @@ func searchPosts(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hashtagTerms, plainTerms := model.ParseHashtags(terms)
+	plainSearchParams, hashtagSearchParams := model.ParseSearchParams(terms)
 
 	var hchan store.StoreChannel
-	if len(hashtagTerms) != 0 {
-		hchan = Srv.Store.Post().Search(c.Session.TeamId, c.Session.UserId, hashtagTerms, true)
+	if hashtagSearchParams != nil {
+		hchan = Srv.Store.Post().Search(c.Session.TeamId, c.Session.UserId, hashtagSearchParams)
 	}
 
 	var pchan store.StoreChannel
-	if len(plainTerms) != 0 {
-		pchan = Srv.Store.Post().Search(c.Session.TeamId, c.Session.UserId, terms, false)
+	if plainSearchParams != nil {
+		pchan = Srv.Store.Post().Search(c.Session.TeamId, c.Session.UserId, plainSearchParams)
 	}
 
 	mainList := &model.PostList{}

@@ -1,25 +1,44 @@
 # Mattermost Documentation 
 
-## General Information 
+## Installation 
 
-- [Mattermost Release Numbering Scheme](install/release-numbering.md)
+#### Preview Installation
+Get up and running quickly with Docker-based install
 
-## Administrator Documentation 
+- [AWS Elastic Beanstalk Setup](install/Amazon-Elastic-Beanstalk.md)
+- [Docker Single Container Preview Setup](install/Docker-Single-Container.md)
+- [SMTP Email Setup](install/SMTP-Email-Setup.md)
+- [System Console Settings](install/Configuration-Settings.md)
 
-### Installation 
+#### Production Installation
+Set up Mattermost in your data center 
+- [Software and Hardware Requirements](install/Requirements.md)
+- [Production Ubuntu Setup](install/Production-Ubuntu.md)
+- [SMTP Email Setup](install/SMTP-Email-Setup.md)
+- [System Console Settings](install/Configuration-Settings.md)
 
-- [Software and Hardware Requirements](install/requirements.md)
-- [Local Machine Setup ](install/single-container-install.md)
-- [AWS Elastic Beanstalk Setup](install/aws-ebs-setup.md)
-- [Developer Machine Setup](install/dev-setup.md)
-
-### Configuration 
-
-- [GitLab SSO Configuration](integrations/sso/gitlab-sso.md) 
-- [SMTP Email Setup](config/smtp-email-setup.md)
+#### Configuration and Management 
+- [System Console Settings](install/Configuration-Settings.md)
+  - [GitLab SSO Configuration](integrations/Single-Sign-On/Gitlab.md) 
+- [Mattermost Release Numbering Scheme](install/Release-Numbering.md)
 
 ## Developer Documentation 
 
-- [Code Contribution Guidelines](developer/code-contribution.md)
-- [Developer Machine Setup](install/dev-setup.md)
-- [Mattermost Style Guide](developer/style-guide.md)
+- [Code Contribution Guidelines](developer/Code-Contribution-Guidelines.md)
+- [Developer Machine Setup](developer/Setup.md)
+- [Mattermost Style Guide](developer/Style-Guide.md)
+- [API Overview](api/Overview.md)
+ - [Incoming Webhooks](integrations/webhooks/Incoming-Webhooks.md) 
+
+## Help
+
+_Note: End user help documentation is a new feature being completed for the v1.2 release. The materials below are work in progress._
+
+- User Interface
+ - [Manage Members](help/Manage-Members.md)
+ - Team Settings 
+   - [Slack Import](help/Slack-Import.md)
+
+- Messaging
+ - [Mattermost Markdown Formatting](usage/Markdown.md)
+

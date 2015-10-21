@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var utils = require('../utils/utils.jsx');
@@ -21,7 +21,7 @@ export default class TeamSignupDisplayNamePage extends React.Component {
     submitNext(e) {
         e.preventDefault();
 
-        var displayName = React.findDOMNode(this.refs.name).value.trim();
+        var displayName = ReactDOM.findDOMNode(this.refs.name).value.trim();
         if (!displayName) {
             this.setState({nameError: 'This field is required'});
             return;
@@ -66,6 +66,7 @@ export default class TeamSignupDisplayNamePage extends React.Component {
                                     defaultValue={this.props.state.team.display_name}
                                     autoFocus={true}
                                     onFocus={this.handleFocus}
+                                    spellCheck='false'
                                 />
                             </div>
                         </div>

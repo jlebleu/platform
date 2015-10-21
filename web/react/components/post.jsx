@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var PostHeader = require('./post_header.jsx');
@@ -51,7 +51,7 @@ export default class Post extends React.Component {
 
         var post = this.props.post;
         client.createPost(post, post.channel_id,
-            function success(data) {
+            (data) => {
                 AsyncClient.getPosts();
 
                 var channel = ChannelStore.get(post.channel_id);
@@ -65,11 +65,11 @@ export default class Post extends React.Component {
                     post: data
                 });
             },
-            function error() {
+            () => {
                 post.state = Constants.POST_FAILED;
                 PostStore.updatePendingPost(post);
                 this.forceUpdate();
-            }.bind(this)
+            }
         );
 
         post.state = Constants.POST_LOADING;
@@ -81,7 +81,39 @@ export default class Post extends React.Component {
             return true;
         }
 
+        if (nextProps.sameRoot !== this.props.sameRoot) {
+            return true;
+        }
+
+        if (nextProps.sameUser !== this.props.sameUser) {
+            return true;
+        }
+
+        if (this.getCommentCount(nextProps) !== this.getCommentCount(this.props)) {
+            return true;
+        }
+
         return false;
+    }
+    getCommentCount(props) {
+        const post = props.post;
+        const parentPost = props.parentPost;
+        const posts = props.posts;
+
+        let commentCount = 0;
+        let commentRootId;
+        if (parentPost) {
+            commentRootId = post.root_id;
+        } else {
+            commentRootId = post.id;
+        }
+        for (let postId in posts) {
+            if (posts[postId].root_id === commentRootId) {
+                commentCount += 1;
+            }
+        }
+
+        return commentCount;
     }
     render() {
         var post = this.props.post;
@@ -93,18 +125,7 @@ export default class Post extends React.Component {
             type = 'Comment';
         }
 
-        var commentCount = 0;
-        var commentRootId;
-        if (parentPost) {
-            commentRootId = post.root_id;
-        } else {
-            commentRootId = post.id;
-        }
-        for (var postId in posts) {
-            if (posts[postId].root_id === commentRootId) {
-                commentCount += 1;
-            }
-        }
+        const commentCount = this.getCommentCount(this.props);
 
         var rootUser;
         if (this.props.sameRoot) {
@@ -137,11 +158,18 @@ export default class Post extends React.Component {
 
         var profilePic = null;
         if (!this.props.hideProfilePic) {
+            let src = '/api/v1/users/' + post.user_id + '/image?time=' + timestamp;
+            if (post.props && post.props.from_webhook && global.window.config.EnablePostIconOverride === 'true') {
+                if (post.props.override_icon_url) {
+                    src = post.props.override_icon_url;
+                }
+            }
+
             profilePic = (
                 <div className='post-profile-img__container'>
                     <img
                         className='post-profile-img'
-                        src={'/api/v1/users/' + post.user_id + '/image?time=' + timestamp}
+                        src={src}
                         height='36'
                         width='36'
                     />

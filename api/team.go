@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -25,12 +25,12 @@ func InitTeam(r *mux.Router) {
 	sr.Handle("/create_from_signup", ApiAppHandler(createTeamFromSignup)).Methods("POST")
 	sr.Handle("/create_with_sso/{service:[A-Za-z]+}", ApiAppHandler(createTeamFromSSO)).Methods("POST")
 	sr.Handle("/signup", ApiAppHandler(signupTeam)).Methods("POST")
+	sr.Handle("/all", ApiUserRequired(getAll)).Methods("GET")
 	sr.Handle("/find_team_by_name", ApiAppHandler(findTeamByName)).Methods("POST")
 	sr.Handle("/find_teams", ApiAppHandler(findTeams)).Methods("POST")
 	sr.Handle("/email_teams", ApiAppHandler(emailTeams)).Methods("POST")
 	sr.Handle("/invite_members", ApiUserRequired(inviteMembers)).Methods("POST")
 	sr.Handle("/update_name", ApiUserRequired(updateTeamDisplayName)).Methods("POST")
-	sr.Handle("/update_valet_feature", ApiUserRequired(updateValetFeature)).Methods("POST")
 	sr.Handle("/me", ApiUserRequired(getMyTeam)).Methods("GET")
 	// These should be moved to the global admain console
 	sr.Handle("/import_team", ApiUserRequired(importTeam)).Methods("POST")
@@ -38,7 +38,7 @@ func InitTeam(r *mux.Router) {
 }
 
 func signupTeam(c *Context, w http.ResponseWriter, r *http.Request) {
-	if utils.Cfg.ServiceSettings.DisableEmailSignUp {
+	if !utils.Cfg.EmailSettings.EnableSignUpWithEmail {
 		c.Err = model.NewAppError("signupTeam", "Team sign-up with email is disabled.", "")
 		c.Err.StatusCode = http.StatusNotImplemented
 		return
@@ -52,7 +52,7 @@ func signupTeam(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !isTreamCreationAllowed(c, email) {
+	if !isTeamCreationAllowed(c, email) {
 		return
 	}
 
@@ -60,14 +60,13 @@ func signupTeam(c *Context, w http.ResponseWriter, r *http.Request) {
 	subjectPage.Props["SiteURL"] = c.GetSiteURL()
 	bodyPage := NewServerTemplatePage("signup_team_body")
 	bodyPage.Props["SiteURL"] = c.GetSiteURL()
-	bodyPage.Props["TourUrl"] = utils.Cfg.TeamSettings.TourLink
 
 	props := make(map[string]string)
 	props["email"] = email
 	props["time"] = fmt.Sprintf("%v", model.GetMillis())
 
 	data := model.MapToJson(props)
-	hash := model.HashPassword(fmt.Sprintf("%v:%v", data, utils.Cfg.ServiceSettings.InviteSalt))
+	hash := model.HashPassword(fmt.Sprintf("%v:%v", data, utils.Cfg.EmailSettings.InviteSalt))
 
 	bodyPage.Props["Link"] = fmt.Sprintf("%s/signup_team_complete/?d=%s&h=%s", c.GetSiteURL(), url.QueryEscape(data), url.QueryEscape(hash))
 
@@ -76,7 +75,7 @@ func signupTeam(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if utils.Cfg.ServiceSettings.Mode == utils.MODE_DEV || utils.Cfg.EmailSettings.ByPassEmail {
+	if !utils.Cfg.EmailSettings.RequireEmailVerification {
 		m["follow_link"] = bodyPage.Props["Link"]
 	}
 
@@ -88,7 +87,8 @@ func createTeamFromSSO(c *Context, w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	service := params["service"]
 
-	if !utils.IsServiceAllowed(service) {
+	sso := utils.Cfg.GetSSOService(service)
+	if sso != nil && !sso.Enable {
 		c.SetInvalidParam("createTeamFromSSO", "service")
 		return
 	}
@@ -100,7 +100,7 @@ func createTeamFromSSO(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !isTreamCreationAllowed(c, team.Email) {
+	if !isTeamCreationAllowed(c, team.Email) {
 		return
 	}
 
@@ -126,8 +126,6 @@ func createTeamFromSSO(c *Context, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	team.AllowValet = utils.Cfg.TeamSettings.AllowValetDefault
-
 	if result := <-Srv.Store.Team().Save(team); result.Err != nil {
 		c.Err = result.Err
 		return
@@ -147,7 +145,7 @@ func createTeamFromSSO(c *Context, w http.ResponseWriter, r *http.Request) {
 }
 
 func createTeamFromSignup(c *Context, w http.ResponseWriter, r *http.Request) {
-	if utils.Cfg.ServiceSettings.DisableEmailSignUp {
+	if !utils.Cfg.EmailSettings.EnableSignUpWithEmail {
 		c.Err = model.NewAppError("createTeamFromSignup", "Team sign-up with email is disabled.", "")
 		c.Err.StatusCode = http.StatusNotImplemented
 		return
@@ -171,7 +169,7 @@ func createTeamFromSignup(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !isTreamCreationAllowed(c, teamSignup.Team.Email) {
+	if !isTeamCreationAllowed(c, teamSignup.Team.Email) {
 		return
 	}
 
@@ -188,7 +186,7 @@ func createTeamFromSignup(c *Context, w http.ResponseWriter, r *http.Request) {
 	teamSignup.User.TeamId = ""
 	teamSignup.User.Password = password
 
-	if !model.ComparePassword(teamSignup.Hash, fmt.Sprintf("%v:%v", teamSignup.Data, utils.Cfg.ServiceSettings.InviteSalt)) {
+	if !model.ComparePassword(teamSignup.Hash, fmt.Sprintf("%v:%v", teamSignup.Data, utils.Cfg.EmailSettings.InviteSalt)) {
 		c.Err = model.NewAppError("createTeamFromSignup", "The signup link does not appear to be valid", "")
 		return
 	}
@@ -209,8 +207,6 @@ func createTeamFromSignup(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	teamSignup.Team.AllowValet = utils.Cfg.TeamSettings.AllowValetDefault
-
 	if result := <-Srv.Store.Team().Save(&teamSignup.Team); result.Err != nil {
 		c.Err = result.Err
 		return
@@ -228,13 +224,6 @@ func createTeamFromSignup(c *Context, w http.ResponseWriter, r *http.Request) {
 		ruser := CreateUser(c, rteam, &teamSignup.User)
 		if c.Err != nil {
 			return
-		}
-
-		if teamSignup.Team.AllowValet {
-			CreateValet(c, rteam)
-			if c.Err != nil {
-				return
-			}
 		}
 
 		InviteMembers(c, rteam, ruser, teamSignup.Invites)
@@ -257,9 +246,9 @@ func createTeam(c *Context, w http.ResponseWriter, r *http.Request) {
 }
 
 func CreateTeam(c *Context, team *model.Team) *model.Team {
-	if utils.Cfg.ServiceSettings.DisableEmailSignUp {
+	if !utils.Cfg.EmailSettings.EnableSignUpWithEmail {
 		c.Err = model.NewAppError("createTeam", "Team sign-up with email is disabled.", "")
-		c.Err.StatusCode = http.StatusNotImplemented
+		c.Err.StatusCode = http.StatusForbidden
 		return nil
 	}
 
@@ -268,12 +257,7 @@ func CreateTeam(c *Context, team *model.Team) *model.Team {
 		return nil
 	}
 
-	if !isTreamCreationAllowed(c, team.Email) {
-		return nil
-	}
-
-	if utils.Cfg.ServiceSettings.Mode != utils.MODE_DEV {
-		c.Err = model.NewAppError("CreateTeam", "The mode does not allow network creation without a valid invite", "")
+	if !isTeamCreationAllowed(c, team.Email) {
 		return nil
 	}
 
@@ -288,23 +272,16 @@ func CreateTeam(c *Context, team *model.Team) *model.Team {
 			return nil
 		}
 
-		if rteam.AllowValet {
-			CreateValet(c, rteam)
-			if c.Err != nil {
-				return nil
-			}
-		}
-
 		return rteam
 	}
 }
 
-func isTreamCreationAllowed(c *Context, email string) bool {
+func isTeamCreationAllowed(c *Context, email string) bool {
 
 	email = strings.ToLower(email)
 
-	if utils.Cfg.TeamSettings.DisableTeamCreation {
-		c.Err = model.NewAppError("isTreamCreationAllowed", "Team creation has been disabled. Please ask your systems administrator for details.", "")
+	if !utils.Cfg.TeamSettings.EnableTeamCreation {
+		c.Err = model.NewAppError("isTeamCreationAllowed", "Team creation has been disabled. Please ask your systems administrator for details.", "")
 		return false
 	}
 
@@ -321,11 +298,58 @@ func isTreamCreationAllowed(c *Context, email string) bool {
 	}
 
 	if len(utils.Cfg.TeamSettings.RestrictCreationToDomains) > 0 && !matched {
-		c.Err = model.NewAppError("isTreamCreationAllowed", "Email must be from a specific domain (e.g. @example.com). Please ask your systems administrator for details.", "")
+		c.Err = model.NewAppError("isTeamCreationAllowed", "Email must be from a specific domain (e.g. @example.com). Please ask your systems administrator for details.", "")
 		return false
 	}
 
 	return true
+}
+
+func getAll(c *Context, w http.ResponseWriter, r *http.Request) {
+	if !c.HasSystemAdminPermissions("getLogs") {
+		return
+	}
+
+	if result := <-Srv.Store.Team().GetAll(); result.Err != nil {
+		c.Err = result.Err
+		return
+	} else {
+		teams := result.Data.([]*model.Team)
+		m := make(map[string]*model.Team)
+		for _, v := range teams {
+			m[v.Id] = v
+		}
+
+		w.Write([]byte(model.TeamMapToJson(m)))
+	}
+}
+
+func revokeAllSessions(c *Context, w http.ResponseWriter, r *http.Request) {
+	props := model.MapFromJson(r.Body)
+	id := props["id"]
+
+	if result := <-Srv.Store.Session().Get(id); result.Err != nil {
+		c.Err = result.Err
+		return
+	} else {
+		session := result.Data.(*model.Session)
+
+		c.LogAudit("revoked_all=" + id)
+
+		if session.IsOAuth {
+			RevokeAccessToken(session.Token)
+		} else {
+			sessionCache.Remove(session.Token)
+
+			if result := <-Srv.Store.Session().Remove(session.Id); result.Err != nil {
+				c.Err = result.Err
+				return
+			} else {
+				w.Write([]byte(model.MapToJson(props)))
+				return
+			}
+		}
+	}
 }
 
 func findTeamByName(c *Context, w http.ResponseWriter, r *http.Request) {
@@ -385,14 +409,13 @@ func findTeams(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		teams := result.Data.([]*model.Team)
-
-		s := make([]string, 0, len(teams))
-
+		m := make(map[string]*model.Team)
 		for _, v := range teams {
-			s = append(s, v.Name)
+			v.Sanitize()
+			m[v.Id] = v
 		}
 
-		w.Write([]byte(model.ArrayToJson(s)))
+		w.Write([]byte(model.TeamMapToJson(m)))
 	}
 }
 
@@ -408,9 +431,9 @@ func emailTeams(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	subjectPage := NewServerTemplatePage("find_teams_subject")
-	subjectPage.Props["SiteURL"] = c.GetSiteURL()
+	subjectPage.ClientProps["SiteURL"] = c.GetSiteURL()
 	bodyPage := NewServerTemplatePage("find_teams_body")
-	bodyPage.Props["SiteURL"] = c.GetSiteURL()
+	bodyPage.ClientProps["SiteURL"] = c.GetSiteURL()
 
 	if result := <-Srv.Store.Team().GetTeamsForEmail(email); result.Err != nil {
 		c.Err = result.Err
@@ -485,7 +508,7 @@ func InviteMembers(c *Context, team *model.Team, user *model.User, invites []str
 			sender := user.GetDisplayName()
 
 			senderRole := ""
-			if model.IsInRole(user.Roles, model.ROLE_TEAM_ADMIN) || model.IsInRole(user.Roles, model.ROLE_SYSTEM_ADMIN) {
+			if c.IsTeamAdmin() {
 				senderRole = "administrator"
 			} else {
 				senderRole = "member"
@@ -509,10 +532,10 @@ func InviteMembers(c *Context, team *model.Team, user *model.User, invites []str
 			props["name"] = team.Name
 			props["time"] = fmt.Sprintf("%v", model.GetMillis())
 			data := model.MapToJson(props)
-			hash := model.HashPassword(fmt.Sprintf("%v:%v", data, utils.Cfg.ServiceSettings.InviteSalt))
+			hash := model.HashPassword(fmt.Sprintf("%v:%v", data, utils.Cfg.EmailSettings.InviteSalt))
 			bodyPage.Props["Link"] = fmt.Sprintf("%s/signup_user_complete/?d=%s&h=%s", c.GetSiteURL(), url.QueryEscape(data), url.QueryEscape(hash))
 
-			if utils.Cfg.ServiceSettings.Mode == utils.MODE_DEV {
+			if !utils.Cfg.EmailSettings.SendEmailNotifications {
 				l4g.Info("sending invitation to %v %v", invite, bodyPage.Props["Link"])
 			}
 
@@ -545,63 +568,13 @@ func updateTeamDisplayName(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !model.IsInRole(c.Session.Roles, model.ROLE_TEAM_ADMIN) {
+	if !c.IsTeamAdmin() {
 		c.Err = model.NewAppError("updateTeamDisplayName", "You do not have the appropriate permissions", "userId="+c.Session.UserId)
 		c.Err.StatusCode = http.StatusForbidden
 		return
 	}
 
 	if result := <-Srv.Store.Team().UpdateDisplayName(new_name, c.Session.TeamId); result.Err != nil {
-		c.Err = result.Err
-		return
-	}
-
-	w.Write([]byte(model.MapToJson(props)))
-}
-
-func updateValetFeature(c *Context, w http.ResponseWriter, r *http.Request) {
-
-	props := model.MapFromJson(r.Body)
-
-	allowValetStr := props["allow_valet"]
-	if len(allowValetStr) == 0 {
-		c.SetInvalidParam("updateValetFeature", "allow_valet")
-		return
-	}
-
-	allowValet := allowValetStr == "true"
-
-	teamId := props["team_id"]
-	if len(teamId) > 0 && len(teamId) != 26 {
-		c.SetInvalidParam("updateValetFeature", "team_id")
-		return
-	} else if len(teamId) == 0 {
-		teamId = c.Session.TeamId
-	}
-
-	tchan := Srv.Store.Team().Get(teamId)
-
-	if !c.HasPermissionsToTeam(teamId, "updateValetFeature") {
-		return
-	}
-
-	if !model.IsInRole(c.Session.Roles, model.ROLE_TEAM_ADMIN) {
-		c.Err = model.NewAppError("updateValetFeature", "You do not have the appropriate permissions", "userId="+c.Session.UserId)
-		c.Err.StatusCode = http.StatusForbidden
-		return
-	}
-
-	var team *model.Team
-	if tResult := <-tchan; tResult.Err != nil {
-		c.Err = tResult.Err
-		return
-	} else {
-		team = tResult.Data.(*model.Team)
-	}
-
-	team.AllowValet = allowValet
-
-	if result := <-Srv.Store.Team().Update(team); result.Err != nil {
 		c.Err = result.Err
 		return
 	}
@@ -629,7 +602,7 @@ func getMyTeam(c *Context, w http.ResponseWriter, r *http.Request) {
 }
 
 func importTeam(c *Context, w http.ResponseWriter, r *http.Request) {
-	if !c.HasPermissionsToTeam(c.Session.TeamId, "import") || !c.IsTeamAdmin(c.Session.UserId) {
+	if !c.HasPermissionsToTeam(c.Session.TeamId, "import") || !c.IsTeamAdmin() {
 		c.Err = model.NewAppError("importTeam", "Only a team admin can import data.", "userId="+c.Session.UserId)
 		c.Err.StatusCode = http.StatusForbidden
 		return
@@ -696,7 +669,7 @@ func importTeam(c *Context, w http.ResponseWriter, r *http.Request) {
 }
 
 func exportTeam(c *Context, w http.ResponseWriter, r *http.Request) {
-	if !c.HasPermissionsToTeam(c.Session.TeamId, "export") || !c.IsTeamAdmin(c.Session.UserId) {
+	if !c.HasPermissionsToTeam(c.Session.TeamId, "export") || !c.IsTeamAdmin() {
 		c.Err = model.NewAppError("exportTeam", "Only a team admin can export data.", "userId="+c.Session.UserId)
 		c.Err.StatusCode = http.StatusForbidden
 		return

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
@@ -15,6 +15,7 @@ var CHANGE_EVENT_AUDITS = 'change_audits';
 var CHANGE_EVENT_TEAMS = 'change_teams';
 var CHANGE_EVENT_STATUSES = 'change_statuses';
 var CHANGE_EVENT_PHONE_STATUSES = 'change_phone_statuses';
+var TOGGLE_IMPORT_MODAL_EVENT = 'toggle_import_modal';
 
 class UserStoreClass extends EventEmitter {
     constructor() {
@@ -35,6 +36,9 @@ class UserStoreClass extends EventEmitter {
         this.emitStatusesChange = this.emitStatusesChange.bind(this);
         this.addStatusesChangeListener = this.addStatusesChangeListener.bind(this);
         this.removeStatusesChangeListener = this.removeStatusesChangeListener.bind(this);
+        this.emitToggleImportModal = this.emitToggleImportModal.bind(this);
+        this.addImportModalListener = this.addImportModalListener.bind(this);
+        this.removeImportModalListener = this.removeImportModalListener.bind(this);
         this.setCurrentId = this.setCurrentId.bind(this);
         this.getCurrentId = this.getCurrentId.bind(this);
         this.getCurrentUser = this.getCurrentUser.bind(this);
@@ -115,14 +119,23 @@ class UserStoreClass extends EventEmitter {
     removeStatusesChangeListener(callback) {
         this.removeListener(CHANGE_EVENT_STATUSES, callback);
     }
+    emitToggleImportModal(value) {
+        this.emit(TOGGLE_IMPORT_MODAL_EVENT, value);
+    }
+    addImportModalListener(callback) {
+        this.on(TOGGLE_IMPORT_MODAL_EVENT, callback);
+    }
+    removeImportModalListener(callback) {
+        this.removeListener(TOGGLE_IMPORT_MODAL_EVENT, callback);
+    }
     emitPhoneStatusesChange() {
         this.emit(CHANGE_EVENT_PHONE_STATUSES);
     }
     addPhoneStatusesChangeListener(callback) {
-       this.on(CHANGE_EVENT_PHONE_STATUSES, callback);
+        this.on(CHANGE_EVENT_PHONE_STATUSES, callback);
     }
     removePhoneStatusesChangeListener(callback) {
-       this.removeListener(CHANGE_EVENT_PHONE_STATUSES, callback);
+        this.removeListener(CHANGE_EVENT_PHONE_STATUSES, callback);
     }
     setCurrentId(id) {
         this.gCurrentId = id;
@@ -291,16 +304,16 @@ class UserStoreClass extends EventEmitter {
     getStatus(id) {
         return this.getStatuses()[id];
     }
-    _setPhoneStatus(user_id, phoneStatus) {
+    setPhoneStatus(userId, phoneStatus) {
         var phoneStatuses = this.getPhoneStatuses();
-        phoneStatuses[user_id] = phoneStatus;
+        phoneStatuses[userId] = phoneStatus;
         this.setPhoneStatuses(phoneStatuses);
     }
     setPhoneStatuses(phoneStatuses) {
-        BrowserStore.setItem("phonestatuses", phoneStatuses);
+        BrowserStore.setItem('phonestatuses', phoneStatuses);
     }
     getPhoneStatuses() {
-        return BrowserStore.getItem("phonestatuses", {});
+        return BrowserStore.getItem('phonestatuses', {});
     }
     getPhoneStatus(id) {
         return this.getPhoneStatuses()[id];
@@ -309,7 +322,6 @@ class UserStoreClass extends EventEmitter {
 
 var UserStore = new UserStoreClass();
 UserStore.setMaxListeners(0);
-
 
 UserStore.dispatchToken = AppDispatcher.register(function registry(payload) {
     var action = payload.action;
@@ -346,15 +358,17 @@ UserStore.dispatchToken = AppDispatcher.register(function registry(payload) {
         UserStore.pSetStatuses(action.statuses);
         UserStore.emitStatusesChange();
         break;
+    case ActionTypes.TOGGLE_IMPORT_THEME_MODAL:
+        UserStore.emitToggleImportModal(action.value);
+        break;
     case ActionTypes.RECIEVED_MSG:
         if (action.msg.action === 'user_phone_status') {
-            console.log('**************' + action.msg.user_id + '  ' + action.msg.props.status);
-            UserStore._setPhoneStatus(action.msg.user_id, action.msg.props.status);
+            UserStore.setPhoneStatus(action.msg.user_id, action.msg.props.status);
             UserStore.emitPhoneStatusesChange();
         }
+        break;
     default:
     }
-
 });
 
 global.window.UserStore = UserStore;

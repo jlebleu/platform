@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -6,6 +6,12 @@ package model
 import (
 	"encoding/json"
 	"io"
+)
+
+const (
+	SYSTEM_DIAGNOSTIC_ID      = "DiagnosticId"
+	SYSTEM_RAN_UNIT_TESTS     = "RanUnitTests"
+	SYSTEM_LAST_SECURITY_TIME = "LastSecurityTime"
 )
 
 type System struct {

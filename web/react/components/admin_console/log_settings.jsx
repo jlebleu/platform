@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var Client = require('../../utils/client.jsx');
@@ -12,13 +12,33 @@ export default class LogSettings extends React.Component {
         this.handleSubmit = this.handleSubmit.bind(this);
 
         this.state = {
+            consoleEnable: this.props.config.LogSettings.EnableConsole,
+            fileEnable: this.props.config.LogSettings.EnableFile,
             saveNeeded: false,
             serverError: null
         };
     }
 
-    handleChange() {
-        this.setState({saveNeeded: true, serverError: this.state.serverError});
+    handleChange(action) {
+        var s = {saveNeeded: true, serverError: this.state.serverError};
+
+        if (action === 'console_true') {
+            s.consoleEnable = true;
+        }
+
+        if (action === 'console_false') {
+            s.consoleEnable = false;
+        }
+
+        if (action === 'file_true') {
+            s.fileEnable = true;
+        }
+
+        if (action === 'file_false') {
+            s.fileEnable = false;
+        }
+
+        this.setState(s);
     }
 
     handleSubmit(e) {
@@ -26,22 +46,32 @@ export default class LogSettings extends React.Component {
         $('#save-button').button('loading');
 
         var config = this.props.config;
-        config.LogSettings.ConsoleEnable = React.findDOMNode(this.refs.consoleEnable).checked;
-        config.LogSettings.ConsoleLevel = React.findDOMNode(this.refs.consoleLevel).value;
-        config.LogSettings.FileEnable = React.findDOMNode(this.refs.fileEnable).checked;
-        config.LogSettings.FileLevel = React.findDOMNode(this.refs.fileLevel).value;
-        config.LogSettings.FileLocation = React.findDOMNode(this.refs.fileLocation).value.trim();
-        config.LogSettings.FileFormat = React.findDOMNode(this.refs.fileFormat).value.trim();
+        config.LogSettings.EnableConsole = ReactDOM.findDOMNode(this.refs.consoleEnable).checked;
+        config.LogSettings.ConsoleLevel = ReactDOM.findDOMNode(this.refs.consoleLevel).value;
+        config.LogSettings.EnableFile = ReactDOM.findDOMNode(this.refs.fileEnable).checked;
+        config.LogSettings.FileLevel = ReactDOM.findDOMNode(this.refs.fileLevel).value;
+        config.LogSettings.FileLocation = ReactDOM.findDOMNode(this.refs.fileLocation).value.trim();
+        config.LogSettings.FileFormat = ReactDOM.findDOMNode(this.refs.fileFormat).value.trim();
 
         Client.saveConfig(
             config,
             () => {
                 AsyncClient.getConfig();
-                this.setState({serverError: null, saveNeeded: false});
+                this.setState({
+                    consoleEnable: config.LogSettings.EnableConsole,
+                    fileEnable: config.LogSettings.EnableFile,
+                    serverError: null,
+                    saveNeeded: false
+                });
                 $('#save-button').button('reset');
             },
             (err) => {
-                this.setState({serverError: err.message, saveNeeded: true});
+                this.setState({
+                    consoleEnable: config.LogSettings.EnableConsole,
+                    fileEnable: config.LogSettings.EnableFile,
+                    serverError: err.message,
+                    saveNeeded: true
+                });
                 $('#save-button').button('reset');
             }
         );
@@ -71,7 +101,7 @@ export default class LogSettings extends React.Component {
                             className='control-label col-sm-4'
                             htmlFor='consoleEnable'
                         >
-                            {'Log To the Console: '}
+                            {'Log To The Console: '}
                         </label>
                         <div className='col-sm-8'>
                             <label className='radio-inline'>
@@ -80,8 +110,8 @@ export default class LogSettings extends React.Component {
                                     name='consoleEnable'
                                     value='true'
                                     ref='consoleEnable'
-                                    defaultChecked={this.props.config.LogSettings.ConsoleEnable}
-                                    onChange={this.handleChange}
+                                    defaultChecked={this.props.config.LogSettings.EnableConsole}
+                                    onChange={this.handleChange.bind(this, 'console_true')}
                                 />
                                     {'true'}
                             </label>
@@ -90,12 +120,12 @@ export default class LogSettings extends React.Component {
                                     type='radio'
                                     name='consoleEnable'
                                     value='false'
-                                    defaultChecked={!this.props.config.LogSettings.ConsoleEnable}
-                                    onChange={this.handleChange}
+                                    defaultChecked={!this.props.config.LogSettings.EnableConsole}
+                                    onChange={this.handleChange.bind(this, 'console_false')}
                                 />
                                     {'false'}
                             </label>
-                            <p className='help-text'>{'Typically set to false in production. Developers may set this field to true to output log messages to console based on the console level option.  If true then the server will output messages to the standard output stream (stdout).'}</p>
+                            <p className='help-text'>{'Typically set to false in production. Developers may set this field to true to output log messages to console based on the console level option.  If true, server writes messages to the standard output stream (stdout).'}</p>
                         </div>
                     </div>
 
@@ -113,12 +143,13 @@ export default class LogSettings extends React.Component {
                                 ref='consoleLevel'
                                 defaultValue={this.props.config.LogSettings.consoleLevel}
                                 onChange={this.handleChange}
+                                disabled={!this.state.consoleEnable}
                             >
                                 <option value='DEBUG'>{'DEBUG'}</option>
                                 <option value='INFO'>{'INFO'}</option>
                                 <option value='ERROR'>{'ERROR'}</option>
                             </select>
-                            <p className='help-text'>{'This setting determines the level of detail at which log events are written to the console. ERROR: Outputs only error messages. INFO: Outputs error messages and information around startup and initialization. DEBUG: Prints high detail for developers debugging issues working on debugging issues.'}</p>
+                            <p className='help-text'>{'This setting determines the level of detail at which log events are written to the console. ERROR: Outputs only error messages. INFO: Outputs error messages and information around startup and initialization. DEBUG: Prints high detail for developers working on debugging issues.'}</p>
                         </div>
                     </div>
 
@@ -135,8 +166,8 @@ export default class LogSettings extends React.Component {
                                     name='fileEnable'
                                     ref='fileEnable'
                                     value='true'
-                                    defaultChecked={this.props.config.LogSettings.FileEnable}
-                                    onChange={this.handleChange}
+                                    defaultChecked={this.props.config.LogSettings.EnableFile}
+                                    onChange={this.handleChange.bind(this, 'file_true')}
                                 />
                                     {'true'}
                             </label>
@@ -145,12 +176,12 @@ export default class LogSettings extends React.Component {
                                     type='radio'
                                     name='fileEnable'
                                     value='false'
-                                    defaultChecked={!this.props.config.LogSettings.FileEnable}
-                                    onChange={this.handleChange}
+                                    defaultChecked={!this.props.config.LogSettings.EnableFile}
+                                    onChange={this.handleChange.bind(this, 'file_false')}
                                 />
                                     {'false'}
                             </label>
-                            <p className='help-text'>{'Typically set to true in production.  When true log files are written to the file specified in file location field below.'}</p>
+                            <p className='help-text'>{'Typically set to true in production.  When true, log files are written to the log file specified in file location field below.'}</p>
                         </div>
                     </div>
 
@@ -168,12 +199,13 @@ export default class LogSettings extends React.Component {
                                 ref='fileLevel'
                                 defaultValue={this.props.config.LogSettings.FileLevel}
                                 onChange={this.handleChange}
+                                disabled={!this.state.fileEnable}
                             >
                                 <option value='DEBUG'>{'DEBUG'}</option>
                                 <option value='INFO'>{'INFO'}</option>
                                 <option value='ERROR'>{'ERROR'}</option>
                             </select>
-                            <p className='help-text'>{'This setting determines the level of detail at which log events are written to the file. ERROR: Outputs only error messages. INFO: Outputs error messages and information around startup and initialization. DEBUG: Prints high detail for developers debugging issues working on debugging issues.'}</p>
+                            <p className='help-text'>{'This setting determines the level of detail at which log events are written to the log file. ERROR: Outputs only error messages. INFO: Outputs error messages and information around startup and initialization. DEBUG: Prints high detail for developers working on debugging issues.'}</p>
                         </div>
                     </div>
 
@@ -193,8 +225,9 @@ export default class LogSettings extends React.Component {
                                 placeholder='Enter your file location'
                                 defaultValue={this.props.config.LogSettings.FileLocation}
                                 onChange={this.handleChange}
+                                disabled={!this.state.fileEnable}
                             />
-                            <p className='help-text'>{'File to which log files are written. If blank, will be set to ./logs/mattermost.log. Log rotation is enabled and new files may be created in the same directory.'}</p>
+                            <p className='help-text'>{'File to which log files are written. If blank, will be set to ./logs/mattermost, which writes logs to mattermost.log. Log rotation is enabled and every 10,000 lines of log information is written to new files stored in the same directory, for example mattermost.2015-09-23.001, mattermost.2015-09-23.002, and so forth.'}</p>
                         </div>
                     </div>
 
@@ -214,23 +247,26 @@ export default class LogSettings extends React.Component {
                                 placeholder='Enter your file format'
                                 defaultValue={this.props.config.LogSettings.FileFormat}
                                 onChange={this.handleChange}
+                                disabled={!this.state.fileEnable}
                             />
-                            <p className='help-text'>
+                            <div className='help-text'>
                                 {'Format of log message output. If blank will be set to "[%D %T] [%L] %M", where:'}
                                 <div className='help-text'>
                                     <table
-                                        className='table-bordered'
+                                        className='table table-bordered'
                                         cellPadding='5'
                                     >
-                                        <tr><td className='help-text'>{'%T'}</td><td className='help-text'>{'Time (15:04:05 MST)'}</td></tr>
-                                        <tr><td className='help-text'>{'%D'}</td><td className='help-text'>{'Date (2006/01/02)'}</td></tr>
-                                        <tr><td className='help-text'>{'%d'}</td><td className='help-text'>{'Date (01/02/06)'}</td></tr>
-                                        <tr><td className='help-text'>{'%L'}</td><td className='help-text'>{'Level (DEBG, INFO, EROR)'}</td></tr>
-                                        <tr><td className='help-text'>{'%S'}</td><td className='help-text'>{'Source'}</td></tr>
-                                        <tr><td className='help-text'>{'%M'}</td><td className='help-text'>{'Message'}</td></tr>
+                                        <tbody>
+                                            <tr><td className='help-text'>{'%T'}</td><td className='help-text'>{'Time (15:04:05 MST)'}</td></tr>
+                                            <tr><td className='help-text'>{'%D'}</td><td className='help-text'>{'Date (2006/01/02)'}</td></tr>
+                                            <tr><td className='help-text'>{'%d'}</td><td className='help-text'>{'Date (01/02/06)'}</td></tr>
+                                            <tr><td className='help-text'>{'%L'}</td><td className='help-text'>{'Level (DEBG, INFO, EROR)'}</td></tr>
+                                            <tr><td className='help-text'>{'%S'}</td><td className='help-text'>{'Source'}</td></tr>
+                                            <tr><td className='help-text'>{'%M'}</td><td className='help-text'>{'Message'}</td></tr>
+                                        </tbody>
                                     </table>
                                 </div>
-                            </p>
+                            </div>
                         </div>
                     </div>
 

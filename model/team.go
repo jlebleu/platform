@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -27,7 +27,6 @@ type Team struct {
 	Type           string `json:"type"`
 	CompanyName    string `json:"company_name"`
 	AllowedDomains string `json:"allowed_domains"`
-	AllowValet     bool   `json:"allow_valet"`
 }
 
 type Invites struct {
@@ -69,6 +68,26 @@ func TeamFromJson(data io.Reader) *Team {
 	err := decoder.Decode(&o)
 	if err == nil {
 		return &o
+	} else {
+		return nil
+	}
+}
+
+func TeamMapToJson(u map[string]*Team) string {
+	b, err := json.Marshal(u)
+	if err != nil {
+		return ""
+	} else {
+		return string(b)
+	}
+}
+
+func TeamMapFromJson(data io.Reader) map[string]*Team {
+	decoder := json.NewDecoder(data)
+	var teams map[string]*Team
+	err := decoder.Decode(&teams)
+	if err == nil {
+		return teams
 	} else {
 		return nil
 	}
@@ -199,4 +218,10 @@ func CleanTeamName(s string) string {
 }
 
 func (o *Team) PreExport() {
+}
+
+func (o *Team) Sanitize() {
+	o.Email = ""
+	o.Type = ""
+	o.AllowedDomains = ""
 }

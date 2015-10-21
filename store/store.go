@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package store
@@ -37,6 +37,8 @@ type Store interface {
 	OAuth() OAuthStore
 	System() SystemStore
 	Webhook() WebhookStore
+	Preference() PreferenceStore
+	MarkSystemRanUnitTests()
 	Close()
 }
 
@@ -47,7 +49,7 @@ type TeamStore interface {
 	Get(id string) StoreChannel
 	GetByName(name string) StoreChannel
 	GetTeamsForEmail(domain string) StoreChannel
-	GetForExport() StoreChannel
+	GetAll() StoreChannel
 }
 
 type ChannelStore interface {
@@ -62,6 +64,7 @@ type ChannelStore interface {
 	GetForExport(teamId string) StoreChannel
 
 	SaveMember(member *model.ChannelMember) StoreChannel
+	UpdateMember(member *model.ChannelMember) StoreChannel
 	GetMembers(channelId string) StoreChannel
 	GetMember(channelId string, userId string) StoreChannel
 	RemoveMember(channelId string, userId string) StoreChannel
@@ -71,8 +74,6 @@ type ChannelStore interface {
 	CheckPermissionsToByName(teamId string, channelName string, userId string) StoreChannel
 	UpdateLastViewedAt(channelId string, userId string) StoreChannel
 	IncrementMentionCount(channelId string, userId string) StoreChannel
-	UpdateNotifyLevel(channelId string, userId string, notifyLevel string) StoreChannel
-
 	GetDirectChannel(userId1 string, userId2 string) StoreChannel
 }
 
@@ -84,7 +85,7 @@ type PostStore interface {
 	GetPosts(channelId string, offset int, limit int) StoreChannel
 	GetPostsSince(channelId string, time int64) StoreChannel
 	GetEtag(channelId string) StoreChannel
-	Search(teamId string, userId string, terms string, isHashtagSearch bool) StoreChannel
+	Search(teamId string, userId string, params *model.SearchParams) StoreChannel
 	GetForExport(channelId string) StoreChannel
 }
 
@@ -105,6 +106,9 @@ type UserStore interface {
 	GetEtagForProfiles(teamId string) StoreChannel
 	UpdateFailedPasswordAttempts(userId string, attempts int) StoreChannel
 	GetForExport(teamId string) StoreChannel
+	GetTotalUsersCount() StoreChannel
+	GetTotalActiveUsersCount() StoreChannel
+	GetSystemAdminProfiles() StoreChannel
 }
 
 type SessionStore interface {
@@ -112,6 +116,7 @@ type SessionStore interface {
 	Get(sessionIdOrToken string) StoreChannel
 	GetSessions(userId string) StoreChannel
 	Remove(sessionIdOrToken string) StoreChannel
+	RemoveAllSessionsForTeam(teamId string) StoreChannel
 	UpdateLastActivityAt(sessionId string, time int64) StoreChannel
 	UpdateRoles(userId string, roles string) StoreChannel
 }
@@ -146,4 +151,18 @@ type WebhookStore interface {
 	GetIncoming(id string) StoreChannel
 	GetIncomingByUser(userId string) StoreChannel
 	DeleteIncoming(webhookId string, time int64) StoreChannel
+	SaveOutgoing(webhook *model.OutgoingWebhook) StoreChannel
+	GetOutgoing(id string) StoreChannel
+	GetOutgoingByCreator(userId string) StoreChannel
+	GetOutgoingByChannel(channelId string) StoreChannel
+	GetOutgoingByTeam(teamId string) StoreChannel
+	DeleteOutgoing(webhookId string, time int64) StoreChannel
+	UpdateOutgoing(hook *model.OutgoingWebhook) StoreChannel
+}
+
+type PreferenceStore interface {
+	Save(preferences *model.Preferences) StoreChannel
+	Get(userId string, category string, name string) StoreChannel
+	GetCategory(userId string, category string) StoreChannel
+	GetAll(userId string) StoreChannel
 }

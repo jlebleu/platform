@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 const Client = require('../utils/client.jsx');
@@ -11,6 +11,7 @@ export default class EditChannelModal extends React.Component {
         this.handleEdit = this.handleEdit.bind(this);
         this.handleUserInput = this.handleUserInput.bind(this);
         this.handleClose = this.handleClose.bind(this);
+        this.onShow = this.onShow.bind(this);
 
         this.state = {
             description: '',
@@ -33,7 +34,7 @@ export default class EditChannelModal extends React.Component {
             function handleUpdateSuccess() {
                 this.setState({serverError: ''});
                 AsyncClient.getChannel(this.state.channelId);
-                $(React.findDOMNode(this.refs.modal)).modal('hide');
+                $(ReactDOM.findDOMNode(this.refs.modal)).modal('hide');
             }.bind(this),
             function handleUpdateError(err) {
                 if (err.message === 'Invalid channel_description parameter') {
@@ -50,15 +51,16 @@ export default class EditChannelModal extends React.Component {
     handleClose() {
         this.setState({description: '', serverError: ''});
     }
+    onShow(e) {
+        const button = e.relatedTarget;
+        this.setState({description: $(button).attr('data-desc'), title: $(button).attr('data-title'), channelId: $(button).attr('data-channelid'), serverError: ''});
+    }
     componentDidMount() {
-        $(React.findDOMNode(this.refs.modal)).on('show.bs.modal', function handleShow(e) {
-            const button = e.relatedTarget;
-            this.setState({description: $(button).attr('data-desc'), title: $(button).attr('data-title'), channelId: $(button).attr('data-channelid'), serverError: ''});
-        }.bind(this));
-        $(React.findDOMNode(this.refs.modal)).on('hidden.bs.modal', this.handleClose);
+        $(ReactDOM.findDOMNode(this.refs.modal)).on('show.bs.modal', this.onShow);
+        $(ReactDOM.findDOMNode(this.refs.modal)).on('hidden.bs.modal', this.handleClose);
     }
     componentWillUnmount() {
-        $(React.findDOMNode(this.refs.modal)).off('hidden.bs.modal', this.handleClose);
+        $(ReactDOM.findDOMNode(this.refs.modal)).off('hidden.bs.modal', this.handleClose);
     }
     render() {
         var serverError = null;

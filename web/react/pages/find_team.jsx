@@ -1,10 +1,10 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var FindTeam = require('../components/find_team.jsx');
 
 function setupFindTeamPage() {
-    React.render(
+    ReactDOM.render(
         <FindTeam />,
         document.getElementById('find-team')
     );

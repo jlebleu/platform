@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -163,6 +163,7 @@ var reservedName = []string{
 	"post",
 	"cluster",
 	"api",
+	"oauth",
 }
 
 var wwwStart = regexp.MustCompile(`^www`)
@@ -241,10 +242,10 @@ func Etag(parts ...interface{}) string {
 
 var validHashtag = regexp.MustCompile(`^(#[A-Za-z]+[A-Za-z0-9_\-]*[A-Za-z0-9])$`)
 var puncStart = regexp.MustCompile(`^[.,()&$!\[\]{}"':;\\]+`)
-var puncEnd = regexp.MustCompile(`[.,()&$#!\[\]{}"':;\\]+$`)
+var puncEnd = regexp.MustCompile(`[.,()&$#!\[\]{}"';\\]+$`)
 
 func ParseHashtags(text string) (string, string) {
-	words := strings.Split(strings.Replace(text, "\n", " ", -1), " ")
+	words := strings.Fields(text)
 
 	hashtagString := ""
 	plainString := ""

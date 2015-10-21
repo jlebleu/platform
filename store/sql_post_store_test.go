@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package store
@@ -484,7 +484,7 @@ func TestPostStoreSearch(t *testing.T) {
 	m1 := model.ChannelMember{}
 	m1.ChannelId = c1.Id
 	m1.UserId = userId
-	m1.NotifyLevel = model.CHANNEL_NOTIFY_ALL
+	m1.NotifyProps = model.GetDefaultChannelNotifyProps()
 	Must(store.Channel().SaveMember(&m1))
 
 	c2 := &model.Channel{}
@@ -516,7 +516,7 @@ func TestPostStoreSearch(t *testing.T) {
 	o4.ChannelId = c1.Id
 	o4.UserId = model.NewId()
 	o4.Hashtags = "#hashtag"
-	o4.Message = "message"
+	o4.Message = "(message)blargh"
 	o4 = (<-store.Post().Save(o4)).Data.(*model.Post)
 
 	o5 := &model.Post{}
@@ -525,55 +525,58 @@ func TestPostStoreSearch(t *testing.T) {
 	o5.Hashtags = "#secret #howdy"
 	o5 = (<-store.Post().Save(o5)).Data.(*model.Post)
 
-	r1 := (<-store.Post().Search(teamId, userId, "corey", false)).Data.(*model.PostList)
+	r1 := (<-store.Post().Search(teamId, userId, &model.SearchParams{Terms: "corey", IsHashtag: false})).Data.(*model.PostList)
 	if len(r1.Order) != 1 && r1.Order[0] != o1.Id {
-		t.Fatal("returned wrong serach result")
+		t.Fatal("returned wrong search result")
 	}
 
-	// if utils.Cfg.SqlSettings.DriverName == "mysql" {
-	// 	r2 := (<-store.Post().Search(teamId, userId, "new york", false)).Data.(*model.PostList)
-	// 	if len(r2.Order) >= 1 && r2.Order[0] != o2.Id {
-	// 		t.Fatal("returned wrong serach result")
-	// 	}
-	// }
-
-	r3 := (<-store.Post().Search(teamId, userId, "new", false)).Data.(*model.PostList)
+	r3 := (<-store.Post().Search(teamId, userId, &model.SearchParams{Terms: "new", IsHashtag: false})).Data.(*model.PostList)
 	if len(r3.Order) != 2 && r3.Order[0] != o1.Id {
-		t.Fatal("returned wrong serach result")
+		t.Fatal("returned wrong search result")
 	}
 
-	r4 := (<-store.Post().Search(teamId, userId, "john", false)).Data.(*model.PostList)
+	r4 := (<-store.Post().Search(teamId, userId, &model.SearchParams{Terms: "john", IsHashtag: false})).Data.(*model.PostList)
 	if len(r4.Order) != 1 && r4.Order[0] != o2.Id {
-		t.Fatal("returned wrong serach result")
+		t.Fatal("returned wrong search result")
 	}
 
-	r5 := (<-store.Post().Search(teamId, userId, "matter*", false)).Data.(*model.PostList)
+	r5 := (<-store.Post().Search(teamId, userId, &model.SearchParams{Terms: "matter*", IsHashtag: false})).Data.(*model.PostList)
 	if len(r5.Order) != 1 && r5.Order[0] != o1.Id {
-		t.Fatal("returned wrong serach result")
+		t.Fatal("returned wrong search result")
 	}
 
-	r6 := (<-store.Post().Search(teamId, userId, "#hashtag", true)).Data.(*model.PostList)
+	r6 := (<-store.Post().Search(teamId, userId, &model.SearchParams{Terms: "#hashtag", IsHashtag: true})).Data.(*model.PostList)
 	if len(r6.Order) != 1 && r6.Order[0] != o4.Id {
-		t.Fatal("returned wrong serach result")
+		t.Fatal("returned wrong search result")
 	}
 
-	r7 := (<-store.Post().Search(teamId, userId, "#secret", true)).Data.(*model.PostList)
+	r7 := (<-store.Post().Search(teamId, userId, &model.SearchParams{Terms: "#secret", IsHashtag: true})).Data.(*model.PostList)
 	if len(r7.Order) != 1 && r7.Order[0] != o5.Id {
-		t.Fatal("returned wrong serach result")
+		t.Fatal("returned wrong search result")
 	}
 
-	r8 := (<-store.Post().Search(teamId, userId, "@thisshouldmatchnothing", true)).Data.(*model.PostList)
+	r8 := (<-store.Post().Search(teamId, userId, &model.SearchParams{Terms: "@thisshouldmatchnothing", IsHashtag: true})).Data.(*model.PostList)
 	if len(r8.Order) != 0 {
-		t.Fatal("returned wrong serach result")
+		t.Fatal("returned wrong search result")
 	}
 
-	r9 := (<-store.Post().Search(teamId, userId, "mattermost jersey", false)).Data.(*model.PostList)
+	r9 := (<-store.Post().Search(teamId, userId, &model.SearchParams{Terms: "mattermost jersey", IsHashtag: false})).Data.(*model.PostList)
 	if len(r9.Order) != 2 {
 		t.Fatal("returned wrong search result")
 	}
 
-	r10 := (<-store.Post().Search(teamId, userId, "matter* jer*", false)).Data.(*model.PostList)
+	r10 := (<-store.Post().Search(teamId, userId, &model.SearchParams{Terms: "matter* jer*", IsHashtag: false})).Data.(*model.PostList)
 	if len(r10.Order) != 2 {
+		t.Fatal("returned wrong search result")
+	}
+
+	r11 := (<-store.Post().Search(teamId, userId, &model.SearchParams{Terms: "message blargh", IsHashtag: false})).Data.(*model.PostList)
+	if len(r11.Order) != 1 {
+		t.Fatal("returned wrong search result")
+	}
+
+	r12 := (<-store.Post().Search(teamId, userId, &model.SearchParams{Terms: "blargh>", IsHashtag: false})).Data.(*model.PostList)
+	if len(r12.Order) != 1 {
 		t.Fatal("returned wrong search result")
 	}
 }

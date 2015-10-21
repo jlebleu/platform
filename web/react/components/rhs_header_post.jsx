@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 const AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
@@ -65,6 +65,7 @@ export default class RhsHeaderPost extends React.Component {
                     aria-label='Close'
                     onClick={this.handleClose}
                 >
+                    <i className='fa fa-sign-out'/>
                 </button>
             </div>
         );

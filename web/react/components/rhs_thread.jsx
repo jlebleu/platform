@@ -1,9 +1,10 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var PostStore = require('../stores/post_store.jsx');
 var UserStore = require('../stores/user_store.jsx');
-var utils = require('../utils/utils.jsx');
+var PreferenceStore = require('../stores/preference_store.jsx');
+var Utils = require('../utils/utils.jsx');
 var SearchBox = require('./search_bar.jsx');
 var CreateComment = require('./create_comment.jsx');
 var RhsHeaderPost = require('./rhs_header_post.jsx');
@@ -18,12 +19,17 @@ export default class RhsThread extends React.Component {
 
         this.onChange = this.onChange.bind(this);
         this.onChangeAll = this.onChangeAll.bind(this);
+        this.forceUpdateInfo = this.forceUpdateInfo.bind(this);
+        this.handleResize = this.handleResize.bind(this);
 
-        this.state = this.getStateFromStores();
+        const state = this.getStateFromStores();
+        state.windowWidth = Utils.windowWidth();
+        state.windowHeight = Utils.windowHeight();
+        this.state = state;
     }
     getStateFromStores() {
         var postList = PostStore.getSelectedPost();
-        if (!postList || postList.order.length < 1) {
+        if (!postList || postList.order.length < 1 || !postList.posts[postList.order[0]]) {
             return {postList: {}};
         }
 
@@ -43,23 +49,40 @@ export default class RhsThread extends React.Component {
     componentDidMount() {
         PostStore.addSelectedPostChangeListener(this.onChange);
         PostStore.addChangeListener(this.onChangeAll);
+        PreferenceStore.addChangeListener(this.forceUpdateInfo);
         this.resize();
-        $(window).resize(function resize() {
-            this.resize();
-        }.bind(this));
+        window.addEventListener('resize', this.handleResize);
     }
     componentDidUpdate() {
-        $('.post-right__scroll').scrollTop($('.post-right__scroll')[0].scrollHeight);
-        $('.post-right__scroll').perfectScrollbar('update');
+        if ($('.post-right__scroll')[0]) {
+            $('.post-right__scroll').scrollTop($('.post-right__scroll')[0].scrollHeight);
+        }
         this.resize();
     }
     componentWillUnmount() {
         PostStore.removeSelectedPostChangeListener(this.onChange);
         PostStore.removeChangeListener(this.onChangeAll);
+        PreferenceStore.removeChangeListener(this.forceUpdateInfo);
+        window.removeEventListener('resize', this.handleResize);
+    }
+    forceUpdateInfo() {
+        if (this.state.postList) {
+            for (var postId in this.state.postList.posts) {
+                if (this.refs[postId]) {
+                    this.refs[postId].forceUpdate();
+                }
+            }
+        }
+    }
+    handleResize() {
+        this.setState({
+            windowWidth: Utils.windowWidth(),
+            windowHeight: Utils.windowHeight()
+        });
     }
     onChange() {
         var newState = this.getStateFromStores();
-        if (!utils.areStatesEqual(newState, this.state)) {
+        if (!Utils.areStatesEqual(newState, this.state)) {
             this.setState(newState);
         }
     }
@@ -67,7 +90,7 @@ export default class RhsThread extends React.Component {
         // if something was changed in the channel like adding a
         // comment or post then lets refresh the sidebar list
         var currentSelected = PostStore.getSelectedPost();
-        if (!currentSelected || currentSelected.order.length === 0) {
+        if (!currentSelected || currentSelected.order.length === 0 || !currentSelected.posts[currentSelected.order[0]]) {
             return;
         }
 
@@ -89,21 +112,23 @@ export default class RhsThread extends React.Component {
         }
 
         var newState = this.getStateFromStores();
-        if (!utils.areStatesEqual(newState, this.state)) {
+        if (!Utils.areStatesEqual(newState, this.state)) {
             this.setState(newState);
         }
     }
     resize() {
-        var height = $(window).height() - $('#error_bar').outerHeight() - 100;
+        var height = this.state.windowHeight - $('#error_bar').outerHeight() - 100;
         $('.post-right__scroll').css('height', height + 'px');
         $('.post-right__scroll').scrollTop(100000);
-        $('.post-right__scroll').perfectScrollbar();
-        $('.post-right__scroll').perfectScrollbar('update');
+        if (this.state.windowWidth > 768) {
+            $('.post-right__scroll').perfectScrollbar();
+            $('.post-right__scroll').perfectScrollbar('update');
+        }
     }
     render() {
         var postList = this.state.postList;
 
-        if (postList == null) {
+        if (postList == null || !postList.order) {
             return (
                 <div></div>
             );
@@ -171,6 +196,7 @@ export default class RhsThread extends React.Component {
                     />
                     <div className='post-right__scroll'>
                         <RootPost
+                            ref={rootPost.id}
                             post={rootPost}
                             commentCount={postsArray.length}
                         />

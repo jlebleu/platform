@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var PostStore = require('../stores/post_store.jsx');
@@ -29,7 +29,7 @@ export default class RhsComment extends React.Component {
 
         var post = this.props.post;
         Client.createPost(post, post.channel_id,
-            function success(data) {
+            (data) => {
                 AsyncClient.getPosts(post.channel_id);
 
                 var channel = ChannelStore.get(post.channel_id);
@@ -43,11 +43,11 @@ export default class RhsComment extends React.Component {
                     post: data
                 });
             },
-            function fail() {
+            () => {
                 post.state = Constants.POST_FAILED;
                 PostStore.updatePendingPost(post);
                 this.forceUpdate();
-            }.bind(this)
+            }
         );
 
         post.state = Constants.POST_LOADING;
@@ -55,8 +55,7 @@ export default class RhsComment extends React.Component {
         this.forceUpdate();
     }
     parseEmojis() {
-        twemoji.parse(React.findDOMNode(this), {size: Constants.EMOJI_SIZE});
-        global.window.emojify.run(React.findDOMNode(this.refs.message_holder));
+        twemoji.parse(ReactDOM.findDOMNode(this), {size: Constants.EMOJI_SIZE});
     }
     componentDidMount() {
         this.parseEmojis();
@@ -71,19 +70,90 @@ export default class RhsComment extends React.Component {
     componentDidUpdate() {
         this.parseEmojis();
     }
+    createDropdown() {
+        var post = this.props.post;
+
+        if (post.state === Constants.POST_FAILED || post.state === Constants.POST_LOADING || post.state === Constants.POST_DELETED) {
+            return '';
+        }
+
+        var isOwner = UserStore.getCurrentId() === post.user_id;
+        var isAdmin = Utils.isAdmin(UserStore.getCurrentUser().roles);
+
+        var dropdownContents = [];
+
+        if (isOwner) {
+            dropdownContents.push(
+                <li
+                    role='presentation'
+                    key='edit-button'
+                >
+                    <a
+                        href='#'
+                        role='menuitem'
+                        data-toggle='modal'
+                        data-target='#edit_post'
+                        data-title='Comment'
+                        data-message={post.message}
+                        data-postid={post.id}
+                        data-channelid={post.channel_id}
+                    >
+                        {'Edit'}
+                    </a>
+                </li>
+            );
+        }
+
+        if (isOwner || isAdmin) {
+            dropdownContents.push(
+                <li
+                    role='presentation'
+                    key='delete-button'
+                >
+                    <a
+                        href='#'
+                        role='menuitem'
+                        data-toggle='modal'
+                        data-target='#delete_post'
+                        data-title='Comment'
+                        data-postid={post.id}
+                        data-channelid={post.channel_id}
+                        data-comments={0}
+                    >
+                        {'Delete'}
+                    </a>
+                </li>
+            );
+        }
+
+        if (dropdownContents.length === 0) {
+            return '';
+        }
+
+        return (
+            <div className='dropdown'>
+                <a
+                    href='#'
+                    className='dropdown-toggle theme'
+                    type='button'
+                    data-toggle='dropdown'
+                    aria-expanded='false'
+                />
+                <ul
+                    className='dropdown-menu'
+                    role='menu'
+                >
+                    {dropdownContents}
+                </ul>
+            </div>
+            );
+    }
     render() {
         var post = this.props.post;
 
         var currentUserCss = '';
         if (UserStore.getCurrentId() === post.user_id) {
             currentUserCss = 'current--user';
-        }
-
-        var isOwner = UserStore.getCurrentId() === post.user_id;
-
-        var type = 'Post';
-        if (post.root_id.length > 0) {
-            type = 'Comment';
         }
 
         var timestamp = UserStore.getCurrentUser().update_at;
@@ -98,7 +168,7 @@ export default class RhsComment extends React.Component {
                     href='#'
                     onClick={this.retryComment}
                 >
-                    Retry
+                    {'Retry'}
                 </a>
             );
         } else if (post.state === Constants.POST_LOADING) {
@@ -111,67 +181,13 @@ export default class RhsComment extends React.Component {
             );
         }
 
-        var ownerOptions;
-        if (isOwner && post.state !== Constants.POST_FAILED && post.state !== Constants.POST_LOADING) {
-            ownerOptions = (
-                <div
-                    className='dropdown'
-                    onClick={
-                        function scroll() {
-                            $('.post-list-holder-by-time').scrollTop($('.post-list-holder-by-time').scrollTop() + 50);
-                        }
-                    }
-                >
-                    <a
-                        href='#'
-                        className='dropdown-toggle theme'
-                        type='button'
-                        data-toggle='dropdown'
-                        aria-expanded='false'
-                    />
-                    <ul
-                        className='dropdown-menu'
-                        role='menu'
-                    >
-                        <li role='presentation'>
-                            <a
-                                href='#'
-                                role='menuitem'
-                                data-toggle='modal'
-                                data-target='#edit_post'
-                                data-title={type}
-                                data-message={post.message}
-                                data-postid={post.id}
-                                data-channelid={post.channel_id}
-                            >
-                                Edit
-                            </a>
-                        </li>
-                        <li role='presentation'>
-                            <a
-                                href='#'
-                                role='menuitem'
-                                data-toggle='modal'
-                                data-target='#delete_post'
-                                data-title={type}
-                                data-postid={post.id}
-                                data-channelid={post.channel_id}
-                                data-comments={0}
-                            >
-                                Delete
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            );
-        }
+        var dropdown = this.createDropdown();
 
         var fileAttachment;
         if (post.filenames && post.filenames.length > 0) {
             fileAttachment = (
                 <FileAttachmentList
                     filenames={post.filenames}
-                    modalId={'rhs_comment_view_image_modal_' + post.id}
                     channelId={post.channel_id}
                     userId={post.user_id}
                 />
@@ -194,26 +210,23 @@ export default class RhsComment extends React.Component {
                             <strong><UserProfile userId={post.user_id} /></strong>
                         </li>
                         <li className='post-header-col'>
-                            <time
-                                className='post-profile-time'
-                                title={new Date(post.create_at).toString()}
-                            >
+                            <time className='post-profile-time'>
                                 {Utils.displayCommentDateTime(post.create_at)}
                             </time>
                         </li>
                         <li className='post-header-col post-header__reply'>
-                            {ownerOptions}
+                            {dropdown}
                         </li>
                     </ul>
                     <div className='post-body'>
-                        <p className={postClass}>
+                        <div className={postClass}>
                             {loading}
                             <div
                                 ref='message_holder'
                                 onClick={TextFormatting.handleClick}
                                 dangerouslySetInnerHTML={{__html: TextFormatting.formatText(post.message)}}
                             />
-                        </p>
+                        </div>
                         {fileAttachment}
                     </div>
                 </div>

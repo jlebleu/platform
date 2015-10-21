@@ -1,11 +1,10 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 const Utils = require('../utils/utils.jsx');
 const Client = require('../utils/client.jsx');
 const UserStore = require('../stores/user_store.jsx');
 const BrowserStore = require('../stores/browser_store.jsx');
-const Constants = require('../utils/constants.jsx');
 
 export default class Login extends React.Component {
     constructor(props) {
@@ -26,14 +25,14 @@ export default class Login extends React.Component {
             return;
         }
 
-        const email = React.findDOMNode(this.refs.email).value.trim();
+        const email = ReactDOM.findDOMNode(this.refs.email).value.trim();
         if (!email) {
             state.serverError = 'An email is required';
             this.setState(state);
             return;
         }
 
-        const password = React.findDOMNode(this.refs.password).value.trim();
+        const password = ReactDOM.findDOMNode(this.refs.password).value.trim();
         if (!password) {
             state.serverError = 'A password is required';
             this.setState(state);
@@ -89,16 +88,14 @@ export default class Login extends React.Component {
 
         let focusEmail = false;
         let focusPassword = false;
-        if (priorEmail !== '') {
-            focusPassword = true;
-        } else {
+        if (priorEmail === '') {
             focusEmail = true;
+        } else {
+            focusPassword = true;
         }
 
-        const authServices = JSON.parse(this.props.authServices);
-
         let loginMessage = [];
-        if (authServices.indexOf(Constants.GITLAB_SERVICE) !== -1) {
+        if (global.window.config.EnableSignUpWithGitLab === 'true') {
             loginMessage.push(
                     <a
                         className='btn btn-custom-login gitlab'
@@ -115,8 +112,19 @@ export default class Login extends React.Component {
             errorClass = ' has-error';
         }
 
+        const verifiedParam = Utils.getUrlParameter('verified');
+        let verifiedBox = '';
+        if (verifiedParam) {
+            verifiedBox = (
+                <div className='alert alert-success'>
+                    <i className='fa fa-check' />
+                    {' Email Verified'}
+                </div>
+            );
+        }
+
         let emailSignup;
-        if (authServices.indexOf(Constants.EMAIL_SERVICE) !== -1) {
+        if (global.window.config.EnableSignUpWithEmail === 'true') {
             emailSignup = (
                 <div>
                     <div className={'form-group' + errorClass}>
@@ -128,6 +136,7 @@ export default class Login extends React.Component {
                             defaultValue={priorEmail}
                             ref='email'
                             placeholder='Email'
+                            spellCheck='false'
                         />
                     </div>
                     <div className={'form-group' + errorClass}>
@@ -138,6 +147,7 @@ export default class Login extends React.Component {
                             name='password'
                             ref='password'
                             placeholder='Password'
+                            spellCheck='false'
                         />
                     </div>
                     <div className='form-group'>
@@ -178,6 +188,7 @@ export default class Login extends React.Component {
                 <h2 className='signup-team__name'>{teamDisplayName}</h2>
                 <h2 className='signup-team__subdomain'>on {global.window.config.SiteName}</h2>
                 <form onSubmit={this.handleSubmit}>
+                    {verifiedBox}
                     <div className={'form-group' + errorClass}>
                         {serverError}
                     </div>
@@ -205,11 +216,9 @@ export default class Login extends React.Component {
 
 Login.defaultProps = {
     teamName: '',
-    teamDisplayName: '',
-    authServices: ''
+    teamDisplayName: ''
 };
 Login.propTypes = {
     teamName: React.PropTypes.string,
-    teamDisplayName: React.PropTypes.string,
-    authServices: React.PropTypes.string
+    teamDisplayName: React.PropTypes.string
 };

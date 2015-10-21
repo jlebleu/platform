@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package store
@@ -16,31 +16,38 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-gorp/gorp"
-	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
-	"github.com/mattermost/platform/model"
-	"github.com/mattermost/platform/utils"
 	"io"
 	sqltrace "log"
 	"math/rand"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/go-gorp/gorp"
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
+	"github.com/mattermost/platform/model"
+	"github.com/mattermost/platform/utils"
+)
+
+const (
+	INDEX_TYPE_FULL_TEXT = "full_text"
+	INDEX_TYPE_DEFAULT   = "default"
 )
 
 type SqlStore struct {
-	master   *gorp.DbMap
-	replicas []*gorp.DbMap
-	team     TeamStore
-	channel  ChannelStore
-	post     PostStore
-	user     UserStore
-	audit    AuditStore
-	session  SessionStore
-	oauth    OAuthStore
-	system   SystemStore
-	webhook  WebhookStore
+	master     *gorp.DbMap
+	replicas   []*gorp.DbMap
+	team       TeamStore
+	channel    ChannelStore
+	post       PostStore
+	user       UserStore
+	audit      AuditStore
+	session    SessionStore
+	oauth      OAuthStore
+	system     SystemStore
+	webhook    WebhookStore
+	preference PreferenceStore
 }
 
 func NewSqlStore() Store {
@@ -51,11 +58,18 @@ func NewSqlStore() Store {
 		utils.Cfg.SqlSettings.DataSource, utils.Cfg.SqlSettings.MaxIdleConns,
 		utils.Cfg.SqlSettings.MaxOpenConns, utils.Cfg.SqlSettings.Trace)
 
-	sqlStore.replicas = make([]*gorp.DbMap, len(utils.Cfg.SqlSettings.DataSourceReplicas))
-	for i, replica := range utils.Cfg.SqlSettings.DataSourceReplicas {
-		sqlStore.replicas[i] = setupConnection(fmt.Sprintf("replica-%v", i), utils.Cfg.SqlSettings.DriverName, replica,
+	if len(utils.Cfg.SqlSettings.DataSourceReplicas) == 0 {
+		sqlStore.replicas = make([]*gorp.DbMap, 1)
+		sqlStore.replicas[0] = setupConnection(fmt.Sprintf("replica-%v", 0), utils.Cfg.SqlSettings.DriverName, utils.Cfg.SqlSettings.DataSource,
 			utils.Cfg.SqlSettings.MaxIdleConns, utils.Cfg.SqlSettings.MaxOpenConns,
 			utils.Cfg.SqlSettings.Trace)
+	} else {
+		sqlStore.replicas = make([]*gorp.DbMap, len(utils.Cfg.SqlSettings.DataSourceReplicas))
+		for i, replica := range utils.Cfg.SqlSettings.DataSourceReplicas {
+			sqlStore.replicas[i] = setupConnection(fmt.Sprintf("replica-%v", i), utils.Cfg.SqlSettings.DriverName, replica,
+				utils.Cfg.SqlSettings.MaxIdleConns, utils.Cfg.SqlSettings.MaxOpenConns,
+				utils.Cfg.SqlSettings.Trace)
+		}
 	}
 
 	schemaVersion := sqlStore.GetCurrentSchemaVersion()
@@ -65,7 +79,14 @@ func NewSqlStore() Store {
 		// Check to see if it's the most current database schema version
 		if !model.IsCurrentVersion(schemaVersion) {
 			// If we are upgrading from the previous version then print a warning and continue
-			if model.IsPreviousVersion(schemaVersion) {
+
+			// Special case
+			isSchemaVersion07 := false
+			if schemaVersion == "0.7.1" || schemaVersion == "0.7.0" {
+				isSchemaVersion07 = true
+			}
+
+			if model.IsPreviousVersion(schemaVersion) || isSchemaVersion07 {
 				l4g.Warn("The database schema version of " + schemaVersion + " appears to be out of date")
 				l4g.Warn("Attempting to upgrade the database schema version to " + model.CurrentVersion)
 			} else {
@@ -77,7 +98,7 @@ func NewSqlStore() Store {
 		}
 	}
 
-	// Temporary upgrade code, remove after 0.8.0 release
+	// REMOVE in 1.2
 	if sqlStore.DoesTableExist("Sessions") {
 		if sqlStore.DoesColumnExist("Sessions", "AltId") {
 			sqlStore.GetMaster().Exec("DROP TABLE IF EXISTS Sessions")
@@ -93,6 +114,7 @@ func NewSqlStore() Store {
 	sqlStore.oauth = NewSqlOAuthStore(sqlStore)
 	sqlStore.system = NewSqlSystemStore(sqlStore)
 	sqlStore.webhook = NewSqlWebhookStore(sqlStore)
+	sqlStore.preference = NewSqlPreferenceStore(sqlStore)
 
 	sqlStore.master.CreateTablesIfNotExists()
 
@@ -105,6 +127,7 @@ func NewSqlStore() Store {
 	sqlStore.oauth.(*SqlOAuthStore).UpgradeSchemaIfNeeded()
 	sqlStore.system.(*SqlSystemStore).UpgradeSchemaIfNeeded()
 	sqlStore.webhook.(*SqlWebhookStore).UpgradeSchemaIfNeeded()
+	sqlStore.preference.(*SqlPreferenceStore).UpgradeSchemaIfNeeded()
 
 	sqlStore.team.(*SqlTeamStore).CreateIndexesIfNotExists()
 	sqlStore.channel.(*SqlChannelStore).CreateIndexesIfNotExists()
@@ -115,6 +138,7 @@ func NewSqlStore() Store {
 	sqlStore.oauth.(*SqlOAuthStore).CreateIndexesIfNotExists()
 	sqlStore.system.(*SqlSystemStore).CreateIndexesIfNotExists()
 	sqlStore.webhook.(*SqlWebhookStore).CreateIndexesIfNotExists()
+	sqlStore.preference.(*SqlPreferenceStore).CreateIndexesIfNotExists()
 
 	if model.IsPreviousVersion(schemaVersion) {
 		sqlStore.system.Update(&model.System{Name: "Version", Value: model.CurrentVersion})
@@ -153,9 +177,9 @@ func setupConnection(con_type string, driver string, dataSource string, maxIdle 
 
 	if driver == "sqlite3" {
 		dbmap = &gorp.DbMap{Db: db, TypeConverter: mattermConverter{}, Dialect: gorp.SqliteDialect{}}
-	} else if driver == "mysql" {
+	} else if driver == model.DATABASE_DRIVER_MYSQL {
 		dbmap = &gorp.DbMap{Db: db, TypeConverter: mattermConverter{}, Dialect: gorp.MySQLDialect{Engine: "InnoDB", Encoding: "UTF8MB4"}}
-	} else if driver == "postgres" {
+	} else if driver == model.DATABASE_DRIVER_POSTGRES {
 		dbmap = &gorp.DbMap{Db: db, TypeConverter: mattermConverter{}, Dialect: gorp.PostgresDialect{}}
 	} else {
 		l4g.Critical("Failed to create dialect specific driver")
@@ -175,8 +199,19 @@ func (ss SqlStore) GetCurrentSchemaVersion() string {
 	return version
 }
 
+func (ss SqlStore) MarkSystemRanUnitTests() {
+	if result := <-ss.System().Get(); result.Err == nil {
+		props := result.Data.(model.StringMap)
+		unitTests := props[model.SYSTEM_RAN_UNIT_TESTS]
+		if len(unitTests) == 0 {
+			systemTests := &model.System{Name: model.SYSTEM_RAN_UNIT_TESTS, Value: "1"}
+			<-ss.System().Save(systemTests)
+		}
+	}
+}
+
 func (ss SqlStore) DoesTableExist(tableName string) bool {
-	if utils.Cfg.SqlSettings.DriverName == "postgres" {
+	if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_POSTGRES {
 		count, err := ss.GetMaster().SelectInt(
 			`SELECT count(relname) FROM pg_class WHERE relname=$1`,
 			strings.ToLower(tableName),
@@ -190,7 +225,7 @@ func (ss SqlStore) DoesTableExist(tableName string) bool {
 
 		return count > 0
 
-	} else if utils.Cfg.SqlSettings.DriverName == "mysql" {
+	} else if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_MYSQL {
 
 		count, err := ss.GetMaster().SelectInt(
 			`SELECT
@@ -221,7 +256,7 @@ func (ss SqlStore) DoesTableExist(tableName string) bool {
 }
 
 func (ss SqlStore) DoesColumnExist(tableName string, columnName string) bool {
-	if utils.Cfg.SqlSettings.DriverName == "postgres" {
+	if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_POSTGRES {
 		count, err := ss.GetMaster().SelectInt(
 			`SELECT COUNT(0)
 			FROM   pg_attribute
@@ -244,7 +279,7 @@ func (ss SqlStore) DoesColumnExist(tableName string, columnName string) bool {
 
 		return count > 0
 
-	} else if utils.Cfg.SqlSettings.DriverName == "mysql" {
+	} else if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_MYSQL {
 
 		count, err := ss.GetMaster().SelectInt(
 			`SELECT
@@ -281,7 +316,7 @@ func (ss SqlStore) CreateColumnIfNotExists(tableName string, columnName string, 
 		return false
 	}
 
-	if utils.Cfg.SqlSettings.DriverName == "postgres" {
+	if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_POSTGRES {
 		_, err := ss.GetMaster().Exec("ALTER TABLE " + tableName + " ADD " + columnName + " " + postgresColType + " DEFAULT '" + defaultValue + "'")
 		if err != nil {
 			l4g.Critical("Failed to create column %v", err)
@@ -291,7 +326,7 @@ func (ss SqlStore) CreateColumnIfNotExists(tableName string, columnName string, 
 
 		return true
 
-	} else if utils.Cfg.SqlSettings.DriverName == "mysql" {
+	} else if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_MYSQL {
 		_, err := ss.GetMaster().Exec("ALTER TABLE " + tableName + " ADD " + columnName + " " + mySqlColType + " DEFAULT '" + defaultValue + "'")
 		if err != nil {
 			l4g.Critical("Failed to create column %v", err)
@@ -308,31 +343,26 @@ func (ss SqlStore) CreateColumnIfNotExists(tableName string, columnName string, 
 	}
 }
 
-// func (ss SqlStore) RemoveColumnIfExists(tableName string, columnName string) bool {
+func (ss SqlStore) RemoveColumnIfExists(tableName string, columnName string) bool {
 
-// 	// XXX TODO FIXME this should be removed after 0.6.0
-// 	if utils.Cfg.SqlSettings.DriverName == "postgres" {
-// 		return false
-// 	}
+	if !ss.DoesColumnExist(tableName, columnName) {
+		return false
+	}
 
-// 	if !ss.DoesColumnExist(tableName, columnName) {
-// 		return false
-// 	}
+	_, err := ss.GetMaster().Exec("ALTER TABLE " + tableName + " DROP COLUMN " + columnName)
+	if err != nil {
+		l4g.Critical("Failed to drop column %v", err)
+		time.Sleep(time.Second)
+		panic("Failed to drop column " + err.Error())
+	}
 
-// 	_, err := ss.GetMaster().Exec("ALTER TABLE " + tableName + " DROP COLUMN " + columnName)
-// 	if err != nil {
-// 		l4g.Critical("Failed to drop column %v", err)
-// 		time.Sleep(time.Second)
-// 		panic("Failed to drop column " + err.Error())
-// 	}
-
-// 	return true
-// }
+	return true
+}
 
 // func (ss SqlStore) RenameColumnIfExists(tableName string, oldColumnName string, newColumnName string, colType string) bool {
 
 // 	// XXX TODO FIXME this should be removed after 0.6.0
-// 	if utils.Cfg.SqlSettings.DriverName == "postgres" {
+// 	if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_POSTGRES {
 // 		return false
 // 	}
 
@@ -352,16 +382,16 @@ func (ss SqlStore) CreateColumnIfNotExists(tableName string, columnName string, 
 // }
 
 func (ss SqlStore) CreateIndexIfNotExists(indexName string, tableName string, columnName string) {
-	ss.createIndexIfNotExists(indexName, tableName, columnName, false)
+	ss.createIndexIfNotExists(indexName, tableName, columnName, INDEX_TYPE_DEFAULT)
 }
 
 func (ss SqlStore) CreateFullTextIndexIfNotExists(indexName string, tableName string, columnName string) {
-	ss.createIndexIfNotExists(indexName, tableName, columnName, true)
+	ss.createIndexIfNotExists(indexName, tableName, columnName, INDEX_TYPE_FULL_TEXT)
 }
 
-func (ss SqlStore) createIndexIfNotExists(indexName string, tableName string, columnName string, fullText bool) {
+func (ss SqlStore) createIndexIfNotExists(indexName string, tableName string, columnName string, indexType string) {
 
-	if utils.Cfg.SqlSettings.DriverName == "postgres" {
+	if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_POSTGRES {
 		_, err := ss.GetMaster().SelectStr("SELECT $1::regclass", indexName)
 		// It should fail if the index does not exist
 		if err == nil {
@@ -369,7 +399,7 @@ func (ss SqlStore) createIndexIfNotExists(indexName string, tableName string, co
 		}
 
 		query := ""
-		if fullText {
+		if indexType == INDEX_TYPE_FULL_TEXT {
 			query = "CREATE INDEX " + indexName + " ON " + tableName + " USING gin(to_tsvector('english', " + columnName + "))"
 		} else {
 			query = "CREATE INDEX " + indexName + " ON " + tableName + " (" + columnName + ")"
@@ -381,7 +411,7 @@ func (ss SqlStore) createIndexIfNotExists(indexName string, tableName string, co
 			time.Sleep(time.Second)
 			panic("Failed to create index " + err.Error())
 		}
-	} else if utils.Cfg.SqlSettings.DriverName == "mysql" {
+	} else if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_MYSQL {
 
 		count, err := ss.GetMaster().SelectInt("SELECT COUNT(0) AS index_exists FROM information_schema.statistics WHERE TABLE_SCHEMA = DATABASE() and table_name = ? AND index_name = ?", tableName, indexName)
 		if err != nil {
@@ -395,7 +425,7 @@ func (ss SqlStore) createIndexIfNotExists(indexName string, tableName string, co
 		}
 
 		fullTextIndex := ""
-		if fullText {
+		if indexType == INDEX_TYPE_FULL_TEXT {
 			fullTextIndex = " FULLTEXT "
 		}
 
@@ -475,6 +505,10 @@ func (ss SqlStore) System() SystemStore {
 
 func (ss SqlStore) Webhook() WebhookStore {
 	return ss.webhook
+}
+
+func (ss SqlStore) Preference() PreferenceStore {
+	return ss.preference
 }
 
 type mattermConverter struct{}

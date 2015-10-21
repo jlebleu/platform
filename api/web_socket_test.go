@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -16,7 +16,7 @@ import (
 func TestSocket(t *testing.T) {
 	Setup()
 
-	url := "ws://localhost:" + utils.Cfg.ServiceSettings.Port + "/api/v1/websocket"
+	url := "ws://localhost" + utils.Cfg.ServiceSettings.ListenAddress + "/api/v1/websocket"
 	team := &model.Team{DisplayName: "Name", Name: "z-z-" + model.NewId() + "a", Email: "test@nowhere.com", Type: model.TEAM_OPEN}
 	team = Client.Must(Client.CreateTeam(team)).Data.(*model.Team)
 
@@ -55,8 +55,13 @@ func TestSocket(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	Client.Must(Client.JoinChannel(channel1.Id))
 
-	// Read the join channel message that gets generated
+	// Read the user_added message that gets generated
 	var rmsg model.Message
+	if err := c2.ReadJSON(&rmsg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read the second user_added message that gets generated
 	if err := c2.ReadJSON(&rmsg); err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var utils = require('../utils/utils.jsx');
@@ -43,7 +43,7 @@ export default class FileAttachment extends React.Component {
                     return function loader() {
                         $(this).remove();
                         if (name in self.refs) {
-                            var imgDiv = React.findDOMNode(self.refs[name]);
+                            var imgDiv = ReactDOM.findDOMNode(self.refs[name]);
 
                             $(imgDiv).removeClass('post__load');
                             $(imgDiv).addClass('post__image');
@@ -82,7 +82,7 @@ export default class FileAttachment extends React.Component {
         if (nextState.fileSize !== this.state.fileSize) {
             if (this.refs.fileSize) {
                 // update the UI element to display the file size without re-rendering the whole component
-                React.findDOMNode(this.refs.fileSize).innerHTML = utils.fileSizeToString(nextState.fileSize);
+                ReactDOM.findDOMNode(this.refs.fileSize).innerHTML = utils.fileSizeToString(nextState.fileSize);
 
                 return false;
             }
@@ -143,10 +143,7 @@ export default class FileAttachment extends React.Component {
             >
                 <a className='post-image__thumbnail'
                     href='#'
-                    onClick={this.props.handleImageClick}
-                    data-img-id={this.props.index}
-                    data-toggle='modal'
-                    data-target={'#' + this.props.modalId}
+                    onClick={() => this.props.handleImageClick(this.props.index)}
                 >
                     {thumbnail}
                 </a>
@@ -187,9 +184,6 @@ FileAttachment.propTypes = {
     // the index of this attachment preview in the parent FileAttachmentList
     index: React.PropTypes.number.isRequired,
 
-    // the identifier of the modal dialog used to preview files
-    modalId: React.PropTypes.string.isRequired,
-
-    // handler for when the thumbnail is clicked
+    // handler for when the thumbnail is clicked passed the index above
     handleImageClick: React.PropTypes.func
 };

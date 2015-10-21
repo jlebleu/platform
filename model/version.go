@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -12,7 +12,8 @@ import (
 // It should be maitained in chronological order with most current
 // release at the front of the list.
 var versions = []string{
-	"0.8.0",
+	"1.1.0",
+	"1.0.0",
 	"0.7.1",
 	"0.7.0",
 	"0.6.0",
@@ -65,6 +66,10 @@ func GetPreviousVersion(currentVersion string) (int64, int64) {
 	}
 
 	return 0, 0
+}
+
+func IsOfficalBuild() bool {
+	return BuildNumber != "_BUILD_NUMBER_"
 }
 
 func IsCurrentVersion(versionToCheck string) bool {

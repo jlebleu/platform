@@ -1,11 +1,7 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var ErrorStore = require('../stores/error_store.jsx');
-var utils = require('../utils/utils.jsx');
-var AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
-var Constants = require('../utils/constants.jsx');
-var ActionTypes = Constants.ActionTypes;
 
 export default class ErrorBar extends React.Component {
     constructor() {
@@ -13,70 +9,92 @@ export default class ErrorBar extends React.Component {
 
         this.onErrorChange = this.onErrorChange.bind(this);
         this.handleClose = this.handleClose.bind(this);
+        this.prevTimer = null;
 
-        this.state = this.getStateFromStores();
-        if (this.state.message) {
-            setTimeout(this.handleClose, 10000);
+        this.state = ErrorStore.getLastError();
+        if (this.isValidError(this.state)) {
+            this.prevTimer = setTimeout(this.handleClose, 10000);
         }
     }
-    getStateFromStores() {
-        var error = ErrorStore.getLastError();
-        if (!error || error.message === 'There appears to be a problem with your internet connection') {
-            return {message: null};
+
+    isValidError(s) {
+        if (!s) {
+            return false;
         }
 
-        return {message: error.message};
+        if (!s.message) {
+            return false;
+        }
+
+        if (s.connErrorCount && s.connErrorCount >= 1 && s.connErrorCount < 7) {
+            return false;
+        }
+
+        return true;
     }
+
+    isConnectionError(s) {
+        if (!s.connErrorCount || s.connErrorCount === 0) {
+            return false;
+        }
+
+        if (s.connErrorCount > 7) {
+            return true;
+        }
+
+        return false;
+    }
+
     componentDidMount() {
         ErrorStore.addChangeListener(this.onErrorChange);
-        $('body').css('padding-top', $(React.findDOMNode(this)).outerHeight());
-        $(window).resize(function onResize() {
-            if (this.state.message) {
-                $('body').css('padding-top', $(React.findDOMNode(this)).outerHeight());
-            }
-        }.bind(this));
     }
+
     componentWillUnmount() {
         ErrorStore.removeChangeListener(this.onErrorChange);
     }
-    onErrorChange() {
-        var newState = this.getStateFromStores();
-        if (!utils.areStatesEqual(newState, this.state)) {
-            if (newState.message) {
-                setTimeout(this.handleClose, 10000);
-            }
 
+    onErrorChange() {
+        var newState = ErrorStore.getLastError();
+
+        if (this.prevTimer != null) {
+            clearInterval(this.prevTimer);
+            this.prevTimer = null;
+        }
+
+        if (newState) {
             this.setState(newState);
+            if (!this.isConnectionError(newState)) {
+                this.prevTimer = setTimeout(this.handleClose, 10000);
+            }
+        } else {
+            this.setState({message: null});
         }
     }
+
     handleClose(e) {
         if (e) {
             e.preventDefault();
         }
 
-        AppDispatcher.handleServerAction({
-            type: ActionTypes.RECIEVED_ERROR,
-            err: null
-        });
-
-        $('body').css('padding-top', '0');
+        this.setState({message: null});
     }
+
     render() {
-        if (this.state.message) {
-            return (
-                <div className='error-bar'>
-                    <span>{this.state.message}</span>
-                    <a
-                        href='#'
-                        className='error-bar__close'
-                        onClick={this.handleClose}
-                    >
-                        &times;
-                    </a>
-                </div>
-            );
+        if (!this.isValidError(this.state)) {
+            return <div/>;
         }
 
-        return <div/>;
+        return (
+            <div className='error-bar'>
+                <span>{this.state.message}</span>
+                <a
+                    href='#'
+                    className='error-bar__close'
+                    onClick={this.handleClose}
+                >
+                    &times;
+                </a>
+            </div>
+        );
     }
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var Utils = require('../utils/utils.jsx');
@@ -36,7 +36,7 @@ export default class TeamSignupWelcomePage extends React.Component {
 
         var state = {useDiff: true, serverError: ''};
 
-        var email = React.findDOMNode(this.refs.email).value.trim().toLowerCase();
+        var email = ReactDOM.findDOMNode(this.refs.email).value.trim().toLowerCase();
         if (!email || !Utils.isEmail(email)) {
             state.emailError = 'Please enter a valid email address';
             this.setState(state);
@@ -59,8 +59,7 @@ export default class TeamSignupWelcomePage extends React.Component {
                 }
             }.bind(this),
             function error(err) {
-                this.state.serverError = err.message;
-                this.setState(this.state);
+                this.setState({serverError: err.message});
             }.bind(this)
         );
     }
@@ -146,6 +145,7 @@ export default class TeamSignupWelcomePage extends React.Component {
                                     className='form-control'
                                     placeholder='Email Address'
                                     maxLength='128'
+                                    spellCheck='false'
                                 />
                             </div>
                         </div>

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 const Utils = require('../utils/utils.jsx');
@@ -13,27 +13,24 @@ export default class TeamSignupEmailItem extends React.Component {
         this.state = {};
     }
     getValue() {
-        return React.findDOMNode(this.refs.email).value.trim();
+        return ReactDOM.findDOMNode(this.refs.email).value.trim();
     }
     validate(teamEmail) {
-        const email = React.findDOMNode(this.refs.email).value.trim().toLowerCase();
+        const email = ReactDOM.findDOMNode(this.refs.email).value.trim().toLowerCase();
 
         if (!email) {
             return true;
         }
 
         if (!Utils.isEmail(email)) {
-            this.state.emailError = 'Please enter a valid email address';
-            this.setState(this.state);
+            this.setState({emailError: 'Please enter a valid email address'});
             return false;
         } else if (email === teamEmail) {
-            this.state.emailError = 'Please use a different email than the one used at signup';
-            this.setState(this.state);
+            this.setState({emailError: 'Please use a different email than the one used at signup'});
             return false;
         }
 
-        this.state.emailError = '';
-        this.setState(this.state);
+        this.setState({emailError: ''});
         return true;
     }
     render() {
@@ -54,6 +51,7 @@ export default class TeamSignupEmailItem extends React.Component {
                     placeholder='Email Address'
                     defaultValue={this.props.email}
                     maxLength='128'
+                    spellCheck='false'
                 />
                 {emailError}
             </div>

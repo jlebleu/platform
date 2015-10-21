@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var client = require('../utils/client.jsx');
@@ -90,7 +90,7 @@ export default class SearchBar extends React.Component {
                 function success(data) {
                     this.setState({isSearching: false});
                     if (utils.isMobile()) {
-                        React.findDOMNode(this.refs.search).value = '';
+                        ReactDOM.findDOMNode(this.refs.search).value = '';
                     }
 
                     AppDispatcher.handleServerAction({

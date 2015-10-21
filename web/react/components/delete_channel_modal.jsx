@@ -1,15 +1,17 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 const Client = require('../utils/client.jsx');
 const AsyncClient = require('../utils/async_client.jsx');
 const ChannelStore = require('../stores/channel_store.jsx');
+var TeamStore = require('../stores/team_store.jsx');
 
 export default class DeleteChannelModal extends React.Component {
     constructor(props) {
         super(props);
 
         this.handleDelete = this.handleDelete.bind(this);
+        this.onShow = this.onShow.bind(this);
 
         this.state = {
             title: '',
@@ -24,21 +26,22 @@ export default class DeleteChannelModal extends React.Component {
         Client.deleteChannel(this.state.channelId,
             function handleDeleteSuccess() {
                 AsyncClient.getChannels(true);
-                window.location.href = '/';
+                window.location.href = TeamStore.getCurrentTeamUrl() + '/channels/town-square';
             },
             function handleDeleteError(err) {
                 AsyncClient.dispatchError(err, 'handleDelete');
             }
         );
     }
+    onShow(e) {
+        var button = $(e.relatedTarget);
+        this.setState({
+            title: button.attr('data-title'),
+            channelId: button.attr('data-channelid')
+        });
+    }
     componentDidMount() {
-        $(React.findDOMNode(this.refs.modal)).on('show.bs.modal', function handleShow(e) {
-            var button = $(e.relatedTarget);
-            this.setState({
-                title: button.attr('data-title'),
-                channelId: button.attr('data-channelid')
-            });
-        }.bind(this));
+        $(ReactDOM.findDOMNode(this.refs.modal)).on('show.bs.modal', this.onShow);
     }
     render() {
         const channel = ChannelStore.getCurrent();

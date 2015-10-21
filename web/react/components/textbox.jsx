@@ -1,15 +1,15 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 const AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
 const PostStore = require('../stores/post_store.jsx');
 const CommandList = require('./command_list.jsx');
 const ErrorStore = require('../stores/error_store.jsx');
-const AsyncClient = require('../utils/async_client.jsx');
 
 const Utils = require('../utils/utils.jsx');
 const Constants = require('../utils/constants.jsx');
 const ActionTypes = Constants.ActionTypes;
+const KeyCodes = Constants.KeyCodes;
 
 export default class Textbox extends React.Component {
     constructor(props) {
@@ -18,7 +18,6 @@ export default class Textbox extends React.Component {
         this.getStateFromStores = this.getStateFromStores.bind(this);
         this.onListenerChange = this.onListenerChange.bind(this);
         this.onRecievedError = this.onRecievedError.bind(this);
-        this.onTimerInterrupt = this.onTimerInterrupt.bind(this);
         this.updateMentionTab = this.updateMentionTab.bind(this);
         this.handleChange = this.handleChange.bind(this);
         this.handleKeyPress = this.handleKeyPress.bind(this);
@@ -35,8 +34,7 @@ export default class Textbox extends React.Component {
         this.state = {
             mentionText: '-1',
             mentions: [],
-            connection: '',
-            timerInterrupt: null
+            connection: ''
         };
 
         this.caret = -1;
@@ -44,6 +42,7 @@ export default class Textbox extends React.Component {
         this.doProcessMentions = false;
         this.mentions = [];
     }
+
     getStateFromStores() {
         const error = ErrorStore.getLastError();
 
@@ -53,6 +52,7 @@ export default class Textbox extends React.Component {
 
         return {message: null};
     }
+
     componentDidMount() {
         PostStore.addAddMentionListener(this.onListenerChange);
         ErrorStore.addChangeListener(this.onRecievedError);
@@ -60,49 +60,31 @@ export default class Textbox extends React.Component {
         this.resize();
         this.updateMentionTab(null);
     }
+
     componentWillUnmount() {
         PostStore.removeAddMentionListener(this.onListenerChange);
         ErrorStore.removeChangeListener(this.onRecievedError);
     }
+
     onListenerChange(id, username) {
         if (id === this.props.id) {
             this.addMention(username);
         }
     }
+
     onRecievedError() {
-        const errorState = this.getStateFromStores();
+        const errorState = ErrorStore.getLastError();
 
-        if (this.state.timerInterrupt !== null) {
-            window.clearInterval(this.state.timerInterrupt);
-            this.setState({timerInterrupt: null});
-        }
-
-        if (errorState.message === 'There appears to be a problem with your internet connection') {
+        if (errorState && errorState.connErrorCount > 0) {
             this.setState({connection: 'bad-connection'});
-            const timerInterrupt = window.setInterval(this.onTimerInterrupt, 5000);
-            this.setState({timerInterrupt: timerInterrupt});
         } else {
             this.setState({connection: ''});
         }
     }
-    onTimerInterrupt() {
-        // Since these should only happen when you have no connection and slightly briefly after any
-        // performance hit should not matter
-        if (this.state.connection === 'bad-connection') {
-            AppDispatcher.handleServerAction({
-                type: ActionTypes.RECIEVED_ERROR,
-                err: null
-            });
 
-            AsyncClient.updateLastViewedAt();
-        }
-
-        window.clearInterval(this.state.timerInterrupt);
-        this.setState({timerInterrupt: null});
-    }
     componentDidUpdate() {
         if (this.caret >= 0) {
-            Utils.setCaretPosition(React.findDOMNode(this.refs.message), this.caret);
+            Utils.setCaretPosition(ReactDOM.findDOMNode(this.refs.message), this.caret);
             this.caret = -1;
         }
         if (this.doProcessMentions) {
@@ -111,32 +93,36 @@ export default class Textbox extends React.Component {
         }
         this.resize();
     }
+
     componentWillReceiveProps(nextProps) {
         if (!this.addedMention) {
             this.checkForNewMention(nextProps.messageText);
         }
-        const text = React.findDOMNode(this.refs.message).value;
+        const text = ReactDOM.findDOMNode(this.refs.message).value;
         if (nextProps.channelId !== this.props.channelId || nextProps.messageText !== text) {
             this.doProcessMentions = true;
         }
         this.addedMention = false;
         this.refs.commands.getSuggestedCommands(nextProps.messageText);
     }
+
     updateMentionTab(mentionText) {
         // using setTimeout so dispatch isn't called during an in progress dispatch
-        setTimeout(function updateMentionTabAfterTimeout() {
+        setTimeout(() => {
             AppDispatcher.handleViewAction({
                 type: ActionTypes.RECIEVED_MENTION_DATA,
                 id: this.props.id,
                 mention_text: mentionText
             });
-        }.bind(this), 1);
+        }, 1);
     }
+
     handleChange() {
-        this.props.onUserInput(React.findDOMNode(this.refs.message).value);
+        this.props.onUserInput(ReactDOM.findDOMNode(this.refs.message).value);
     }
+
     handleKeyPress(e) {
-        const text = React.findDOMNode(this.refs.message).value;
+        const text = ReactDOM.findDOMNode(this.refs.message).value;
 
         if (!this.refs.commands.isEmpty() && text.indexOf('/') === 0 && e.which === 13) {
             this.refs.commands.addFirstCommand();
@@ -145,7 +131,7 @@ export default class Textbox extends React.Component {
         }
 
         if (!this.doProcessMentions) {
-            const caret = Utils.getCaretPosition(React.findDOMNode(this.refs.message));
+            const caret = Utils.getCaretPosition(ReactDOM.findDOMNode(this.refs.message));
             const preText = text.substring(0, caret);
             const lastSpace = preText.lastIndexOf(' ');
             const lastAt = preText.lastIndexOf('@');
@@ -157,17 +143,21 @@ export default class Textbox extends React.Component {
 
         this.props.onKeyPress(e);
     }
+
     handleKeyDown(e) {
-        if (Utils.getSelectedText(React.findDOMNode(this.refs.message)) !== '') {
+        if (Utils.getSelectedText(ReactDOM.findDOMNode(this.refs.message)) !== '') {
             this.doProcessMentions = true;
         }
 
-        if (e.keyCode === 8) {
+        if (e.keyCode === KeyCodes.BACKSPACE) {
             this.handleBackspace(e);
+        } else if (this.props.onKeyDown) {
+            this.props.onKeyDown(e);
         }
     }
+
     handleBackspace() {
-        const text = React.findDOMNode(this.refs.message).value;
+        const text = ReactDOM.findDOMNode(this.refs.message).value;
         if (text.indexOf('/') === 0) {
             this.refs.commands.getSuggestedCommands(text.substring(0, text.length - 1));
         }
@@ -176,7 +166,7 @@ export default class Textbox extends React.Component {
             return;
         }
 
-        const caret = Utils.getCaretPosition(React.findDOMNode(this.refs.message));
+        const caret = Utils.getCaretPosition(ReactDOM.findDOMNode(this.refs.message));
         const preText = text.substring(0, caret);
         const lastSpace = preText.lastIndexOf(' ');
         const lastAt = preText.lastIndexOf('@');
@@ -185,8 +175,9 @@ export default class Textbox extends React.Component {
             this.doProcessMentions = true;
         }
     }
+
     checkForNewMention(text) {
-        const caret = Utils.getCaretPosition(React.findDOMNode(this.refs.message));
+        const caret = Utils.getCaretPosition(ReactDOM.findDOMNode(this.refs.message));
 
         const preText = text.substring(0, caret);
 
@@ -211,8 +202,9 @@ export default class Textbox extends React.Component {
         const name = preText.substring(atIndex + 1, preText.length).toLowerCase();
         this.updateMentionTab(name);
     }
+
     addMention(name) {
-        const caret = Utils.getCaretPosition(React.findDOMNode(this.refs.message));
+        const caret = Utils.getCaretPosition(ReactDOM.findDOMNode(this.refs.message));
 
         const text = this.props.messageText;
 
@@ -233,14 +225,16 @@ export default class Textbox extends React.Component {
 
         this.props.onUserInput(`${prefix}@${name} ${suffix}`);
     }
+
     addCommand(cmd) {
-        const elm = React.findDOMNode(this.refs.message);
+        const elm = ReactDOM.findDOMNode(this.refs.message);
         elm.value = cmd;
         this.handleChange();
     }
+
     resize() {
-        const e = React.findDOMNode(this.refs.message);
-        const w = React.findDOMNode(this.refs.wrapper);
+        const e = ReactDOM.findDOMNode(this.refs.message);
+        const w = ReactDOM.findDOMNode(this.refs.wrapper);
 
         const prevHeight = $(e).height();
 
@@ -255,30 +249,36 @@ export default class Textbox extends React.Component {
         if (e.scrollHeight - mod < 167) {
             $(e).css({height: 'auto', 'overflow-y': 'hidden'}).height(e.scrollHeight - mod);
             $(w).css({height: 'auto'}).height(e.scrollHeight + 2);
+            $(w).closest('.post-body__cell').removeClass('scroll');
         } else {
             $(e).css({height: 'auto', 'overflow-y': 'scroll'}).height(167);
             $(w).css({height: 'auto'}).height(167);
+            $(w).closest('.post-body__cell').addClass('scroll');
         }
 
         if (prevHeight !== $(e).height() && this.props.onHeightChange) {
             this.props.onHeightChange();
         }
     }
+
     handleFocus() {
-        const elm = React.findDOMNode(this.refs.message);
+        const elm = ReactDOM.findDOMNode(this.refs.message);
         if (elm.title === elm.value) {
             elm.value = '';
         }
     }
+
     handleBlur() {
-        const elm = React.findDOMNode(this.refs.message);
+        const elm = ReactDOM.findDOMNode(this.refs.message);
         if (elm.value === '') {
             elm.value = elm.title;
         }
     }
+
     handlePaste() {
         this.doProcessMentions = true;
     }
+
     render() {
         return (
             <div
@@ -321,5 +321,6 @@ Textbox.propTypes = {
     onUserInput: React.PropTypes.func.isRequired,
     onKeyPress: React.PropTypes.func.isRequired,
     onHeightChange: React.PropTypes.func,
-    createMessage: React.PropTypes.string.isRequired
+    createMessage: React.PropTypes.string.isRequired,
+    onKeyDown: React.PropTypes.func
 };

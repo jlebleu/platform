@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -23,7 +23,10 @@ func InitAdmin(r *mux.Router) {
 	sr.Handle("/logs", ApiUserRequired(getLogs)).Methods("GET")
 	sr.Handle("/config", ApiUserRequired(getConfig)).Methods("GET")
 	sr.Handle("/save_config", ApiUserRequired(saveConfig)).Methods("POST")
+	sr.Handle("/test_email", ApiUserRequired(testEmail)).Methods("POST")
 	sr.Handle("/client_props", ApiAppHandler(getClientProperties)).Methods("GET")
+	sr.Handle("/log_client", ApiAppHandler(logClient)).Methods("POST")
+
 }
 
 func getLogs(c *Context, w http.ResponseWriter, r *http.Request) {
@@ -34,7 +37,7 @@ func getLogs(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	var lines []string
 
-	if utils.Cfg.LogSettings.FileEnable {
+	if utils.Cfg.LogSettings.EnableFile {
 
 		file, err := os.Open(utils.GetLogFileLocation(utils.Cfg.LogSettings.FileLocation))
 		if err != nil {
@@ -56,6 +59,26 @@ func getLogs(c *Context, w http.ResponseWriter, r *http.Request) {
 
 func getClientProperties(c *Context, w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(model.MapToJson(utils.ClientProperties)))
+}
+
+func logClient(c *Context, w http.ResponseWriter, r *http.Request) {
+	m := model.MapFromJson(r.Body)
+
+	lvl := m["level"]
+	msg := m["message"]
+
+	if len(msg) > 400 {
+		msg = msg[0:399]
+	}
+
+	if lvl == "ERROR" {
+		err := model.NewAppError("client", msg, "")
+		c.LogError(err)
+	}
+
+	rm := make(map[string]string)
+	rm["SUCCESS"] = "true"
+	w.Write([]byte(model.MapToJson(rm)))
 }
 
 func getConfig(c *Context, w http.ResponseWriter, r *http.Request) {
@@ -81,20 +104,41 @@ func saveConfig(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(cfg.ServiceSettings.Port) == 0 {
-		c.SetInvalidParam("saveConfig", "config")
+	cfg.SetDefaults()
+
+	if err := cfg.IsValid(); err != nil {
+		c.Err = err
 		return
 	}
-
-	if cfg.TeamSettings.MaxUsersPerTeam == 0 {
-		c.SetInvalidParam("saveConfig", "config")
-		return
-	}
-
-	// TODO run some cleanup validators
 
 	utils.SaveConfig(utils.CfgFileName, cfg)
 	utils.LoadConfig(utils.CfgFileName)
 	json := utils.Cfg.ToJson()
 	w.Write([]byte(json))
+}
+
+func testEmail(c *Context, w http.ResponseWriter, r *http.Request) {
+	if !c.HasSystemAdminPermissions("testEmail") {
+		return
+	}
+
+	cfg := model.ConfigFromJson(r.Body)
+	if cfg == nil {
+		c.SetInvalidParam("testEmail", "config")
+		return
+	}
+
+	if result := <-Srv.Store.User().Get(c.Session.UserId); result.Err != nil {
+		c.Err = result.Err
+		return
+	} else {
+		if err := utils.SendMailUsingConfig(result.Data.(*model.User).Email, "Mattermost - Testing Email Settings", "<br/><br/><br/>It appears your Mattermost email is setup correctly!", cfg); err != nil {
+			c.Err = err
+			return
+		}
+	}
+
+	m := make(map[string]string)
+	m["SUCCESS"] = "true"
+	w.Write([]byte(model.MapToJson(m)))
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
@@ -48,7 +48,7 @@ class ErrorStoreClass extends EventEmitter {
 
 var ErrorStore = new ErrorStoreClass();
 
-ErrorStore.dispatchToken = AppDispatcher.register(function registry(payload) {
+ErrorStore.dispatchToken = AppDispatcher.register((payload) => {
     var action = payload.action;
     switch (action.type) {
     case ActionTypes.RECIEVED_ERROR:

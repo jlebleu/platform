@@ -26,6 +26,7 @@
         .post-header {
             .post-header-col {
                 &.post-header__reply {
+                    min-width: 30px;
                     text-align: right;
                     float: right;
                 }
@@ -51,9 +52,10 @@
         margin: 11px 0 0 0;
         width: 22px;
         height: 22px;
-        background: url("../images/closeSidebar.png");
-        @include background-size(100% 100%);
         opacity: 0.5;
+        font-size: 22px;
+        line-height: 0;
+        background: none;
         float: right;
         outline: none;
         border: none;
@@ -61,11 +63,15 @@
         &:hover, &:active {
             opacity: 0.8;
         }
+        i {
+            position: relative;
+            top: -2px;
+        }
     }
     .sidebar--right__header {
         font-size: 1em;
         text-transform: uppercase;
-        color: #444;
+        color: inherit;
         height: 44px;
         padding: 0 1em;
         line-height: 44px;

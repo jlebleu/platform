@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package web
@@ -15,7 +15,6 @@ import (
 	"gopkg.in/fsnotify.v1"
 	"html/template"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -27,7 +26,7 @@ type HtmlTemplatePage api.Page
 func NewHtmlTemplatePage(templateName string, title string) *HtmlTemplatePage {
 
 	if len(title) > 0 {
-		title = utils.Cfg.ServiceSettings.SiteName + " - " + title
+		title = utils.Cfg.TeamSettings.SiteName + " - " + title
 	}
 
 	props := make(map[string]string)
@@ -64,6 +63,9 @@ func InitWeb() {
 	mainrouter.Handle("/signup/{service:[A-Za-z]+}/complete", api.AppHandlerIndependent(signupCompleteOAuth)).Methods("GET")
 
 	mainrouter.Handle("/admin_console", api.UserRequired(adminConsole)).Methods("GET")
+	mainrouter.Handle("/admin_console/", api.UserRequired(adminConsole)).Methods("GET")
+	mainrouter.Handle("/admin_console/{tab:[A-Za-z0-9-_]+}", api.UserRequired(adminConsole)).Methods("GET")
+	mainrouter.Handle("/admin_console/{tab:[A-Za-z0-9-_]+}/{team:[A-Za-z0-9-]*}", api.UserRequired(adminConsole)).Methods("GET")
 
 	mainrouter.Handle("/hooks/{id:[A-Za-z0-9]+}", api.ApiAppHandler(incomingWebhook)).Methods("POST")
 
@@ -147,7 +149,6 @@ func root(c *api.Context, w http.ResponseWriter, r *http.Request) {
 
 	if len(c.Session.UserId) == 0 {
 		page := NewHtmlTemplatePage("signup_team", "Signup")
-		page.Props["AuthServices"] = model.ArrayToJson(utils.GetAllowedAuthServices())
 		page.Render(c, w)
 	} else {
 		page := NewHtmlTemplatePage("home", "Home")
@@ -163,7 +164,6 @@ func signup(c *api.Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	page := NewHtmlTemplatePage("signup_team", "Signup")
-	page.Props["AuthServices"] = model.ArrayToJson(utils.GetAllowedAuthServices())
 	page.Render(c, w)
 }
 
@@ -177,8 +177,7 @@ func login(c *api.Context, w http.ResponseWriter, r *http.Request) {
 	var team *model.Team
 	if tResult := <-api.Srv.Store.Team().GetByName(teamName); tResult.Err != nil {
 		l4g.Error("Couldn't find team name=%v, teamURL=%v, err=%v", teamName, c.GetTeamURL(), tResult.Err.Message)
-		// This should probably do somthing nicer
-		http.Redirect(w, r, "http://"+r.Host, http.StatusTemporaryRedirect)
+		http.Redirect(w, r, api.GetProtocol(r)+"://"+r.Host, http.StatusTemporaryRedirect)
 		return
 	} else {
 		team = tResult.Data.(*model.Team)
@@ -192,10 +191,40 @@ func login(c *api.Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// We still might be able to switch to this team because we've logged in before
+	if multiCookie, err := r.Cookie(model.MULTI_SESSION_TOKEN); err == nil {
+		multiToken := multiCookie.Value
+
+		if len(multiToken) > 0 {
+			tokens := strings.Split(multiToken, " ")
+
+			for _, token := range tokens {
+				if sr := <-api.Srv.Store.Session().Get(token); sr.Err == nil {
+					s := sr.Data.(*model.Session)
+
+					if !s.IsExpired() && s.TeamId == team.Id {
+						w.Header().Set(model.HEADER_TOKEN, s.Token)
+						sessionCookie := &http.Cookie{
+							Name:     model.SESSION_TOKEN,
+							Value:    s.Token,
+							Path:     "/",
+							MaxAge:   model.SESSION_TIME_WEB_IN_SECS,
+							HttpOnly: true,
+						}
+
+						http.SetCookie(w, sessionCookie)
+
+						http.Redirect(w, r, c.GetSiteURL()+"/"+team.Name+"/channels/town-square", http.StatusTemporaryRedirect)
+						return
+					}
+				}
+			}
+		}
+	}
+
 	page := NewHtmlTemplatePage("login", "Login")
 	page.Props["TeamDisplayName"] = team.DisplayName
-	page.Props["TeamName"] = teamName
-	page.Props["AuthServices"] = model.ArrayToJson(utils.GetAllowedAuthServices())
+	page.Props["TeamName"] = team.Name
 	page.Render(c, w)
 }
 
@@ -211,7 +240,7 @@ func signupTeamComplete(c *api.Context, w http.ResponseWriter, r *http.Request) 
 	data := r.FormValue("d")
 	hash := r.FormValue("h")
 
-	if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", data, utils.Cfg.ServiceSettings.InviteSalt)) {
+	if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", data, utils.Cfg.EmailSettings.InviteSalt)) {
 		c.Err = model.NewAppError("signupTeamComplete", "The signup link does not appear to be valid", "")
 		return
 	}
@@ -260,7 +289,7 @@ func signupUserComplete(c *api.Context, w http.ResponseWriter, r *http.Request) 
 		}
 	} else {
 
-		if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", data, utils.Cfg.ServiceSettings.InviteSalt)) {
+		if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", data, utils.Cfg.EmailSettings.InviteSalt)) {
 			c.Err = model.NewAppError("signupTeamComplete", "The signup link does not appear to be valid", "")
 			return
 		}
@@ -281,7 +310,6 @@ func signupUserComplete(c *api.Context, w http.ResponseWriter, r *http.Request) 
 	page.Props["TeamId"] = props["id"]
 	page.Props["Data"] = data
 	page.Props["Hash"] = hash
-	page.Props["AuthServices"] = model.ArrayToJson(utils.GetAllowedAuthServices())
 	page.Render(c, w)
 }
 
@@ -293,6 +321,10 @@ func logout(c *api.Context, w http.ResponseWriter, r *http.Request) {
 func getChannel(c *api.Context, w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	name := params["channelname"]
+	teamName := params["team"]
+
+	var team *model.Team
+	teamChan := api.Srv.Store.Team().Get(c.Session.TeamId)
 
 	var channelId string
 	if result := <-api.Srv.Store.Channel().CheckPermissionsToByName(c.Session.TeamId, name, c.Session.UserId); result.Err != nil {
@@ -300,6 +332,19 @@ func getChannel(c *api.Context, w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		channelId = result.Data.(string)
+	}
+
+	if tResult := <-teamChan; tResult.Err != nil {
+		c.Err = tResult.Err
+		return
+	} else {
+		team = tResult.Data.(*model.Team)
+	}
+
+	if team.Name != teamName {
+		l4g.Error("It appears you are logged into " + team.Name + ", but are trying to access " + teamName)
+		http.Redirect(w, r, c.GetSiteURL()+"/"+team.Name+"/channels/town-square", http.StatusFound)
+		return
 	}
 
 	if len(channelId) == 0 {
@@ -324,31 +369,34 @@ func getChannel(c *api.Context, w http.ResponseWriter, r *http.Request) {
 			// lets make sure the user is valid
 			if result := <-api.Srv.Store.User().Get(c.Session.UserId); result.Err != nil {
 				c.Err = result.Err
-				c.RemoveSessionCookie(w)
+				c.RemoveSessionCookie(w, r)
 				l4g.Error("Error in getting users profile for id=%v forcing logout", c.Session.UserId)
 				return
 			}
 
-			//api.Handle404(w, r)
-			//Bad channel urls just redirect to the town-square for now
+			// We will attempt to auto-join open channels
+			if cr := <-api.Srv.Store.Channel().GetByName(c.Session.TeamId, name); cr.Err != nil {
+				http.Redirect(w, r, c.GetTeamURL()+"/channels/town-square", http.StatusFound)
+			} else {
+				channel := cr.Data.(*model.Channel)
+				if channel.Type == model.CHANNEL_OPEN {
+					api.JoinChannel(c, channel.Id, "")
+					if c.Err != nil {
+						return
+					}
 
-			http.Redirect(w, r, c.GetTeamURL()+"/channels/town-square", http.StatusFound)
-			return
+					channelId = channel.Id
+				} else {
+					http.Redirect(w, r, c.GetTeamURL()+"/channels/town-square", http.StatusFound)
+				}
+			}
 		}
-	}
-
-	var team *model.Team
-
-	if tResult := <-api.Srv.Store.Team().Get(c.Session.TeamId); tResult.Err != nil {
-		c.Err = tResult.Err
-		return
-	} else {
-		team = tResult.Data.(*model.Team)
 	}
 
 	page := NewHtmlTemplatePage("channel", "")
 	page.Props["Title"] = name + " - " + team.DisplayName + " " + page.ClientProps["SiteName"]
 	page.Props["TeamDisplayName"] = team.DisplayName
+	page.Props["TeamName"] = team.Name
 	page.Props["TeamType"] = team.Type
 	page.Props["TeamId"] = team.Id
 	page.Props["ChannelName"] = name
@@ -359,6 +407,7 @@ func getChannel(c *api.Context, w http.ResponseWriter, r *http.Request) {
 
 func verifyEmail(c *api.Context, w http.ResponseWriter, r *http.Request) {
 	resend := r.URL.Query().Get("resend")
+	resendSuccess := r.URL.Query().Get("resend_success")
 	name := r.URL.Query().Get("teamname")
 	email := r.URL.Query().Get("email")
 	hashedId := r.URL.Query().Get("hid")
@@ -378,32 +427,33 @@ func verifyEmail(c *api.Context, w http.ResponseWriter, r *http.Request) {
 			return
 		} else {
 			user := result.Data.(*model.User)
-			api.FireAndForgetVerifyEmail(user.Id, user.Email, team.Name, team.DisplayName, c.GetSiteURL(), c.GetTeamURLFromTeam(team))
-			http.Redirect(w, r, "/", http.StatusFound)
+
+			if user.LastActivityAt > 0 {
+				api.SendEmailChangeVerifyEmailAndForget(user.Id, user.Email, team.Name, team.DisplayName, c.GetSiteURL(), c.GetTeamURLFromTeam(team))
+			} else {
+				api.SendVerifyEmailAndForget(user.Id, user.Email, team.Name, team.DisplayName, c.GetSiteURL(), c.GetTeamURLFromTeam(team))
+			}
+
+			newAddress := strings.Replace(r.URL.String(), "&resend=true", "&resend_success=true", -1)
+			http.Redirect(w, r, newAddress, http.StatusFound)
 			return
 		}
 	}
 
-	var isVerified string
-	if len(userId) != 26 {
-		isVerified = "false"
-	} else if len(hashedId) == 0 {
-		isVerified = "false"
-	} else if model.ComparePassword(hashedId, userId) {
-		isVerified = "true"
+	if len(userId) == 26 && len(hashedId) != 0 && model.ComparePassword(hashedId, userId) {
 		if c.Err = (<-api.Srv.Store.User().VerifyEmail(userId)).Err; c.Err != nil {
 			return
 		} else {
-			c.LogAudit("")
+			c.LogAudit("Email Verified")
+			http.Redirect(w, r, api.GetProtocol(r)+"://"+r.Host+"/"+name+"/login?verified=true&email="+email, http.StatusTemporaryRedirect)
+			return
 		}
-	} else {
-		isVerified = "false"
 	}
 
 	page := NewHtmlTemplatePage("verify", "Email Verified")
-	page.Props["IsVerified"] = isVerified
 	page.Props["TeamURL"] = c.GetTeamURLFromTeam(team)
 	page.Props["UserEmail"] = email
+	page.Props["ResendSuccess"] = resendSuccess
 	page.Render(c, w)
 }
 
@@ -422,7 +472,7 @@ func resetPassword(c *api.Context, w http.ResponseWriter, r *http.Request) {
 	if len(hash) == 0 || len(data) == 0 {
 		isResetLink = false
 	} else {
-		if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", data, utils.Cfg.ServiceSettings.ResetSalt)) {
+		if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", data, utils.Cfg.EmailSettings.PasswordResetSalt)) {
 			c.Err = model.NewAppError("resetPassword", "The reset link does not appear to be valid", "")
 			return
 		}
@@ -452,6 +502,7 @@ func resetPassword(c *api.Context, w http.ResponseWriter, r *http.Request) {
 	page := NewHtmlTemplatePage("password_reset", "")
 	page.Props["Title"] = "Reset Password " + page.ClientProps["SiteName"]
 	page.Props["TeamDisplayName"] = teamDisplayName
+	page.Props["TeamName"] = teamName
 	page.Props["Hash"] = hash
 	page.Props["Data"] = data
 	page.Props["TeamName"] = teamName
@@ -484,7 +535,7 @@ func signupWithOAuth(c *api.Context, w http.ResponseWriter, r *http.Request) {
 		data := r.URL.Query().Get("d")
 		props := model.MapFromJson(strings.NewReader(data))
 
-		if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", data, utils.Cfg.ServiceSettings.InviteSalt)) {
+		if !model.ComparePassword(hash, fmt.Sprintf("%v:%v", data, utils.Cfg.EmailSettings.InviteSalt)) {
 			c.Err = model.NewAppError("signupWithOAuth", "The signup link does not appear to be valid", "")
 			return
 		}
@@ -650,7 +701,14 @@ func adminConsole(c *api.Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	params := mux.Vars(r)
+	activeTab := params["tab"]
+	teamId := params["team"]
+
 	page := NewHtmlTemplatePage("admin_console", "Admin Console")
+
+	page.Props["ActiveTab"] = activeTab
+	page.Props["TeamId"] = teamId
 	page.Render(c, w)
 }
 
@@ -844,6 +902,12 @@ func getAccessToken(c *api.Context, w http.ResponseWriter, r *http.Request) {
 }
 
 func incomingWebhook(c *api.Context, w http.ResponseWriter, r *http.Request) {
+	if !utils.Cfg.ServiceSettings.EnableIncomingWebhooks {
+		c.Err = model.NewAppError("incomingWebhook", "Incoming webhooks have been disabled by the system admin.", "")
+		c.Err.StatusCode = http.StatusNotImplemented
+		return
+	}
+
 	params := mux.Vars(r)
 	id := params["id"]
 
@@ -851,7 +915,12 @@ func incomingWebhook(c *api.Context, w http.ResponseWriter, r *http.Request) {
 
 	r.ParseForm()
 
-	props := model.MapFromJson(strings.NewReader(r.FormValue("payload")))
+	var props map[string]string
+	if r.Header.Get("Content-Type") == "application/json" {
+		props = model.MapFromJson(r.Body)
+	} else {
+		props = model.MapFromJson(strings.NewReader(r.FormValue("payload")))
+	}
 
 	text := props["text"]
 	if len(text) == 0 {
@@ -889,12 +958,8 @@ func incomingWebhook(c *api.Context, w http.ResponseWriter, r *http.Request) {
 		cchan = api.Srv.Store.Channel().Get(hook.ChannelId)
 	}
 
-	// parse links into Markdown format
-	linkWithTextRegex := regexp.MustCompile(`<([^<\|]+)\|([^>]+)>`)
-	text = linkWithTextRegex.ReplaceAllString(text, "[${2}](${1})")
-
-	linkRegex := regexp.MustCompile(`<\s*(\S*)\s*>`)
-	text = linkRegex.ReplaceAllString(text, "${1}")
+	overrideUsername := props["username"]
+	overrideIconUrl := props["icon_url"]
 
 	if result := <-cchan; result.Err != nil {
 		c.Err = model.NewAppError("incomingWebhook", "Couldn't find the channel", "err="+result.Err.Message)
@@ -905,18 +970,16 @@ func incomingWebhook(c *api.Context, w http.ResponseWriter, r *http.Request) {
 
 	pchan := api.Srv.Store.Channel().CheckPermissionsTo(hook.TeamId, channel.Id, hook.UserId)
 
-	post := &model.Post{UserId: hook.UserId, ChannelId: channel.Id, Message: text}
+	// create a mock session
+	c.Session = model.Session{UserId: hook.UserId, TeamId: hook.TeamId, IsOAuth: false}
 
 	if !c.HasPermissionsToChannel(pchan, "createIncomingHook") && channel.Type != model.CHANNEL_OPEN {
 		c.Err = model.NewAppError("incomingWebhook", "Inappropriate channel permissions", "")
 		return
 	}
 
-	// create a mock session
-	c.Session = model.Session{UserId: hook.UserId, TeamId: hook.TeamId, IsOAuth: false}
-
-	if _, err := api.CreatePost(c, post, false); err != nil {
-		c.Err = model.NewAppError("incomingWebhook", "Error creating post", "err="+err.Message)
+	if _, err := api.CreateWebhookPost(c, channel.Id, text, overrideUsername, overrideIconUrl); err != nil {
+		c.Err = err
 		return
 	}
 

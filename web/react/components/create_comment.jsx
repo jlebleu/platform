@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 const AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
@@ -28,9 +28,11 @@ export default class CreateComment extends React.Component {
         this.handleUploadStart = this.handleUploadStart.bind(this);
         this.handleFileUploadComplete = this.handleFileUploadComplete.bind(this);
         this.handleUploadError = this.handleUploadError.bind(this);
+        this.handleTextDrop = this.handleTextDrop.bind(this);
         this.removePreview = this.removePreview.bind(this);
         this.handleSubmit = this.handleSubmit.bind(this);
         this.getFileCount = this.getFileCount.bind(this);
+        this.handleResize = this.handleResize.bind(this);
 
         PostStore.clearCommentDraftUploads();
 
@@ -39,8 +41,26 @@ export default class CreateComment extends React.Component {
             messageText: draft.message,
             uploadsInProgress: draft.uploadsInProgress,
             previews: draft.previews,
-            submitting: false
+            submitting: false,
+            windowWidth: Utils.windowWidth()
         };
+    }
+    componentDidMount() {
+        window.addEventListener('resize', this.handleResize);
+    }
+    componentWillUnmount() {
+        window.removeEventListener('resize', this.handleResize);
+    }
+    handleResize() {
+        this.setState({windowWidth: Utils.windowWidth()});
+    }
+    componentDidUpdate(prevProps, prevState) {
+        if (prevState.uploadsInProgress < this.state.uploadsInProgress) {
+            $('.post-right__scroll').scrollTop($('.post-right__scroll')[0].scrollHeight);
+            if (this.state.windowWidth > 768) {
+                $('.post-right__scroll').perfectScrollbar('update');
+            }
+        }
     }
     handleSubmit(e) {
         e.preventDefault();
@@ -99,10 +119,11 @@ export default class CreateComment extends React.Component {
                 let state = {};
 
                 if (err.message === 'Invalid RootId parameter') {
+                    PostStore.removePendingPost(post.channel_id, post.pending_post_id);
+
                     if ($('#post_deleted').length > 0) {
                         $('#post_deleted').modal('show');
                     }
-                    PostStore.removePendingPost(post.pending_post_id);
                 } else {
                     post.state = Constants.POST_FAILED;
                     PostStore.updatePendingPost(post);
@@ -118,7 +139,7 @@ export default class CreateComment extends React.Component {
     commentMsgKeyPress(e) {
         if (e.which === 13 && !e.shiftKey && !e.altKey) {
             e.preventDefault();
-            React.findDOMNode(this.refs.textbox).blur();
+            ReactDOM.findDOMNode(this.refs.textbox).blur();
             this.handleSubmit(e);
         }
 
@@ -163,7 +184,9 @@ export default class CreateComment extends React.Component {
         this.setState({uploadsInProgress: draft.uploadsInProgress, previews: draft.previews});
     }
     handleUploadError(err, clientId) {
-        if (clientId !== -1) {
+        if (clientId === -1) {
+            this.setState({serverError: err});
+        } else {
             let draft = PostStore.getCommentDraft(this.props.rootId);
 
             const index = draft.uploadsInProgress.indexOf(clientId);
@@ -174,9 +197,12 @@ export default class CreateComment extends React.Component {
             PostStore.storeCommentDraft(this.props.rootId, draft);
 
             this.setState({uploadsInProgress: draft.uploadsInProgress, serverError: err});
-        } else {
-            this.setState({serverError: err});
         }
+    }
+    handleTextDrop(text) {
+        const newText = this.state.messageText + text;
+        this.handleUserInput(newText);
+        Utils.setCaretPosition(ReactDOM.findDOMNode(this.refs.textbox.refs.message), newText.length);
     }
     removePreview(id) {
         let previews = this.state.previews;
@@ -184,15 +210,15 @@ export default class CreateComment extends React.Component {
 
         // id can either be the path of an uploaded file or the client id of an in progress upload
         let index = previews.indexOf(id);
-        if (index !== -1) {
-            previews.splice(index, 1);
-        } else {
+        if (index === -1) {
             index = uploadsInProgress.indexOf(id);
 
             if (index !== -1) {
                 uploadsInProgress.splice(index, 1);
                 this.refs.fileUpload.cancelUpload(id);
             }
+        } else {
+            previews.splice(index, 1);
         }
 
         let draft = PostStore.getCommentDraft(this.props.rootId);
@@ -242,6 +268,17 @@ export default class CreateComment extends React.Component {
             postFooterClassName += ' has-error';
         }
 
+        let uploadsInProgressText = null;
+        if (this.state.uploadsInProgress.length > 0) {
+            uploadsInProgressText = (
+                <span
+                    className='pull-right post-right-comments-upload-in-progress'
+                >
+                    {this.state.uploadsInProgress.length === 1 ? 'File uploading' : 'Files uploading'}
+                </span>
+            );
+        }
+
         return (
             <form onSubmit={this.handleSubmit}>
                 <div className='post-create'>
@@ -249,24 +286,27 @@ export default class CreateComment extends React.Component {
                         id={this.props.rootId}
                         className='post-create-body comment-create-body'
                     >
-                        <Textbox
-                            onUserInput={this.handleUserInput}
-                            onKeyPress={this.commentMsgKeyPress}
-                            messageText={this.state.messageText}
-                            createMessage='Add a comment...'
-                            initialText=''
-                            id='reply_textbox'
-                            ref='textbox'
-                        />
-                        <FileUpload
-                            ref='fileUpload'
-                            getFileCount={this.getFileCount}
-                            onUploadStart={this.handleUploadStart}
-                            onFileUpload={this.handleFileUploadComplete}
-                            onUploadError={this.handleUploadError}
-                            postType='comment'
-                            channelId={this.props.channelId}
-                        />
+                        <div className='post-body__cell'>
+                            <Textbox
+                                onUserInput={this.handleUserInput}
+                                onKeyPress={this.commentMsgKeyPress}
+                                messageText={this.state.messageText}
+                                createMessage='Add a comment...'
+                                initialText=''
+                                id='reply_textbox'
+                                ref='textbox'
+                            />
+                            <FileUpload
+                                ref='fileUpload'
+                                getFileCount={this.getFileCount}
+                                onUploadStart={this.handleUploadStart}
+                                onFileUpload={this.handleFileUploadComplete}
+                                onUploadError={this.handleUploadError}
+                                onTextDrop={this.handleTextDrop}
+                                postType='comment'
+                                channelId={this.props.channelId}
+                            />
+                        </div>
                     </div>
                     <MsgTyping
                         channelId={this.props.channelId}
@@ -279,6 +319,7 @@ export default class CreateComment extends React.Component {
                             value='Add Comment'
                             onClick={this.handleSubmit}
                         />
+                        {uploadsInProgressText}
                         {postError}
                         {serverError}
                     </div>

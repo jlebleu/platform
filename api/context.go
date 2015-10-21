@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -107,21 +107,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		isTokenFromQueryString = true
 	}
 
-	protocol := "http"
-
-	// If the request came from the ELB then assume this is produciton
-	// and redirect all http requests to https
-	if utils.Cfg.ServiceSettings.UseSSL {
-		forwardProto := r.Header.Get(model.HEADER_FORWARDED_PROTO)
-		if forwardProto == "http" {
-			l4g.Info("redirecting http request to https for %v", r.URL.Path)
-			http.Redirect(w, r, "https://"+r.Host, http.StatusTemporaryRedirect)
-			return
-		} else {
-			protocol = "https"
-		}
-	}
-
+	protocol := GetProtocol(r)
 	c.setSiteURL(protocol + "://" + r.Host)
 
 	w.Header().Set(model.HEADER_REQUEST_ID, c.RequestId)
@@ -151,7 +137,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if session == nil || session.IsExpired() {
-			c.RemoveSessionCookie(w)
+			c.RemoveSessionCookie(w, r)
 			c.Err = model.NewAppError("ServeHTTP", "Invalid or expired session, please login again.", "token="+token)
 			c.Err.StatusCode = http.StatusUnauthorized
 		} else if !session.IsOAuth && isTokenFromQueryString {
@@ -206,6 +192,14 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				RenderWebError(c.Err, w, r)
 			}
 		}
+	}
+}
+
+func GetProtocol(r *http.Request) string {
+	if r.Header.Get(model.HEADER_FORWARDED_PROTO) == "https" {
+		return "https"
+	} else {
+		return "http"
 	}
 }
 
@@ -298,14 +292,6 @@ func (c *Context) HasPermissionsToChannel(sc store.StoreChannel, where string) b
 	return true
 }
 
-func (c *Context) IsSystemAdmin() bool {
-	// TODO XXX FIXME && IsPrivateIpAddress(c.IpAddress)
-	if model.IsInRole(c.Session.Roles, model.ROLE_SYSTEM_ADMIN) {
-		return true
-	}
-	return false
-}
-
 func (c *Context) HasSystemAdminPermissions(where string) bool {
 	if c.IsSystemAdmin() {
 		return true
@@ -316,17 +302,21 @@ func (c *Context) HasSystemAdminPermissions(where string) bool {
 	return false
 }
 
-func (c *Context) IsTeamAdmin(userId string) bool {
-	if uresult := <-Srv.Store.User().Get(userId); uresult.Err != nil {
-		c.Err = uresult.Err
-		return false
-	} else {
-		user := uresult.Data.(*model.User)
-		return model.IsInRole(c.Session.Roles, model.ROLE_TEAM_ADMIN) && user.TeamId == c.Session.TeamId
+func (c *Context) IsSystemAdmin() bool {
+	if model.IsInRole(c.Session.Roles, model.ROLE_SYSTEM_ADMIN) {
+		return true
 	}
+	return false
 }
 
-func (c *Context) RemoveSessionCookie(w http.ResponseWriter) {
+func (c *Context) IsTeamAdmin() bool {
+	if model.IsInRole(c.Session.Roles, model.ROLE_TEAM_ADMIN) || c.IsSystemAdmin() {
+		return true
+	}
+	return false
+}
+
+func (c *Context) RemoveSessionCookie(w http.ResponseWriter, r *http.Request) {
 
 	sessionCache.Remove(c.Session.Token)
 
@@ -339,6 +329,21 @@ func (c *Context) RemoveSessionCookie(w http.ResponseWriter) {
 	}
 
 	http.SetCookie(w, cookie)
+
+	multiToken := ""
+	if oldMultiCookie, err := r.Cookie(model.MULTI_SESSION_TOKEN); err == nil {
+		multiToken = oldMultiCookie.Value
+	}
+
+	multiCookie := &http.Cookie{
+		Name:     model.MULTI_SESSION_TOKEN,
+		Value:    strings.TrimSpace(strings.Replace(multiToken, c.Session.Token, "", -1)),
+		Path:     "/",
+		MaxAge:   model.SESSION_TIME_WEB_IN_SECS,
+		HttpOnly: true,
+	}
+
+	http.SetCookie(w, multiCookie)
 }
 
 func (c *Context) SetInvalidParam(where string, name string) {
@@ -355,7 +360,7 @@ func (c *Context) setTeamURL(url string, valid bool) {
 	c.teamURLValid = valid
 }
 
-func (c *Context) setTeamURLFromSession() {
+func (c *Context) SetTeamURLFromSession() {
 	if result := <-Srv.Store.Team().Get(c.Session.TeamId); result.Err == nil {
 		c.setTeamURL(c.GetSiteURL()+"/"+result.Data.(*model.Team).Name, true)
 	}
@@ -371,7 +376,7 @@ func (c *Context) GetTeamURLFromTeam(team *model.Team) string {
 
 func (c *Context) GetTeamURL() string {
 	if !c.teamURLValid {
-		c.setTeamURLFromSession()
+		c.SetTeamURLFromSession()
 		if !c.teamURLValid {
 			l4g.Debug("TeamURL accessed when not valid. Team URL should not be used in api functions or those that are team independent")
 		}
@@ -385,6 +390,11 @@ func (c *Context) GetSiteURL() string {
 
 func GetIpAddress(r *http.Request) string {
 	address := r.Header.Get(model.HEADER_FORWARDED)
+
+	if len(address) == 0 {
+		address = r.Header.Get(model.HEADER_REAL_IP)
+	}
+
 	if len(address) == 0 {
 		address, _, _ = net.SplitHostPort(r.RemoteAddr)
 	}
@@ -457,25 +467,19 @@ func IsPrivateIpAddress(ipAddress string) bool {
 }
 
 func RenderWebError(err *model.AppError, w http.ResponseWriter, r *http.Request) {
+	props := make(map[string]string)
+	props["Message"] = err.Message
+	props["Details"] = err.DetailedError
 
-	protocol := "http"
-	if utils.Cfg.ServiceSettings.UseSSL {
-		forwardProto := r.Header.Get(model.HEADER_FORWARDED_PROTO)
-		if forwardProto != "http" {
-			protocol = "https"
-		}
+	pathParts := strings.Split(r.URL.Path, "/")
+	if len(pathParts) > 1 {
+		props["SiteURL"] = GetProtocol(r) + "://" + r.Host + "/" + pathParts[1]
+	} else {
+		props["SiteURL"] = GetProtocol(r) + "://" + r.Host
 	}
 
-	SiteURL := protocol + "://" + r.Host
-
-	m := make(map[string]string)
-	m["Message"] = err.Message
-	m["Details"] = err.DetailedError
-	m["SiteName"] = utils.Cfg.ServiceSettings.SiteName
-	m["SiteURL"] = SiteURL
-
 	w.WriteHeader(err.StatusCode)
-	ServerTemplates.ExecuteTemplate(w, "error.html", m)
+	ServerTemplates.ExecuteTemplate(w, "error.html", Page{Props: props, ClientProps: utils.ClientProperties})
 }
 
 func Handle404(w http.ResponseWriter, r *http.Request) {

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package store
@@ -42,7 +42,7 @@ func TestUserStoreSave(t *testing.T) {
 		t.Fatal("should be unique username")
 	}
 
-	for i := 0; i < 150; i++ {
+	for i := 0; i < 50; i++ {
 		u1.Id = ""
 		u1.Email = model.NewId()
 		u1.Username = model.NewId()
@@ -206,6 +206,42 @@ func TestUserStoreGet(t *testing.T) {
 	}
 }
 
+func TestUserCount(t *testing.T) {
+	Setup()
+
+	u1 := model.User{}
+	u1.TeamId = model.NewId()
+	u1.Email = model.NewId()
+	Must(store.User().Save(&u1))
+
+	if result := <-store.User().GetTotalUsersCount(); result.Err != nil {
+		t.Fatal(result.Err)
+	} else {
+		count := result.Data.(int64)
+		if count <= 0 {
+			t.Fatal()
+		}
+	}
+}
+
+func TestActiveUserCount(t *testing.T) {
+	Setup()
+
+	u1 := model.User{}
+	u1.TeamId = model.NewId()
+	u1.Email = model.NewId()
+	Must(store.User().Save(&u1))
+
+	if result := <-store.User().GetTotalActiveUsersCount(); result.Err != nil {
+		t.Fatal(result.Err)
+	} else {
+		count := result.Data.(int64)
+		if count <= 0 {
+			t.Fatal()
+		}
+	}
+}
+
 func TestUserStoreGetProfiles(t *testing.T) {
 	Setup()
 
@@ -237,6 +273,29 @@ func TestUserStoreGetProfiles(t *testing.T) {
 	} else {
 		if len(r2.Data.(map[string]*model.User)) != 0 {
 			t.Fatal("should have returned empty map")
+		}
+	}
+}
+
+func TestUserStoreGetSystemAdminProfiles(t *testing.T) {
+	Setup()
+
+	u1 := model.User{}
+	u1.TeamId = model.NewId()
+	u1.Email = model.NewId()
+	Must(store.User().Save(&u1))
+
+	u2 := model.User{}
+	u2.TeamId = u1.TeamId
+	u2.Email = model.NewId()
+	Must(store.User().Save(&u2))
+
+	if r1 := <-store.User().GetSystemAdminProfiles(); r1.Err != nil {
+		t.Fatal(r1.Err)
+	} else {
+		users := r1.Data.(map[string]*model.User)
+		if len(users) <= 0 {
+			t.Fatal("invalid returned system admin users")
 		}
 	}
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var UserStore = require('../../stores/user_store.jsx');
@@ -17,7 +17,7 @@ function getNotificationsStateFromStores() {
     if (user.notify_props && user.notify_props.desktop_sound) {
         sound = user.notify_props.desktop_sound;
     }
-    var desktop = 'all';
+    var desktop = 'default';
     if (user.notify_props && user.notify_props.desktop) {
         desktop = user.notify_props.desktop;
     }
@@ -129,7 +129,7 @@ export default class NotificationsTab extends React.Component {
         );
     }
     handleClose() {
-        $(React.findDOMNode(this)).find('.form-control').each(function clearField() {
+        $(ReactDOM.findDOMNode(this)).find('.form-control').each(function clearField() {
             this.value = '';
         });
 
@@ -158,15 +158,15 @@ export default class NotificationsTab extends React.Component {
     }
     handleNotifyRadio(notifyLevel) {
         this.setState({notifyLevel: notifyLevel});
-        React.findDOMNode(this.refs.wrapper).focus();
+        ReactDOM.findDOMNode(this.refs.wrapper).focus();
     }
     handleEmailRadio(enableEmail) {
         this.setState({enableEmail: enableEmail});
-        React.findDOMNode(this.refs.wrapper).focus();
+        ReactDOM.findDOMNode(this.refs.wrapper).focus();
     }
     handleSoundRadio(enableSound) {
         this.setState({enableSound: enableSound});
-        React.findDOMNode(this.refs.wrapper).focus();
+        ReactDOM.findDOMNode(this.refs.wrapper).focus();
     }
     updateUsernameKey(val) {
         this.setState({usernameKey: val});
@@ -184,10 +184,10 @@ export default class NotificationsTab extends React.Component {
         this.setState({channelKey: val});
     }
     updateCustomMentionKeys() {
-        var checked = React.findDOMNode(this.refs.customcheck).checked;
+        var checked = ReactDOM.findDOMNode(this.refs.customcheck).checked;
 
         if (checked) {
-            var text = React.findDOMNode(this.refs.custommentions).value;
+            var text = ReactDOM.findDOMNode(this.refs.custommentions).value;
 
             // remove all spaces and split string into individual keys
             this.setState({customKeys: text.replace(/ /g, ''), customKeysChecked: true});
@@ -196,7 +196,7 @@ export default class NotificationsTab extends React.Component {
         }
     }
     onCustomChange() {
-        React.findDOMNode(this.refs.customcheck).checked = true;
+        ReactDOM.findDOMNode(this.refs.customcheck).checked = true;
         this.updateCustomMentionKeys();
     }
     render() {
@@ -228,9 +228,8 @@ export default class NotificationsTab extends React.Component {
                             <input type='radio'
                                 checked={notifyActive[0]}
                                 onChange={this.handleNotifyRadio.bind(this, 'all')}
-                            >
-                                For all activity
-                            </input>
+                            />
+                            {'For all activity'}
                         </label>
                         <br/>
                     </div>
@@ -240,9 +239,8 @@ export default class NotificationsTab extends React.Component {
                                 type='radio'
                                 checked={notifyActive[1]}
                                 onChange={this.handleNotifyRadio.bind(this, 'mention')}
-                            >
-                                Only for mentions and private messages
-                            </input>
+                            />
+                            {'Only for mentions and direct messages'}
                         </label>
                         <br/>
                     </div>
@@ -252,9 +250,8 @@ export default class NotificationsTab extends React.Component {
                                 type='radio'
                                 checked={notifyActive[2]}
                                 onChange={this.handleNotifyRadio.bind(this, 'none')}
-                            >
-                                Never
-                            </input>
+                            />
+                            {'Never'}
                         </label>
                     </div>
                 </div>
@@ -265,9 +262,12 @@ export default class NotificationsTab extends React.Component {
                 e.preventDefault();
             }.bind(this);
 
+            const extraInfo = <span>{'Desktop notifications are available on Firefox, Safari, and Chrome.'}</span>;
+
             desktopSection = (
                 <SettingItemMax
                     title='Send desktop notifications'
+                    extraInfo={extraInfo}
                     inputs={inputs}
                     submit={this.handleSubmit}
                     server_error={serverError}
@@ -277,7 +277,7 @@ export default class NotificationsTab extends React.Component {
         } else {
             let describe = '';
             if (this.state.notifyLevel === 'mention') {
-                describe = 'Only for mentions and private messages';
+                describe = 'Only for mentions and direct messages';
             } else if (this.state.notifyLevel === 'none') {
                 describe = 'Never';
             } else {
@@ -317,9 +317,8 @@ export default class NotificationsTab extends React.Component {
                                 type='radio'
                                 checked={soundActive[0]}
                                 onChange={this.handleSoundRadio.bind(this, 'true')}
-                            >
-                                On
-                            </input>
+                            />
+                            {'On'}
                         </label>
                         <br/>
                     </div>
@@ -329,9 +328,8 @@ export default class NotificationsTab extends React.Component {
                                 type='radio'
                                 checked={soundActive[1]}
                                 onChange={this.handleSoundRadio.bind(this, 'false')}
-                            >
-                                Off
-                            </input>
+                            />
+                            {'Off'}
                         </label>
                         <br/>
                      </div>
@@ -343,9 +341,12 @@ export default class NotificationsTab extends React.Component {
                 e.preventDefault();
             }.bind(this);
 
+            const extraInfo = <span>{'Desktop notification sounds are available on Firefox, Safari, Chrome, Internet Explorer, and Edge.'}</span>;
+
             soundSection = (
                 <SettingItemMax
                     title='Desktop notification sounds'
+                    extraInfo={extraInfo}
                     inputs={inputs}
                     submit={this.handleSubmit}
                     server_error={serverError}
@@ -396,9 +397,8 @@ export default class NotificationsTab extends React.Component {
                                 type='radio'
                                 checked={emailActive[0]}
                                 onChange={this.handleEmailRadio.bind(this, 'true')}
-                            >
-                                On
-                            </input>
+                            />
+                            {'On'}
                         </label>
                         <br/>
                     </div>
@@ -408,13 +408,12 @@ export default class NotificationsTab extends React.Component {
                                 type='radio'
                                 checked={emailActive[1]}
                                 onChange={this.handleEmailRadio.bind(this, 'false')}
-                            >
-                                Off
-                            </input>
+                            />
+                            {'Off'}
                         </label>
                         <br/>
                     </div>
-                    <div><br/>{'Email notifications are sent for mentions and private messages after you have been away from ' + global.window.config.SiteName + ' for 5 minutes.'}</div>
+                    <div><br/>{'Email notifications are sent for mentions and direct messages after you’ve been offline for more than 60 seconds or away from ' + global.window.config.SiteName + ' for more than 5 minutes.'}</div>
                 </div>
             );
 
@@ -476,9 +475,8 @@ export default class NotificationsTab extends React.Component {
                                     type='checkbox'
                                     checked={this.state.firstNameKey}
                                     onChange={handleUpdateFirstNameKey}
-                                >
-                                    {'Your case sensitive first name "' + user.first_name + '"'}
-                                </input>
+                                />
+                                {'Your case sensitive first name "' + user.first_name + '"'}
                             </label>
                         </div>
                     </div>
@@ -496,9 +494,8 @@ export default class NotificationsTab extends React.Component {
                                 type='checkbox'
                                 checked={this.state.usernameKey}
                                 onChange={handleUpdateUsernameKey}
-                            >
-                                {'Your non-case sensitive username "' + user.username + '"'}
-                            </input>
+                            />
+                            {'Your non-case sensitive username "' + user.username + '"'}
                         </label>
                     </div>
                 </div>
@@ -515,9 +512,8 @@ export default class NotificationsTab extends React.Component {
                                 type='checkbox'
                                 checked={this.state.mentionKey}
                                 onChange={handleUpdateMentionKey}
-                            >
-                                {'Your username mentioned "@' + user.username + '"'}
-                            </input>
+                            />
+                            {'Your username mentioned "@' + user.username + '"'}
                         </label>
                     </div>
                 </div>
@@ -534,9 +530,8 @@ export default class NotificationsTab extends React.Component {
                                 type='checkbox'
                                 checked={this.state.allKey}
                                 onChange={handleUpdateAllKey}
-                            >
-                                {'Team-wide mentions "@all"'}
-                            </input>
+                            />
+                            {'Team-wide mentions "@all"'}
                         </label>
                     </div>
                 </div>
@@ -553,9 +548,8 @@ export default class NotificationsTab extends React.Component {
                                 type='checkbox'
                                 checked={this.state.channelKey}
                                 onChange={handleUpdateChannelKey}
-                            >
-                                {'Channel-wide mentions "@channel"'}
-                            </input>
+                            />
+                            {'Channel-wide mentions "@channel"'}
                         </label>
                     </div>
                 </div>
@@ -570,9 +564,8 @@ export default class NotificationsTab extends React.Component {
                                 type='checkbox'
                                 checked={this.state.customKeysChecked}
                                 onChange={this.updateCustomMentionKeys}
-                            >
-                                {'Other non-case sensitive words, separated by commas:'}
-                            </input>
+                            />
+                            {'Other non-case sensitive words, separated by commas:'}
                         </label>
                     </div>
                     <input

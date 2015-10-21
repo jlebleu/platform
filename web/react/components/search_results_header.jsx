@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
@@ -50,6 +50,7 @@ export default class SearchResultsHeader extends React.Component {
                     title='Close'
                     onClick={this.handleClose}
                 >
+                    <i className='fa fa-sign-out'/>
                 </button>
             </div>
         );

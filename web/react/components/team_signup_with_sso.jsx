@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var utils = require('../utils/utils.jsx');
@@ -23,12 +23,14 @@ export default class SSOSignUpPage extends React.Component {
 
         team.display_name = this.state.name;
 
-        if (team.display_name.length <= 3) {
+        if (!team.display_name) {
+            state.nameError = 'Please enter a team name';
+            this.setState(state);
             return;
         }
 
-        if (!team.display_name) {
-            state.nameError = 'Please enter a team name';
+        if (team.display_name.length <= 2) {
+            state.nameError = 'Name must be 3 or more characters up to a maximum of 15';
             this.setState(state);
             return;
         }
@@ -38,21 +40,21 @@ export default class SSOSignUpPage extends React.Component {
 
         client.createTeamWithSSO(team,
             this.props.service,
-            function success(data) {
+            (data) => {
                 if (data.follow_link) {
                     window.location.href = data.follow_link;
                 } else {
-                    window.location.href = '/';
+                    window.location.href = '/' + team.name + '/channels/town-square';
                 }
             },
-            function fail(err) {
+            (err) => {
                 state.serverError = err.message;
                 this.setState(state);
-            }.bind(this)
+            }
         );
     }
     nameChange() {
-        this.setState({name: React.findDOMNode(this.refs.teamname).value.trim()});
+        this.setState({name: ReactDOM.findDOMNode(this.refs.teamname).value.trim()});
     }
     render() {
         var nameError = null;
@@ -68,7 +70,7 @@ export default class SSOSignUpPage extends React.Component {
         }
 
         var disabled = false;
-        if (this.state.name.length <= 3) {
+        if (this.state.name.length <= 2) {
             disabled = true;
         }
 
@@ -83,7 +85,7 @@ export default class SSOSignUpPage extends React.Component {
                     disabled={disabled}
                 >
                     <span className='icon'/>
-                    <span>Create team with GitLab Account</span>
+                    <span>{'Create team with GitLab Account'}</span>
                 </a>
             );
         }
@@ -102,6 +104,7 @@ export default class SSOSignUpPage extends React.Component {
                         placeholder='Enter name of new team'
                         maxLength='128'
                         onChange={this.nameChange}
+                        spellCheck='false'
                     />
                     {nameError}
                 </div>
@@ -110,7 +113,7 @@ export default class SSOSignUpPage extends React.Component {
                     {serverError}
                 </div>
                 <div className='form-group margin--extra-2x'>
-                    <span><a href='/find_team'>{'Find my team'}</a></span>
+                    <span><a href='/find_team'>{'Find my teams'}</a></span>
                 </div>
             </form>
         );

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -14,10 +14,13 @@ var Client *model.Client
 func Setup() {
 	if Srv == nil {
 		utils.LoadConfig("config.json")
+		utils.Cfg.TeamSettings.MaxUsersPerTeam = 50
 		NewServer()
 		StartServer()
 		InitApi()
-		Client = model.NewClient("http://localhost:" + utils.Cfg.ServiceSettings.Port)
+		Client = model.NewClient("http://localhost" + utils.Cfg.ServiceSettings.ListenAddress)
+
+		Srv.Store.MarkSystemRanUnitTests()
 	}
 }
 

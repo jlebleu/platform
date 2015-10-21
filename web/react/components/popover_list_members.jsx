@@ -1,5 +1,9 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
+
+var UserStore = require('../stores/user_store.jsx');
+var Popover = ReactBootstrap.Popover;
+var OverlayTrigger = ReactBootstrap.OverlayTrigger;
 
 export default class PopoverListMembers extends React.Component {
     componentDidMount() {
@@ -22,54 +26,64 @@ export default class PopoverListMembers extends React.Component {
                 });
             }
         };
-
-        $('#member_popover').popover({placement: 'bottom', trigger: 'click', html: true});
-        $('body').on('click', function onClick(e) {
-            if (e.target.parentNode && $(e.target.parentNode.parentNode)[0] !== $('#member_popover')[0] && $(e.target).parents('.popover.in').length === 0) {
-                $('#member_popover').popover('hide');
-            }
-        });
     }
     render() {
-        let popoverHtml = '';
+        let popoverHtml = [];
+        let count = 0;
+        let countText = '-';
         const members = this.props.members;
-        let count;
-        if (members.length > 20) {
-            count = '20+';
-        } else {
-            count = members.length || '-';
-        }
+        const teamMembers = UserStore.getProfilesUsernameMap();
 
-        if (members) {
-            members.sort(function compareByLocal(a, b) {
+        if (members && teamMembers) {
+            members.sort((a, b) => {
                 return a.username.localeCompare(b.username);
             });
 
-            members.forEach(function addMemberElement(m) {
-                popoverHtml += `<div class='text--nowrap'>${m.username}</div>`;
+            members.forEach((m, i) => {
+                if (teamMembers[m.username] && teamMembers[m.username].delete_at <= 0) {
+                    popoverHtml.push(
+                        <div
+                            className='text--nowrap'
+                            key={'popover-member-' + i}
+                        >
+                            {m.username}
+                        </div>
+                    );
+                    count++;
+                }
             });
+
+            if (count > 20) {
+                countText = '20+';
+            } else if (count > 0) {
+                countText = count.toString();
+            }
         }
 
         return (
-            <div
-                id='member_popover'
-                data-toggle='popover'
-                data-content={popoverHtml}
-                data-original-title='Members'
+            <OverlayTrigger
+                trigger='click'
+                placement='bottom'
+                rootClose={true}
+                overlay={
+                    <Popover
+                        title='Members'
+                        id='member-list-popover'
+                    >
+                        {popoverHtml}
+                    </Popover>
+                }
             >
-                <div
-                    id='member_tooltip'
-                    data-placement='left'
-                    data-toggle='tooltip'
-                    title='View Channel Members'
-                >
-                    {count}
+            <div id='member_popover'>
+                <div>
+                    {countText}
                     <span
-                        className='glyphicon glyphicon-user'
+                        className='fa fa-user'
                         aria-hidden='true'
                     />
                 </div>
             </div>
+            </OverlayTrigger>
         );
     }
 }

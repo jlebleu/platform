@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package utils
@@ -6,52 +6,38 @@ package utils
 import (
 	l4g "code.google.com/p/log4go"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"github.com/mattermost/platform/model"
-	"html"
 	"net"
 	"net/mail"
 	"net/smtp"
 	"time"
 )
 
-func CheckMailSettings() *model.AppError {
-	if len(Cfg.EmailSettings.SMTPServer) == 0 || Cfg.EmailSettings.ByPassEmail {
-		return model.NewAppError("CheckMailSettings", "No email settings present, mail will not be sent", "")
-	}
-	conn, err := connectToSMTPServer()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	c, err2 := newSMTPClient(conn)
-	if err2 != nil {
-		return err2
-	}
-	defer c.Quit()
-	defer c.Close()
-
-	return nil
+func encodeRFC2047Word(s string) string {
+	// TODO: use `mime.BEncoding.Encode` instead when `go` >= 1.5
+	// return mime.BEncoding.Encode("utf-8", s)
+	dst := base64.StdEncoding.EncodeToString([]byte(s))
+	return "=?utf-8?b?" + dst + "?="
 }
 
-func connectToSMTPServer() (net.Conn, *model.AppError) {
-	host, _, _ := net.SplitHostPort(Cfg.EmailSettings.SMTPServer)
-
+func connectToSMTPServer(config *model.Config) (net.Conn, *model.AppError) {
 	var conn net.Conn
 	var err error
 
-	if Cfg.EmailSettings.UseTLS {
+	if config.EmailSettings.ConnectionSecurity == model.CONN_SECURITY_TLS {
 		tlsconfig := &tls.Config{
 			InsecureSkipVerify: true,
-			ServerName:         host,
+			ServerName:         config.EmailSettings.SMTPServer,
 		}
 
-		conn, err = tls.Dial("tcp", Cfg.EmailSettings.SMTPServer, tlsconfig)
+		conn, err = tls.Dial("tcp", config.EmailSettings.SMTPServer+":"+config.EmailSettings.SMTPPort, tlsconfig)
 		if err != nil {
 			return nil, model.NewAppError("SendMail", "Failed to open TLS connection", err.Error())
 		}
 	} else {
-		conn, err = net.Dial("tcp", Cfg.EmailSettings.SMTPServer)
+		conn, err = net.Dial("tcp", config.EmailSettings.SMTPServer+":"+config.EmailSettings.SMTPPort)
 		if err != nil {
 			return nil, model.NewAppError("SendMail", "Failed to open connection", err.Error())
 		}
@@ -60,24 +46,23 @@ func connectToSMTPServer() (net.Conn, *model.AppError) {
 	return conn, nil
 }
 
-func newSMTPClient(conn net.Conn) (*smtp.Client, *model.AppError) {
-	host, _, _ := net.SplitHostPort(Cfg.EmailSettings.SMTPServer)
-	c, err := smtp.NewClient(conn, host)
+func newSMTPClient(conn net.Conn, config *model.Config) (*smtp.Client, *model.AppError) {
+	c, err := smtp.NewClient(conn, config.EmailSettings.SMTPServer+":"+config.EmailSettings.SMTPPort)
 	if err != nil {
 		l4g.Error("Failed to open a connection to SMTP server %v", err)
 		return nil, model.NewAppError("SendMail", "Failed to open TLS connection", err.Error())
 	}
 	// GO does not support plain auth over a non encrypted connection.
 	// so if not tls then no auth
-	auth := smtp.PlainAuth("", Cfg.EmailSettings.SMTPUsername, Cfg.EmailSettings.SMTPPassword, host)
-	if Cfg.EmailSettings.UseTLS {
+	auth := smtp.PlainAuth("", config.EmailSettings.SMTPUsername, config.EmailSettings.SMTPPassword, config.EmailSettings.SMTPServer+":"+config.EmailSettings.SMTPPort)
+	if config.EmailSettings.ConnectionSecurity == model.CONN_SECURITY_TLS {
 		if err = c.Auth(auth); err != nil {
 			return nil, model.NewAppError("SendMail", "Failed to authenticate on SMTP server", err.Error())
 		}
-	} else if Cfg.EmailSettings.UseStartTLS {
+	} else if config.EmailSettings.ConnectionSecurity == model.CONN_SECURITY_STARTTLS {
 		tlsconfig := &tls.Config{
 			InsecureSkipVerify: true,
-			ServerName:         host,
+			ServerName:         config.EmailSettings.SMTPServer,
 		}
 		c.StartTLS(tlsconfig)
 		if err = c.Auth(auth); err != nil {
@@ -87,21 +72,47 @@ func newSMTPClient(conn net.Conn) (*smtp.Client, *model.AppError) {
 	return c, nil
 }
 
-func SendMail(to, subject, body string) *model.AppError {
+func TestConnection(config *model.Config) {
+	if !config.EmailSettings.SendEmailNotifications {
+		return
+	}
 
-	if len(Cfg.EmailSettings.SMTPServer) == 0 || Cfg.EmailSettings.ByPassEmail {
+	conn, err1 := connectToSMTPServer(config)
+	if err1 != nil {
+		l4g.Error("SMTP server settings do not appear to be configured properly err=%v details=%v", err1.Message, err1.DetailedError)
+		return
+	}
+	defer conn.Close()
+
+	c, err2 := newSMTPClient(conn, config)
+	if err2 != nil {
+		l4g.Error("SMTP connection settings do not appear to be configured properly err=%v details=%v", err2.Message, err2.DetailedError)
+		return
+	}
+	defer c.Quit()
+	defer c.Close()
+}
+
+func SendMail(to, subject, body string) *model.AppError {
+	return SendMailUsingConfig(to, subject, body, Cfg)
+}
+
+func SendMailUsingConfig(to, subject, body string, config *model.Config) *model.AppError {
+
+	if !config.EmailSettings.SendEmailNotifications || len(config.EmailSettings.SMTPServer) == 0 {
 		return nil
 	}
 
-	fromMail := mail.Address{Cfg.EmailSettings.FeedbackName, Cfg.EmailSettings.FeedbackEmail}
+	fromMail := mail.Address{config.EmailSettings.FeedbackName, config.EmailSettings.FeedbackEmail}
 	toMail := mail.Address{"", to}
 
 	headers := make(map[string]string)
 	headers["From"] = fromMail.String()
 	headers["To"] = toMail.String()
-	headers["Subject"] = html.UnescapeString(subject)
+	headers["Subject"] = encodeRFC2047Word(subject)
 	headers["MIME-version"] = "1.0"
-	headers["Content-Type"] = "text/html"
+	headers["Content-Type"] = "text/html; charset=\"utf-8\""
+	headers["Content-Transfer-Encoding"] = "8bit"
 	headers["Date"] = time.Now().Format(time.RFC1123Z)
 
 	message := ""
@@ -110,13 +121,13 @@ func SendMail(to, subject, body string) *model.AppError {
 	}
 	message += "\r\n<html><body>" + body + "</body></html>"
 
-	conn, err1 := connectToSMTPServer()
+	conn, err1 := connectToSMTPServer(config)
 	if err1 != nil {
 		return err1
 	}
 	defer conn.Close()
 
-	c, err2 := newSMTPClient(conn)
+	c, err2 := newSMTPClient(conn, config)
 	if err2 != nil {
 		return err2
 	}

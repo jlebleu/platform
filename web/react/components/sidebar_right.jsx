@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var SearchResults = require('./search_results.jsx');
@@ -14,9 +14,10 @@ export default class SidebarRight extends React.Component {
     constructor(props) {
         super(props);
 
+        this.plScrolledToBottom = true;
+
         this.onSelectedChange = this.onSelectedChange.bind(this);
         this.onSearchChange = this.onSearchChange.bind(this);
-        this.resize = this.resize.bind(this);
 
         this.state = getStateFromStores();
     }
@@ -27,6 +28,14 @@ export default class SidebarRight extends React.Component {
     componentWillUnmount() {
         PostStore.removeSearchChangeListener(this.onSearchChange);
         PostStore.removeSelectedPostChangeListener(this.onSelectedChange);
+    }
+    componentDidUpdate() {
+        if (this.plScrolledToBottom) {
+            var postHolder = $('.post-list-holder-by-time').not('.inactive');
+            postHolder.scrollTop(postHolder[0].scrollHeight);
+        } else {
+            $('.top-visible-post')[0].scrollIntoView();
+        }
     }
     onSelectedChange(fromSearch) {
         var newState = getStateFromStores(fromSearch);
@@ -41,15 +50,15 @@ export default class SidebarRight extends React.Component {
             this.setState(newState);
         }
     }
-    resize() {
-        var postHolder = $('.post-list-holder-by-time');
-        postHolder[0].scrollTop = postHolder[0].scrollHeight - 224;
-    }
     render() {
+        var postHolder = $('.post-list-holder-by-time').not('.inactive');
+        const position = postHolder.scrollTop() + postHolder.height() + 14;
+        const bottom = postHolder[0].scrollHeight;
+        this.plScrolledToBottom = position >= bottom;
+
         if (!(this.state.search_visible || this.state.post_right_visible)) {
             $('.inner__wrap').removeClass('move--left').removeClass('move--right');
             $('.sidebar--right').removeClass('move--left');
-            this.resize();
             return (
                 <div></div>
             );
@@ -59,8 +68,8 @@ export default class SidebarRight extends React.Component {
         $('.sidebar--left').removeClass('move--right');
         $('.sidebar--right').addClass('move--left');
         $('.sidebar--right').prepend('<div class="sidebar__overlay"></div>');
-        this.resize();
-        setTimeout(function overlayTimer() {
+
+        setTimeout(() => {
             $('.sidebar__overlay').fadeOut('200', function fadeOverlay() {
                 $(this).remove();
             });

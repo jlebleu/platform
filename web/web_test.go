@@ -1,18 +1,19 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package web
 
 import (
-	"github.com/mattermost/platform/api"
-	"github.com/mattermost/platform/model"
-	"github.com/mattermost/platform/store"
-	"github.com/mattermost/platform/utils"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mattermost/platform/api"
+	"github.com/mattermost/platform/model"
+	"github.com/mattermost/platform/store"
+	"github.com/mattermost/platform/utils"
 )
 
 var ApiClient *model.Client
@@ -25,8 +26,10 @@ func Setup() {
 		api.StartServer()
 		api.InitApi()
 		InitWeb()
-		URL = "http://localhost:" + utils.Cfg.ServiceSettings.Port
+		URL = "http://localhost" + utils.Cfg.ServiceSettings.ListenAddress
 		ApiClient = model.NewClient(URL)
+
+		api.Srv.Store.MarkSystemRanUnitTests()
 	}
 }
 
@@ -195,7 +198,7 @@ func TestIncomingWebhook(t *testing.T) {
 	channel1 := &model.Channel{DisplayName: "Test API Name", Name: "a" + model.NewId() + "a", Type: model.CHANNEL_OPEN, TeamId: team.Id}
 	channel1 = ApiClient.Must(ApiClient.CreateChannel(channel1)).Data.(*model.Channel)
 
-	if utils.Cfg.ServiceSettings.AllowIncomingWebhooks {
+	if utils.Cfg.ServiceSettings.EnableIncomingWebhooks {
 		hook1 := &model.IncomingWebhook{ChannelId: channel1.Id}
 		hook1 = ApiClient.Must(ApiClient.CreateIncomingWebhook(hook1)).Data.(*model.IncomingWebhook)
 

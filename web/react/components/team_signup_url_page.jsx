@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 const Utils = require('../utils/utils.jsx');
@@ -23,7 +23,7 @@ export default class TeamSignupUrlPage extends React.Component {
     submitNext(e) {
         e.preventDefault();
 
-        const name = React.findDOMNode(this.refs.name).value.trim();
+        const name = ReactDOM.findDOMNode(this.refs.name).value.trim();
         if (!name) {
             this.setState({nameError: 'This field is required'});
             return;
@@ -35,8 +35,8 @@ export default class TeamSignupUrlPage extends React.Component {
         if (cleanedName !== name || !urlRegex.test(name)) {
             this.setState({nameError: "Use only lower case letters, numbers and dashes. Must start with a letter and can't end in a dash."});
             return;
-        } else if (cleanedName.length <= 3 || cleanedName.length > 15) {
-            this.setState({nameError: 'Name must be 4 or more characters up to a maximum of 15'});
+        } else if (cleanedName.length <= 2 || cleanedName.length > 15) {
+            this.setState({nameError: 'Name must be 3 or more characters up to a maximum of 15'});
             return;
         }
 
@@ -48,22 +48,20 @@ export default class TeamSignupUrlPage extends React.Component {
         }
 
         Client.findTeamByName(name,
-            function success(data) {
-                if (!data) {
-                    this.props.state.wizard = 'send_invites';
-                    this.props.state.team.type = 'O';
+              (data) => {
+                  if (data) {
+                      this.setState({nameError: 'This URL is unavailable. Please try another.'});
+                  } else {
+                      this.props.state.wizard = 'send_invites';
+                      this.props.state.team.type = 'O';
 
-                    this.props.state.team.name = name;
-                    this.props.updateParent(this.props.state);
-                } else {
-                    this.state.nameError = 'This URL is unavailable. Please try another.';
-                    this.setState(this.state);
-                }
-            }.bind(this),
-            function error(err) {
-                this.state.nameError = err.message;
-                this.setState(this.state);
-            }.bind(this)
+                      this.props.state.team.name = name;
+                      this.props.updateParent(this.props.state);
+                  }
+              },
+              (err) => {
+                  this.setState({nameError: err.message});
+              }
         );
     }
     handleFocus(e) {
@@ -113,6 +111,7 @@ export default class TeamSignupUrlPage extends React.Component {
                                         defaultValue={this.props.state.team.name}
                                         autoFocus={true}
                                         onFocus={this.handleFocus}
+                                        spellCheck='false'
                                     />
                                 </div>
                             </div>

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package store
@@ -28,6 +28,8 @@ func NewSqlTeamStore(sqlStore *SqlStore) TeamStore {
 }
 
 func (s SqlTeamStore) UpgradeSchemaIfNeeded() {
+	// REMOVE in 1.2
+	s.RemoveColumnIfExists("Teams", "AllowValet")
 }
 
 func (s SqlTeamStore) CreateIndexesIfNotExists() {
@@ -195,7 +197,7 @@ func (s SqlTeamStore) GetTeamsForEmail(email string) StoreChannel {
 	return storeChannel
 }
 
-func (s SqlTeamStore) GetForExport() StoreChannel {
+func (s SqlTeamStore) GetAll() StoreChannel {
 	storeChannel := make(StoreChannel)
 
 	go func() {
@@ -203,7 +205,7 @@ func (s SqlTeamStore) GetForExport() StoreChannel {
 
 		var data []*model.Team
 		if _, err := s.GetReplica().Select(&data, "SELECT * FROM Teams"); err != nil {
-			result.Err = model.NewAppError("SqlTeamStore.GetForExport", "We could not get all teams", err.Error())
+			result.Err = model.NewAppError("SqlTeamStore.GetAllTeams", "We could not get all teams", err.Error())
 		}
 
 		result.Data = data

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var UserStore = require('../stores/user_store.jsx');
@@ -6,6 +6,10 @@ var client = require('../utils/client.jsx');
 var utils = require('../utils/utils.jsx');
 
 export default class SidebarRightMenu extends React.Component {
+    componentDidMount() {
+        $('.sidebar--left .dropdown-menu').perfectScrollbar();
+    }
+
     constructor(props) {
         super(props);
 
@@ -22,11 +26,14 @@ export default class SidebarRightMenu extends React.Component {
         var inviteLink = '';
         var teamSettingsLink = '';
         var manageLink = '';
+        var consoleLink = '';
         var currentUser = UserStore.getCurrentUser();
         var isAdmin = false;
+        var isSystemAdmin = false;
 
         if (currentUser != null) {
             isAdmin = utils.isAdmin(currentUser.roles);
+            isSystemAdmin = utils.isSystemAdmin(currentUser.roles);
 
             inviteLink = (
                 <li>
@@ -68,7 +75,18 @@ export default class SidebarRightMenu extends React.Component {
                         data-toggle='modal'
                         data-target='#team_members'
                     >
-                    <i className='glyphicon glyphicon-wrench'></i>Manage Team</a>
+                    <i className='glyphicon glyphicon-wrench'></i>Manage Members</a>
+                </li>
+            );
+        }
+
+        if (isSystemAdmin) {
+            consoleLink = (
+                <li>
+                    <a
+                        href='/admin_console'
+                    >
+                    <i className='glyphicon glyphicon-wrench'></i>System Console</a>
                 </li>
             );
         }
@@ -103,6 +121,7 @@ export default class SidebarRightMenu extends React.Component {
                         {inviteLink}
                         {teamLink}
                         {manageLink}
+                        {consoleLink}
                         <li>
                             <a
                                 href='#'

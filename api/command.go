@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -145,7 +145,7 @@ func echoCommand(c *Context, command *model.Command) bool {
 
 			time.Sleep(time.Duration(delay) * time.Second)
 
-			if _, err := CreatePost(c, post, false); err != nil {
+			if _, err := CreatePost(c, post, true); err != nil {
 				l4g.Error("Unable to create /echo post, err=%v", err)
 			}
 		}()
@@ -195,7 +195,7 @@ func joinCommand(c *Context, command *model.Command) bool {
 						return false
 					}
 
-					command.GotoLocation = "/channels/" + v.Name
+					command.GotoLocation = c.GetTeamURL() + "/channels/" + v.Name
 					command.Response = model.RESP_EXECUTED
 					return true
 				}
@@ -215,8 +215,8 @@ func joinCommand(c *Context, command *model.Command) bool {
 func loadTestCommand(c *Context, command *model.Command) bool {
 	cmd := "/loadtest"
 
-	// This command is only available when AllowTesting is true
-	if !utils.Cfg.ServiceSettings.AllowTesting {
+	// This command is only available when EnableTesting is true
+	if !utils.Cfg.ServiceSettings.EnableTesting {
 		return false
 	}
 

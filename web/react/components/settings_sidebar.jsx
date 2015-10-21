@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 export default class SettingsSidebar extends React.Component {
@@ -7,9 +7,10 @@ export default class SettingsSidebar extends React.Component {
 
         this.handleClick = this.handleClick.bind(this);
     }
-    handleClick(tab) {
+    handleClick(tab, e) {
+        e.preventDefault();
         this.props.updateTab(tab.name);
-        $('.settings-modal').addClass('display--content');
+        $(e.target).closest('.settings-modal').addClass('display--content');
     }
     render() {
         let tabList = this.props.tabs.map(function makeTab(tab) {

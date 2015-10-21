@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 /* This is a special React control with the sole purpose of making all the AsyncClient calls
@@ -12,6 +12,7 @@ var PostStore = require('../stores/post_store.jsx');
 var UserStore = require('../stores/user_store.jsx');
 
 var Utils = require('../utils/utils.jsx');
+var Constants = require('../utils/constants.jsx');
 
 export default class ChannelLoader extends React.Component {
     constructor(props) {
@@ -68,34 +69,11 @@ export default class ChannelLoader extends React.Component {
         /* Update CSS classes to match user theme */
         var user = UserStore.getCurrentUser();
 
-        if (user.props && user.props.theme) {
-            Utils.changeCss('div.theme', 'background-color:' + user.props.theme + ';');
-            Utils.changeCss('.btn.btn-primary', 'background: ' + user.props.theme + ';');
-            Utils.changeCss('.modal .modal-header', 'background: ' + user.props.theme + ';');
-            Utils.changeCss('.mention', 'background: ' + user.props.theme + ';');
-            Utils.changeCss('.mention-link', 'color: ' + user.props.theme + ';');
-            Utils.changeCss('@media(max-width: 768px){.search-bar__container', 'background: ' + user.props.theme + ';}');
-            Utils.changeCss('.search-item-container:hover', 'background: ' + Utils.changeOpacity(user.props.theme, 0.05) + ';');
+        if ($.isPlainObject(user.theme_props) && !$.isEmptyObject(user.theme_props)) {
+            Utils.applyTheme(user.theme_props);
+        } else {
+            Utils.applyTheme(Constants.THEMES.default);
         }
-
-        if (user.props.theme !== '#000000' && user.props.theme !== '#585858') {
-            Utils.changeCss('.btn.btn-primary:hover, .btn.btn-primary:active, .btn.btn-primary:focus', 'background: ' + Utils.changeColor(user.props.theme, -10) + ';');
-            Utils.changeCss('a.theme', 'color:' + user.props.theme + '; fill:' + user.props.theme + '!important;');
-        } else if (user.props.theme === '#000000') {
-            Utils.changeCss('.btn.btn-primary:hover, .btn.btn-primary:active, .btn.btn-primary:focus', 'background: ' + Utils.changeColor(user.props.theme, +50) + ';');
-            $('.team__header').addClass('theme--black');
-        } else if (user.props.theme === '#585858') {
-            Utils.changeCss('.btn.btn-primary:hover, .btn.btn-primary:active, .btn.btn-primary:focus', 'background: ' + Utils.changeColor(user.props.theme, +10) + ';');
-            $('.team__header').addClass('theme--gray');
-        }
-
-        /* Setup global mouse events */
-        $('body').on('click.userpopover', function popOver(e) {
-            if ($(e.target).attr('data-toggle') !== 'popover' &&
-                $(e.target).parents('.popover.in').length === 0) {
-                $('.user-popover').popover('hide');
-            }
-        });
 
         $('body').on('mouseenter mouseleave', '.post', function mouseOver(ev) {
             if (ev.type === 'mouseenter') {
@@ -117,10 +95,11 @@ export default class ChannelLoader extends React.Component {
             }
         });
 
-        /* Setup modal events */
-        $('.modal').on('show.bs.modal', function onShow() {
-            $('.modal-body').css('overflow-y', 'auto');
-            $('.modal-body').css('max-height', $(window).height() * 0.7);
+        /* Prevent backspace from navigating back a page */
+        $(window).on('keydown.preventBackspace', (e) => {
+            if (e.which === 8 && !$(e.target).is('input, textarea')) {
+                e.preventDefault();
+            }
         });
     }
     componentWillUnmount() {
@@ -136,6 +115,8 @@ export default class ChannelLoader extends React.Component {
         $('body').off('mouseenter mouseleave', '.post.post--comment.same--root');
 
         $('.modal').off('show.bs.modal');
+
+        $(window).off('keydown.preventBackspace');
     }
     onSocketChange(msg) {
         if (msg && msg.user_id && msg.user_id !== UserStore.getCurrentId()) {

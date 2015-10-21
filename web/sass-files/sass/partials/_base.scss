@@ -34,25 +34,57 @@ body {
   }
 }
 
-b, strong {
-  font-weight: 600;
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+.popover {
+  color: #333;
+  &.bottom, &.right, &.top, &.left {
+    >.arrow:after {
+      border-color: transparent;
+    }
+  }
+  .popover-title {
+    background: rgba(black, 0.05);
+  }
+  .popover-content {
+    white-space: pre-wrap;
+  }
+}
+
+.dropdown-menu {
+  .divider {
+    @include opacity(0.15);
+  }
+  > li > a {
+    color: inherit;
+    &:focus, &:hover {
+      color: inherit;
+    }
+  }
+}
+
+.word-break--all {
+  word-break: break-all;
 }
 
 a {
   word-break: break-word;
-}
-
-a.theme {
   color: $primary-color;
 }
 
-div.theme {
-  background-color: $primary-color;
+a:focus, a:hover {
+  color: $primary-color;
 }
 
 .tooltip {
   .tooltip-inner {
     word-break: break-word;
+    font-size: 13px;
+    padding: 3px 10px 4px;
+    font-weight: 500;
   }
 }
 
@@ -61,8 +93,24 @@ div.theme {
  margin: 0;
 }
 
+.text-danger {
+  color: #E05F5D;
+}
+
+.btn {
+  &.btn-danger {
+    color: #fff;
+    &:hover, &:active {
+      color: #fff;
+    }
+  }
+}
+
 .form-control {
   @include border-radius(2px);
+  &:focus {
+    @include box-shadow(none);
+  }
   &.no-resize {
     resize: none;
   }
@@ -84,6 +132,10 @@ div.theme {
   right: 10px;
   top: 40px;
   z-index: 100;
+}
+
+.nav>li>a:focus, .nav>li>a:hover {
+  background: transparent;
 }
 
 .btn {
@@ -129,10 +181,14 @@ div.theme {
   background-color: white !important;
 }
 
+.alert {
+  padding: 8px 12px;
+}
+
 .emoji {
-    width: 1.5em;
-    height: 1.5em;
-    display: inline-block;
-    margin-bottom: 0.25em;
-    background-size: contain;
+  width: 1.5em;
+  height: 1.5em;
+  display: inline-block;
+  margin-bottom: 0.25em;
+  background-size: contain;
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -120,7 +120,10 @@ func (o *Post) PreSave() {
 
 	o.OriginalId = ""
 
-	o.CreateAt = GetMillis()
+	if o.CreateAt == 0 {
+		o.CreateAt = GetMillis()
+	}
+
 	o.UpdateAt = o.CreateAt
 
 	if o.Props == nil {

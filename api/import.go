@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -6,7 +6,6 @@ package api
 import (
 	l4g "code.google.com/p/log4go"
 	"github.com/mattermost/platform/model"
-	"github.com/mattermost/platform/utils"
 )
 
 //
@@ -24,9 +23,6 @@ func ImportPost(post *model.Post) {
 
 func ImportUser(user *model.User) *model.User {
 	user.MakeNonNil()
-	if len(user.Props["theme"]) == 0 {
-		user.AddProp("theme", utils.Cfg.TeamSettings.DefaultThemeColor)
-	}
 
 	if result := <-Srv.Store.User().Save(user); result.Err != nil {
 		l4g.Error("Error saving user. err=%v", result.Err)

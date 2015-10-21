@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 var Utils = require('../utils/utils.jsx');
@@ -15,13 +15,18 @@ export default class TeamSignupUsernamePage extends React.Component {
     }
     submitBack(e) {
         e.preventDefault();
-        this.props.state.wizard = 'send_invites';
+        if (global.window.config.SendEmailNotifications === 'true') {
+            this.props.state.wizard = 'send_invites';
+        } else {
+            this.props.state.wizard = 'team_url';
+        }
+
         this.props.updateParent(this.props.state);
     }
     submitNext(e) {
         e.preventDefault();
 
-        var name = React.findDOMNode(this.refs.name).value.trim().toLowerCase();
+        var name = ReactDOM.findDOMNode(this.refs.name).value.trim().toLowerCase();
 
         var usernameError = Utils.isValidUsername(name);
         if (usernameError === 'Cannot use a reserved word as a username.') {
@@ -68,8 +73,9 @@ export default class TeamSignupUsernamePage extends React.Component {
                                         placeholder=''
                                         defaultValue={this.props.state.user.username}
                                         maxLength='128'
+                                        spellCheck='false'
                                     />
-                                    <div className='color--light form__hint'>Usernames must begin with a letter and contain 3 to 15 characters made up of lowercase letters, numbers, and the symbols '.', '-' and '_'</div>
+                                    <span className='color--light help-block'>Usernames must begin with a letter and contain 3 to 15 characters made up of lowercase letters, numbers, and the symbols '.', '-' and '_'</span>
                                 </div>
                             </div>
                             {nameError}

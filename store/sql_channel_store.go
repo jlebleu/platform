@@ -1,9 +1,10 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package store
 
 import (
+	l4g "code.google.com/p/log4go"
 	"github.com/mattermost/platform/model"
 	"github.com/mattermost/platform/utils"
 )
@@ -30,13 +31,58 @@ func NewSqlChannelStore(sqlStore *SqlStore) ChannelStore {
 		tablem.ColMap("ChannelId").SetMaxSize(26)
 		tablem.ColMap("UserId").SetMaxSize(26)
 		tablem.ColMap("Roles").SetMaxSize(64)
-		tablem.ColMap("NotifyLevel").SetMaxSize(20)
+		tablem.ColMap("NotifyProps").SetMaxSize(2000)
 	}
 
 	return s
 }
 
 func (s SqlChannelStore) UpgradeSchemaIfNeeded() {
+
+	// BEGIN REMOVE AFTER 1.1.0
+	if s.CreateColumnIfNotExists("ChannelMembers", "NotifyProps", "varchar(2000)", "varchar(2000)", "{}") {
+		// populate NotifyProps from existing NotifyLevel field
+
+		// set default values
+		_, err := s.GetMaster().Exec(
+			`UPDATE
+				ChannelMembers
+			SET
+				NotifyProps = CONCAT('{"desktop":"', CONCAT(NotifyLevel, '","mark_unread":"` + model.CHANNEL_MARK_UNREAD_ALL + `"}'))`)
+		if err != nil {
+			l4g.Error("Unable to set default values for ChannelMembers.NotifyProps")
+			l4g.Error(err.Error())
+		}
+
+		// assume channels with all notifications enabled are just using the default settings
+		_, err = s.GetMaster().Exec(
+			`UPDATE
+				ChannelMembers
+			SET
+				NotifyProps = '{"desktop":"` + model.CHANNEL_NOTIFY_DEFAULT + `","mark_unread":"` + model.CHANNEL_MARK_UNREAD_ALL + `"}'
+			WHERE
+				NotifyLevel = '` + model.CHANNEL_NOTIFY_ALL + `'`)
+		if err != nil {
+			l4g.Error("Unable to set values for ChannelMembers.NotifyProps when members previously had notifyLevel=all")
+			l4g.Error(err.Error())
+		}
+
+		// set quiet mode channels to have no notifications and only mark the channel unread on mentions
+		_, err = s.GetMaster().Exec(
+			`UPDATE
+				ChannelMembers
+			SET
+				NotifyProps = '{"desktop":"` + model.CHANNEL_NOTIFY_NONE + `","mark_unread":"` + model.CHANNEL_MARK_UNREAD_MENTION + `"}'
+			WHERE
+				NotifyLevel = 'quiet'`)
+		if err != nil {
+			l4g.Error("Unable to set values for ChannelMembers.NotifyProps when members previously had notifyLevel=quiet")
+			l4g.Error(err.Error())
+		}
+
+		s.RemoveColumnIfExists("ChannelMembers", "NotifyLevel")
+	}
+	// END REMOVE AFTER 1.1.0
 }
 
 func (s SqlChannelStore) CreateIndexesIfNotExists() {
@@ -386,6 +432,34 @@ func (s SqlChannelStore) SaveMember(member *model.ChannelMember) StoreChannel {
 	return storeChannel
 }
 
+func (s SqlChannelStore) UpdateMember(member *model.ChannelMember) StoreChannel {
+	storeChannel := make(StoreChannel)
+
+	go func() {
+		result := StoreResult{}
+
+		member.PreUpdate()
+
+		if result.Err = member.IsValid(); result.Err != nil {
+			storeChannel <- result
+			close(storeChannel)
+			return
+		}
+
+		if _, err := s.GetMaster().Update(member); err != nil {
+			result.Err = model.NewAppError("SqlChannelStore.UpdateMember", "We encounted an error updating the channel member",
+				"channel_id="+member.ChannelId+", "+"user_id="+member.UserId+", "+err.Error())
+		} else {
+			result.Data = member
+		}
+
+		storeChannel <- result
+		close(storeChannel)
+	}()
+
+	return storeChannel
+}
+
 func (s SqlChannelStore) GetMembers(channelId string) StoreChannel {
 	storeChannel := make(StoreChannel)
 
@@ -583,7 +657,7 @@ func (s SqlChannelStore) UpdateLastViewedAt(channelId string, userId string) Sto
 
 		var query string
 
-		if utils.Cfg.SqlSettings.DriverName == "postgres" {
+		if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_POSTGRES {
 			query = `UPDATE
 				ChannelMembers
 			SET
@@ -597,7 +671,7 @@ func (s SqlChannelStore) UpdateLastViewedAt(channelId string, userId string) Sto
 			    Channels.Id = ChannelMembers.ChannelId
 			        AND UserId = :UserId
 			        AND ChannelId = :ChannelId`
-		} else if utils.Cfg.SqlSettings.DriverName == "mysql" {
+		} else if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_MYSQL {
 			query = `UPDATE
 				ChannelMembers, Channels
 			SET
@@ -640,35 +714,6 @@ func (s SqlChannelStore) IncrementMentionCount(channelId string, userId string) 
 			map[string]interface{}{"ChannelId": channelId, "UserId": userId})
 		if err != nil {
 			result.Err = model.NewAppError("SqlChannelStore.IncrementMentionCount", "We couldn't increment the mention count", "channel_id="+channelId+", user_id="+userId+", "+err.Error())
-		}
-
-		storeChannel <- result
-		close(storeChannel)
-	}()
-
-	return storeChannel
-}
-
-func (s SqlChannelStore) UpdateNotifyLevel(channelId, userId, notifyLevel string) StoreChannel {
-	storeChannel := make(StoreChannel)
-
-	go func() {
-		result := StoreResult{}
-
-		updateAt := model.GetMillis()
-
-		_, err := s.GetMaster().Exec(
-			`UPDATE
-				ChannelMembers
-			SET
-				NotifyLevel = :NotifyLevel,
-				LastUpdateAt = :LastUpdateAt
-			WHERE
-				UserId = :UserId
-					AND ChannelId = :ChannelId`,
-			map[string]interface{}{"ChannelId": channelId, "UserId": userId, "NotifyLevel": notifyLevel, "LastUpdateAt": updateAt})
-		if err != nil {
-			result.Err = model.NewAppError("SqlChannelStore.UpdateNotifyLevel", "We couldn't update the notify level", "channel_id="+channelId+", user_id="+userId+", "+err.Error())
 		}
 
 		storeChannel <- result

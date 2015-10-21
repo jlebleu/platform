@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -9,14 +9,14 @@ import (
 )
 
 const (
-	ACTION_TYPING       = "typing"
-	ACTION_POSTED       = "posted"
-	ACTION_POST_EDITED  = "post_edited"
-	ACTION_POST_DELETED = "post_deleted"
-	ACTION_VIEWED       = "viewed"
-	ACTION_NEW_USER     = "new_user"
-	ACTION_USER_ADDED   = "user_added"
-	ACTION_USER_REMOVED = "user_removed"
+	ACTION_TYPING         = "typing"
+	ACTION_POSTED         = "posted"
+	ACTION_POST_EDITED    = "post_edited"
+	ACTION_POST_DELETED   = "post_deleted"
+	ACTION_CHANNEL_VIEWED = "channel_viewed"
+	ACTION_NEW_USER       = "new_user"
+	ACTION_USER_ADDED     = "user_added"
+	ACTION_USER_REMOVED   = "user_removed"
 	ACTION_USER_PHONE_STATUS = "user_phone_status"
 )
 
@@ -32,8 +32,8 @@ func (m *Message) Add(key string, value string) {
 	m.Props[key] = value
 }
 
-func NewMessage(teamId string, channekId string, userId string, action string) *Message {
-	return &Message{TeamId: teamId, ChannelId: channekId, UserId: userId, Action: action, Props: make(map[string]string)}
+func NewMessage(teamId string, channelId string, userId string, action string) *Message {
+	return &Message{TeamId: teamId, ChannelId: channelId, UserId: userId, Action: action, Props: make(map[string]string)}
 }
 
 func (o *Message) ToJson() string {

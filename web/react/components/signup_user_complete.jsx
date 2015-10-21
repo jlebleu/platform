@@ -1,11 +1,10 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
-var utils = require('../utils/utils.jsx');
+var Utils = require('../utils/utils.jsx');
 var client = require('../utils/client.jsx');
 var UserStore = require('../stores/user_store.jsx');
 var BrowserStore = require('../stores/browser_store.jsx');
-var Constants = require('../utils/constants.jsx');
 
 export default class SignupUserComplete extends React.Component {
     constructor(props) {
@@ -21,8 +20,6 @@ export default class SignupUserComplete extends React.Component {
             initialState.user = {};
             initialState.user.team_id = this.props.teamId;
             initialState.user.email = this.props.email;
-            initialState.hash = this.props.hash;
-            initialState.data = this.props.data;
             initialState.original_email = this.props.email;
         }
 
@@ -31,13 +28,24 @@ export default class SignupUserComplete extends React.Component {
     handleSubmit(e) {
         e.preventDefault();
 
-        this.state.user.username = React.findDOMNode(this.refs.name).value.trim().toLowerCase();
-        if (!this.state.user.username) {
+        const providedEmail = ReactDOM.findDOMNode(this.refs.email).value.trim();
+        if (!providedEmail) {
+            this.setState({nameError: '', emailError: 'This field is required', passwordError: ''});
+            return;
+        }
+
+        if (!Utils.isEmail(providedEmail)) {
+            this.setState({nameError: '', emailError: 'Please enter a valid email address', passwordError: ''});
+            return;
+        }
+
+        const providedUsername = ReactDOM.findDOMNode(this.refs.name).value.trim().toLowerCase();
+        if (!providedUsername) {
             this.setState({nameError: 'This field is required', emailError: '', passwordError: '', serverError: ''});
             return;
         }
 
-        var usernameError = utils.isValidUsername(this.state.user.username);
+        const usernameError = Utils.isValidUsername(providedUsername);
         if (usernameError === 'Cannot use a reserved word as a username.') {
             this.setState({nameError: 'This username is reserved, please choose a new one.', emailError: '', passwordError: '', serverError: ''});
             return;
@@ -51,38 +59,44 @@ export default class SignupUserComplete extends React.Component {
             return;
         }
 
-        this.state.user.email = React.findDOMNode(this.refs.email).value.trim();
-        if (!this.state.user.email) {
-            this.setState({nameError: '', emailError: 'This field is required', passwordError: ''});
-            return;
-        }
-
-        this.state.user.password = React.findDOMNode(this.refs.password).value.trim();
-        if (!this.state.user.password || this.state.user.password .length < 5) {
+        const providedPassword = ReactDOM.findDOMNode(this.refs.password).value.trim();
+        if (!providedPassword || providedPassword.length < 5) {
             this.setState({nameError: '', emailError: '', passwordError: 'Please enter at least 5 characters', serverError: ''});
             return;
         }
 
-        this.setState({nameError: '', emailError: '', passwordError: '', serverError: ''});
+        const user = {
+            team_id: this.props.teamId,
+            email: providedEmail,
+            username: providedUsername,
+            password: providedPassword,
+            allow_marketing: true
+        };
 
-        this.state.user.allow_marketing = true;
+        this.setState({
+            user,
+            nameError: '',
+            emailError: '',
+            passwordError: '',
+            serverError: ''
+        });
 
-        client.createUser(this.state.user, this.state.data, this.state.hash,
+        client.createUser(user, this.props.data, this.props.hash,
             function createUserSuccess() {
                 client.track('signup', 'signup_user_02_complete');
 
-                client.loginByEmail(this.props.teamName, this.state.user.email, this.state.user.password,
+                client.loginByEmail(this.props.teamName, user.email, user.password,
                     function emailLoginSuccess(data) {
-                        UserStore.setLastEmail(this.state.user.email);
+                        UserStore.setLastEmail(user.email);
                         UserStore.setCurrentUser(data);
                         if (this.props.hash > 0) {
                             BrowserStore.setGlobalItem(this.props.hash, JSON.stringify({wizard: 'finished'}));
                         }
-                        window.location.href = '/';
+                        window.location.href = '/' + this.props.teamName + '/channels/town-square';
                     }.bind(this),
                     function emailLoginFailure(err) {
                         if (err.message === 'Login failed because email address has not been verified') {
-                            window.location.href = '/verify_email?email=' + encodeURIComponent(this.state.user.email) + '&teamname=' + encodeURIComponent(this.props.teamName);
+                            window.location.href = '/verify_email?email=' + encodeURIComponent(user.email) + '&teamname=' + encodeURIComponent(this.props.teamName);
                         } else {
                             this.setState({serverError: err.message});
                         }
@@ -135,7 +149,7 @@ export default class SignupUserComplete extends React.Component {
         // set up the email entry and hide it if an email was provided
         var yourEmailIs = '';
         if (this.state.user.email) {
-            yourEmailIs = <span>Your email address is {this.state.user.email}. You'll use this address to sign in to {global.window.config.SiteName}.</span>;
+            yourEmailIs = <span>Your email address is <strong>{this.state.user.email}</strong>. You'll use this address to sign in to {global.window.config.SiteName}.</span>;
         }
 
         var emailContainerStyle = 'margin--extra';
@@ -155,17 +169,15 @@ export default class SignupUserComplete extends React.Component {
                         placeholder=''
                         maxLength='128'
                         autoFocus={true}
+                        spellCheck='false'
                     />
                     {emailError}
                 </div>
             </div>
         );
 
-        // add options to log in using another service
-        var authServices = JSON.parse(this.props.authServices);
-
         var signupMessage = [];
-        if (authServices.indexOf(Constants.GITLAB_SERVICE) >= 0) {
+        if (global.window.config.EnableSignUpWithGitLab === 'true') {
             signupMessage.push(
                     <a
                         className='btn btn-custom-login gitlab'
@@ -178,7 +190,7 @@ export default class SignupUserComplete extends React.Component {
         }
 
         var emailSignup;
-        if (authServices.indexOf(Constants.EMAIL_SERVICE) !== -1) {
+        if (global.window.config.EnableSignUpWithEmail === 'true') {
             emailSignup = (
                 <div>
                     <div className='inner__content'>
@@ -193,9 +205,10 @@ export default class SignupUserComplete extends React.Component {
                                     className='form-control'
                                     placeholder=''
                                     maxLength='128'
+                                    spellCheck='false'
                                 />
                                 {nameError}
-                                <p className='form__hint'>Username must begin with a letter, and contain between 3 to 15 lowercase characters made up of numbers, letters, and the symbols '.', '-' and '_'</p>
+                                <span className='help-block'>Username must begin with a letter, and contain between 3 to 15 lowercase characters made up of numbers, letters, and the symbols '.', '-' and '_'</span>
                             </div>
                         </div>
                         <div className='margin--extra'>
@@ -207,6 +220,7 @@ export default class SignupUserComplete extends React.Component {
                                 className='form-control'
                                 placeholder=''
                                 maxLength='128'
+                                spellCheck='false'
                             />
                             {passwordError}
                         </div>
@@ -262,7 +276,6 @@ SignupUserComplete.defaultProps = {
     teamId: '',
     email: '',
     data: null,
-    authServices: '',
     teamDisplayName: ''
 };
 SignupUserComplete.propTypes = {
@@ -271,6 +284,5 @@ SignupUserComplete.propTypes = {
     teamId: React.PropTypes.string,
     email: React.PropTypes.string,
     data: React.PropTypes.string,
-    authServices: React.PropTypes.string,
     teamDisplayName: React.PropTypes.string
 };

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
+// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -83,5 +83,18 @@ func TestPostIsValid(t *testing.T) {
 func TestPostPreSave(t *testing.T) {
 	o := Post{Message: "test"}
 	o.PreSave()
+
+	if o.CreateAt == 0 {
+		t.Fatal("should be set")
+	}
+
+	past := GetMillis() - 1
+	o = Post{Message: "test", CreateAt: past}
+	o.PreSave()
+
+	if o.CreateAt > past {
+		t.Fatal("should not be updated")
+	}
+
 	o.Etag()
 }
