@@ -109,12 +109,12 @@ func updatePhoneStatus(c *Context, w http.ResponseWriter, r *http.Request) {
 		message.Add("status",status)
 		PublishAndForget(message)
 		if status == "0" {
-			c.Err = getAndPublishLastCall(user)
+			c.Err = getAndPublishLastCall(c, team, user)
 		}
 	}
 }
 
-func getAndPublishLastCall(user *model.User) *model.AppError {
+func getAndPublishLastCall(c *Context, team *model.Team, user *model.User) *model.AppError {
 	lastCall := getLastCall(user.Username)
 	if lastCall == nil {
 		return model.NewAppError("user.publisLastCall", fmt.Sprintf("Last call is null for user %s", user.Username), "")
@@ -123,11 +123,11 @@ func getAndPublishLastCall(user *model.User) *model.AppError {
 	if lastCall.DstUsername == "" || lastCall.SrcUsername == "" || lastCall.SrcUsername != user.Username {
 		return nil
 	} else {
-		return publishLastCall(lastCall, user)
+		return publishLastCall(c, team, lastCall, user)
 	}
 }
 
-func publishLastCall(lastCall *model.CallDetail, user *model.User) *model.AppError {
+func publishLastCall(c *Context, team *model.Team, lastCall *model.CallDetail, user *model.User) *model.AppError {
 	if result2 := <-Srv.Store.User().GetByUsername(user.TeamId, lastCall.DstUsername); result2.Err != nil {
 		return result2.Err
 	} else {
@@ -146,7 +146,7 @@ func publishLastCall(lastCall *model.CallDetail, user *model.User) *model.AppErr
 			} else {
 				l4g.Debug("Created post with message %v on channelid %v", post.Message, post.ChannelId)
 				rpost := res.Data.(*model.Post)
-				fireAndForgetNotifications(rpost, user.TeamId, "")
+				sendNotificationsAndForget(c, rpost, team, channel)
 				return nil
 			}
 		}

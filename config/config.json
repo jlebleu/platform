@@ -81,6 +81,10 @@
         "ShowEmailAddress": true,
         "ShowFullName": true
     },
+    "XucSettings": {
+        "XucHost": "xuc",
+        "XucPort": 9000
+    },
     "GitLabSettings": {
         "Enable": false,
         "Secret": "",
@@ -89,9 +93,5 @@
         "AuthEndpoint": "",
         "TokenEndpoint": "",
         "UserApiEndpoint": ""
-    },
-    "XucSettings": {
-        "XucHost": "xuc",
-        "XucPort": 9000
     }
 }
