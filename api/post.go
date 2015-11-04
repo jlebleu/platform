@@ -249,7 +249,7 @@ func handleWebhookEventsAndForget(c *Context, post *model.Post, team *model.Team
 		}
 
 		for _, hook := range relevantHooks {
-			go func() {
+			go func(hook *model.OutgoingWebhook) {
 				p := url.Values{}
 				p.Set("token", hook.Token)
 
@@ -270,7 +270,7 @@ func handleWebhookEventsAndForget(c *Context, post *model.Post, team *model.Team
 				client := &http.Client{}
 
 				for _, url := range hook.CallbackURLs {
-					go func() {
+					go func(url string) {
 						req, _ := http.NewRequest("POST", url, strings.NewReader(p.Encode()))
 						req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 						req.Header.Set("Accept", "application/json")
@@ -281,7 +281,7 @@ func handleWebhookEventsAndForget(c *Context, post *model.Post, team *model.Team
 
 							// copy the context and create a mock session for posting the message
 							mockSession := model.Session{UserId: hook.CreatorId, TeamId: hook.TeamId, IsOAuth: false}
-							newContext := &Context{mockSession, model.NewId(), "", c.Path, nil, c.teamURLValid, c.teamURL, c.siteURL}
+							newContext := &Context{mockSession, model.NewId(), "", c.Path, nil, c.teamURLValid, c.teamURL, c.siteURL, 0}
 
 							if text, ok := respProps["text"]; ok {
 								if _, err := CreateWebhookPost(newContext, post.ChannelId, text, respProps["username"], respProps["icon_url"]); err != nil {
@@ -289,10 +289,10 @@ func handleWebhookEventsAndForget(c *Context, post *model.Post, team *model.Team
 								}
 							}
 						}
-					}()
+					}(url)
 				}
 
-			}()
+			}(hook)
 		}
 
 	}()
@@ -820,45 +820,23 @@ func searchPosts(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plainSearchParams, hashtagSearchParams := model.ParseSearchParams(terms)
+	paramsList := model.ParseSearchParams(terms)
+	channels := []store.StoreChannel{}
 
-	var hchan store.StoreChannel
-	if hashtagSearchParams != nil {
-		hchan = Srv.Store.Post().Search(c.Session.TeamId, c.Session.UserId, hashtagSearchParams)
+	for _, params := range paramsList {
+		channels = append(channels, Srv.Store.Post().Search(c.Session.TeamId, c.Session.UserId, params))
 	}
 
-	var pchan store.StoreChannel
-	if plainSearchParams != nil {
-		pchan = Srv.Store.Post().Search(c.Session.TeamId, c.Session.UserId, plainSearchParams)
-	}
-
-	mainList := &model.PostList{}
-	if hchan != nil {
-		if result := <-hchan; result.Err != nil {
+	posts := &model.PostList{}
+	for _, channel := range channels {
+		if result := <-channel; result.Err != nil {
 			c.Err = result.Err
 			return
 		} else {
-			mainList = result.Data.(*model.PostList)
+			data := result.Data.(*model.PostList)
+			posts.Extend(data)
 		}
 	}
 
-	plainList := &model.PostList{}
-	if pchan != nil {
-		if result := <-pchan; result.Err != nil {
-			c.Err = result.Err
-			return
-		} else {
-			plainList = result.Data.(*model.PostList)
-		}
-	}
-
-	for _, postId := range plainList.Order {
-		if _, ok := mainList.Posts[postId]; !ok {
-			mainList.AddPost(plainList.Posts[postId])
-			mainList.AddOrder(postId)
-		}
-
-	}
-
-	w.Write([]byte(mainList.ToJson()))
+	w.Write([]byte(posts.ToJson()))
 }

@@ -33,7 +33,6 @@ module.exports = {
 
         RECIEVED_MSG: null,
 
-        CLICK_TEAM: null,
         RECIEVED_TEAM: null,
 
         RECIEVED_CONFIG: null,
@@ -99,6 +98,7 @@ module.exports = {
     POST_LOADING: 'loading',
     POST_FAILED: 'failed',
     POST_DELETED: 'deleted',
+    POST_TYPE_JOIN_LEAVE: 'join_leave',
     RESERVED_TEAM_NAMES: [
         'www',
         'web',
@@ -127,6 +127,8 @@ module.exports = {
     MAX_DMS: 20,
     DM_CHANNEL: 'D',
     OPEN_CHANNEL: 'O',
+    INVITE_TEAM: 'I',
+    OPEN_TEAM: 'O',
     MAX_POST_LEN: 4000,
     EMOJI_SIZE: 16,
     ONLINE_ICON_SVG: "<svg version='1.1' id='Layer_1' xmlns:dc='http://purl.org/dc/elements/1.1/' xmlns:cc='http://creativecommons.org/ns#' xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#' xmlns:svg='http://www.w3.org/2000/svg' xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd' xmlns:inkscape='http://www.inkscape.org/namespaces/inkscape' sodipodi:docname='TRASH_1_4.svg' inkscape:version='0.48.4 r9939' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' x='0px' y='0px' width='12px' height='12px' viewBox='0 0 12 12' enable-background='new 0 0 12 12' xml:space='preserve'><sodipodi:namedview  inkscape:cy='139.7898' inkscape:cx='26.358185' inkscape:zoom='1.18' showguides='true' showgrid='false' id='namedview6' guidetolerance='10' gridtolerance='10' objecttolerance='10' borderopacity='1' bordercolor='#666666' pagecolor='#ffffff' inkscape:current-layer='Layer_1' inkscape:window-maximized='1' inkscape:window-y='-8' inkscape:window-x='-8' inkscape:window-height='705' inkscape:window-width='1366' inkscape:guide-bbox='true' inkscape:pageshadow='2' inkscape:pageopacity='0'><sodipodi:guide  position='50.036793,85.991376' orientation='1,0' id='guide2986'></sodipodi:guide><sodipodi:guide  position='58.426196,66.216355' orientation='0,1' id='guide3047'></sodipodi:guide></sodipodi:namedview><g><g><path class='online--icon' d='M6,5.487c1.371,0,2.482-1.116,2.482-2.493c0-1.378-1.111-2.495-2.482-2.495S3.518,1.616,3.518,2.994C3.518,4.371,4.629,5.487,6,5.487z M10.452,8.545c-0.101-0.829-0.36-1.968-0.726-2.541C9.475,5.606,8.5,5.5,8.5,5.5S8.43,7.521,6,7.521C3.507,7.521,3.5,5.5,3.5,5.5S2.527,5.606,2.273,6.004C1.908,6.577,1.648,7.716,1.547,8.545C1.521,8.688,1.49,9.082,1.498,9.142c0.161,1.295,2.238,2.322,4.375,2.358C5.916,11.501,5.958,11.501,6,11.501c0.043,0,0.084,0,0.127-0.001c2.076-0.026,4.214-1.063,4.375-2.358C10.509,9.082,10.471,8.696,10.452,8.545z'/></g></g></svg>",
@@ -137,6 +139,7 @@ module.exports = {
     PHONE_AVAIL_SVG: "<?xml version='1.0' encoding='UTF-8' standalone='no'?><svg xmlns:dc='http://purl.org/dc/elements/1.1/' xmlns:cc='http://creativecommons.org/ns#' xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#' xmlns:svg='http://www.w3.org/2000/svg' xmlns='http://www.w3.org/2000/svg' xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd' xmlns:inkscape='http://www.inkscape.org/namespaces/inkscape' version='1.1' id='Layer_1' sodipodi:docname='phoneavail2.svg' inkscape:version='0.91 r13725' x='0px' y='0px' width='12px' height='12px' viewBox='0 0 12 12' enable-background='new 0 0 12 12' xml:space='preserve'><metadata id='metadata5334'><rdf:RDF><cc:Work rdf:about=''><dc:format>image/svg+xml</dc:format><dc:type rdf:resource='http://purl.org/dc/dcmitype/StillImage' /><dc:title></dc:title></cc:Work></rdf:RDF></metadata><defs id='defs5332' /><sodipodi:namedview inkscape:cy='4.7182315' inkscape:cx='12.881552' inkscape:zoom='26.700352' showguides='true' showgrid='false' id='namedview6' guidetolerance='10' gridtolerance='10' objecttolerance='10' borderopacity='1' bordercolor='#666666' pagecolor='#ffffff' inkscape:current-layer='Layer_1' inkscape:window-maximized='1' inkscape:window-y='24' inkscape:window-x='1600' inkscape:window-height='1056' inkscape:window-width='1920' inkscape:guide-bbox='true' inkscape:pageshadow='2' inkscape:pageopacity='0'><sodipodi:guide position='50.036793,85.991376' orientation='1,0' id='guide2986' /><sodipodi:guide position='58.426196,66.216355' orientation='0,1' id='guide3047' /></sodipodi:namedview><path class='online--icon' d='M 10.750537,8.5523604 C 10.641451,7.7258326 9.4462896,6.1122432 6.9580632,5.6072938 6.4038139,2.18586 9.1571145,4.2605127 10.786171,3.6120505 12.617745,2.882974 8.8498267,0.96677926 6.225299,0.96677926 c -2.6925709,0 -6.87831499,2.14000084 -5.1676344,2.37389744 C 3.7142364,3.7039022 6.493904,3.2615544 4.5146376,5.6071821 2.0469548,5.996919 1.2417544,7.7258326 1.132669,8.5523604 1.1045877,8.6949339 1.0711061,9.0877589 1.0797465,9.1475799 1.253635,10.438718 1.8788691,10.977222 4.1869414,11.013115 c 0.046442,9.97e-4 -1.7088513,-0.472883 1.7956525,-0.528729 2.9479026,-0.04698 1.7492101,0.417703 1.7956524,0.416705 2.2421887,-0.02593 2.8524047,-0.462373 3.0262937,-1.7535111 0.0075,-0.05982 -0.03348,-0.4446699 -0.054,-0.5952195 z' id='path5330' inkscape:connector-curvature='0' sodipodi:nodetypes='ccsssccccsccc' style='fill:#aad400' /></svg>",
     PHONE_RINGING_SVG: "<?xml version='1.0' encoding='UTF-8' standalone='no'?><svg xmlns:dc='http://purl.org/dc/elements/1.1/' xmlns:cc='http://creativecommons.org/ns#' xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#' xmlns:svg='http://www.w3.org/2000/svg' xmlns='http://www.w3.org/2000/svg' xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd' xmlns:inkscape='http://www.inkscape.org/namespaces/inkscape' version='1.1' id='Layer_1' sodipodi:docname='phoneavail2.svg' inkscape:version='0.91 r13725' x='0px' y='0px' width='12px' height='12px' viewBox='0 0 12 12' enable-background='new 0 0 12 12' xml:space='preserve'><metadata id='metadata5334'><rdf:RDF><cc:Work rdf:about=''><dc:format>image/svg+xml</dc:format><dc:type rdf:resource='http://purl.org/dc/dcmitype/StillImage' /><dc:title></dc:title></cc:Work></rdf:RDF></metadata><defs id='defs5332' /><sodipodi:namedview inkscape:cy='4.7182315' inkscape:cx='12.881552' inkscape:zoom='26.700352' showguides='true' showgrid='false' id='namedview6' guidetolerance='10' gridtolerance='10' objecttolerance='10' borderopacity='1' bordercolor='#666666' pagecolor='#ffffff' inkscape:current-layer='Layer_1' inkscape:window-maximized='1' inkscape:window-y='24' inkscape:window-x='1600' inkscape:window-height='1056' inkscape:window-width='1920' inkscape:guide-bbox='true' inkscape:pageshadow='2' inkscape:pageopacity='0'><sodipodi:guide position='50.036793,85.991376' orientation='1,0' id='guide2986' /><sodipodi:guide position='58.426196,66.216355' orientation='0,1' id='guide3047' /></sodipodi:namedview><path class='online--icon' d='M 10.750537,8.5523604 C 10.641451,7.7258326 9.4462896,6.1122432 6.9580632,5.6072938 6.4038139,2.18586 9.1571145,4.2605127 10.786171,3.6120505 12.617745,2.882974 8.8498267,0.96677926 6.225299,0.96677926 c -2.6925709,0 -6.87831499,2.14000084 -5.1676344,2.37389744 C 3.7142364,3.7039022 6.493904,3.2615544 4.5146376,5.6071821 2.0469548,5.996919 1.2417544,7.7258326 1.132669,8.5523604 1.1045877,8.6949339 1.0711061,9.0877589 1.0797465,9.1475799 1.253635,10.438718 1.8788691,10.977222 4.1869414,11.013115 c 0.046442,9.97e-4 -1.7088513,-0.472883 1.7956525,-0.528729 2.9479026,-0.04698 1.7492101,0.417703 1.7956524,0.416705 2.2421887,-0.02593 2.8524047,-0.462373 3.0262937,-1.7535111 0.0075,-0.05982 -0.03348,-0.4446699 -0.054,-0.5952195 z' id='path5330' inkscape:connector-curvature='0' sodipodi:nodetypes='ccsssccccsccc' style='fill:#0066FF' /></svg>",
     PHONE_BUSY_SVG: "<?xml version='1.0' encoding='UTF-8' standalone='no'?><svg xmlns:dc='http://purl.org/dc/elements/1.1/' xmlns:cc='http://creativecommons.org/ns#' xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#' xmlns:svg='http://www.w3.org/2000/svg' xmlns='http://www.w3.org/2000/svg' xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd' xmlns:inkscape='http://www.inkscape.org/namespaces/inkscape' version='1.1' id='Layer_1' sodipodi:docname='phoneavail2.svg' inkscape:version='0.91 r13725' x='0px' y='0px' width='12px' height='12px' viewBox='0 0 12 12' enable-background='new 0 0 12 12' xml:space='preserve'><metadata id='metadata5334'><rdf:RDF><cc:Work rdf:about=''><dc:format>image/svg+xml</dc:format><dc:type rdf:resource='http://purl.org/dc/dcmitype/StillImage' /><dc:title></dc:title></cc:Work></rdf:RDF></metadata><defs id='defs5332' /><sodipodi:namedview inkscape:cy='4.7182315' inkscape:cx='12.881552' inkscape:zoom='26.700352' showguides='true' showgrid='false' id='namedview6' guidetolerance='10' gridtolerance='10' objecttolerance='10' borderopacity='1' bordercolor='#666666' pagecolor='#ffffff' inkscape:current-layer='Layer_1' inkscape:window-maximized='1' inkscape:window-y='24' inkscape:window-x='1600' inkscape:window-height='1056' inkscape:window-width='1920' inkscape:guide-bbox='true' inkscape:pageshadow='2' inkscape:pageopacity='0'><sodipodi:guide position='50.036793,85.991376' orientation='1,0' id='guide2986' /><sodipodi:guide position='58.426196,66.216355' orientation='0,1' id='guide3047' /></sodipodi:namedview><path class='online--icon' d='M 10.750537,8.5523604 C 10.641451,7.7258326 9.4462896,6.1122432 6.9580632,5.6072938 6.4038139,2.18586 9.1571145,4.2605127 10.786171,3.6120505 12.617745,2.882974 8.8498267,0.96677926 6.225299,0.96677926 c -2.6925709,0 -6.87831499,2.14000084 -5.1676344,2.37389744 C 3.7142364,3.7039022 6.493904,3.2615544 4.5146376,5.6071821 2.0469548,5.996919 1.2417544,7.7258326 1.132669,8.5523604 1.1045877,8.6949339 1.0711061,9.0877589 1.0797465,9.1475799 1.253635,10.438718 1.8788691,10.977222 4.1869414,11.013115 c 0.046442,9.97e-4 -1.7088513,-0.472883 1.7956525,-0.528729 2.9479026,-0.04698 1.7492101,0.417703 1.7956524,0.416705 2.2421887,-0.02593 2.8524047,-0.462373 3.0262937,-1.7535111 0.0075,-0.05982 -0.03348,-0.4446699 -0.054,-0.5952195 z' id='path5330' inkscape:connector-curvature='0' sodipodi:nodetypes='ccsssccccsccc' style='fill:#ff2a2a' /></svg>",
+    UPDATE_TYPING_MS: 5000,
     THEMES: {
         default: {
             type: 'Mattermost',
@@ -144,7 +147,7 @@ module.exports = {
             sidebarText: '#333333',
             sidebarUnreadText: '#333333',
             sidebarTextHoverBg: '#e6f2fa',
-            sidebarTextActiveBg: '#e1e1e1',
+            sidebarTextActiveBorder: '#378FD2',
             sidebarTextActiveColor: '#111111',
             sidebarHeaderBg: '#2389d7',
             sidebarHeaderTextColor: '#ffffff',
@@ -166,7 +169,7 @@ module.exports = {
             sidebarText: '#fff',
             sidebarUnreadText: '#fff',
             sidebarTextHoverBg: '#136197',
-            sidebarTextActiveBg: '#136197',
+            sidebarTextActiveBorder: '#7AB0D6',
             sidebarTextActiveColor: '#FFFFFF',
             sidebarHeaderBg: '#2f81b7',
             sidebarHeaderTextColor: '#FFFFFF',
@@ -188,7 +191,7 @@ module.exports = {
             sidebarText: '#fff',
             sidebarUnreadText: '#fff',
             sidebarTextHoverBg: '#4A5664',
-            sidebarTextActiveBg: '#39769C',
+            sidebarTextActiveBorder: '#39769C',
             sidebarTextActiveColor: '#FFFFFF',
             sidebarHeaderBg: '#1B2C3E',
             sidebarHeaderTextColor: '#FFFFFF',
@@ -210,7 +213,7 @@ module.exports = {
             sidebarText: '#fff',
             sidebarUnreadText: '#fff',
             sidebarTextHoverBg: '#302e30',
-            sidebarTextActiveBg: '#484748',
+            sidebarTextActiveBorder: '#196CAF',
             sidebarTextActiveColor: '#FFFFFF',
             sidebarHeaderBg: '#1f1f1f',
             sidebarHeaderTextColor: '#FFFFFF',
@@ -253,8 +256,8 @@ module.exports = {
             uiName: 'Sidebar Text Hover BG'
         },
         {
-            id: 'sidebarTextActiveBg',
-            uiName: 'Sidebar Text Active BG'
+            id: 'sidebarTextActiveBorder',
+            uiName: 'Sidebar Text Active Border'
         },
         {
             id: 'sidebarTextActiveColor',
@@ -305,9 +308,17 @@ module.exports = {
             uiName: 'Mention Highlight Link'
         }
     ],
+    CODE_THEMES: {
+        github: 'GitHub',
+        solarized_light: 'Solarized light',
+        monokai: 'Monokai',
+        solarized_dark: 'Solarized Dark'
+    },
+    DEFAULT_CODE_THEME: 'github',
     Preferences: {
         CATEGORY_DIRECT_CHANNEL_SHOW: 'direct_channel_show',
-        CATEGORY_DISPLAY_SETTINGS: 'display_settings'
+        CATEGORY_DISPLAY_SETTINGS: 'display_settings',
+        CATEGORY_ADVANCED_SETTINGS: 'advanced_settings'
     },
     KeyCodes: {
         UP: 38,
@@ -316,6 +327,32 @@ module.exports = {
         RIGHT: 39,
         BACKSPACE: 8,
         ENTER: 13,
-        ESCAPE: 27
+        ESCAPE: 27,
+        SPACE: 32
+    },
+    HighlightedLanguages: {
+        diff: 'Diff',
+        apache: 'Apache',
+        makefile: 'Makefile',
+        http: 'HTTP',
+        json: 'JSON',
+        markdown: 'Markdown',
+        javascript: 'JavaScript',
+        css: 'CSS',
+        nginx: 'nginx',
+        objectivec: 'Objective-C',
+        python: 'Python',
+        xml: 'XML',
+        perl: 'Perl',
+        bash: 'Bash',
+        php: 'PHP',
+        coffeescript: 'CoffeeScript',
+        cs: 'C#',
+        cpp: 'C++',
+        sql: 'SQL',
+        go: 'Go',
+        ruby: 'Ruby',
+        java: 'Java',
+        ini: 'ini'
     }
 };

@@ -16,7 +16,7 @@ export default class Login extends React.Component {
     }
     handleSubmit(e) {
         e.preventDefault();
-        let state = {};
+        var state = {};
 
         const name = this.props.teamName;
         if (!name) {
@@ -49,8 +49,7 @@ export default class Login extends React.Component {
         this.setState(state);
 
         Client.loginByEmail(name, email, password,
-            function loggedIn(data) {
-                UserStore.setCurrentUser(data);
+            () => {
                 UserStore.setLastEmail(email);
 
                 const redirect = Utils.getUrlParameter('redirect');
@@ -60,7 +59,7 @@ export default class Login extends React.Component {
                     window.location.href = '/' + name + '/channels/town-square';
                 }
             },
-            function loginFailed(err) {
+            (err) => {
                 if (err.message === 'Login failed because email address has not been verified') {
                     window.location.href = '/verify_email?teamname=' + encodeURIComponent(name) + '&email=' + encodeURIComponent(email);
                     return;
@@ -68,7 +67,7 @@ export default class Login extends React.Component {
                 state.serverError = err.message;
                 this.valid = false;
                 this.setState(state);
-            }.bind(this)
+            }
         );
     }
     render() {
@@ -95,14 +94,14 @@ export default class Login extends React.Component {
         }
 
         let loginMessage = [];
-        if (global.window.config.EnableSignUpWithGitLab === 'true') {
+        if (global.window.mm_config.EnableSignUpWithGitLab === 'true') {
             loginMessage.push(
                     <a
                         className='btn btn-custom-login gitlab'
                         href={'/' + teamName + '/login/gitlab'}
                     >
                         <span className='icon' />
-                        <span>with GitLab</span>
+                        <span>{'with GitLab'}</span>
                     </a>
            );
         }
@@ -124,7 +123,7 @@ export default class Login extends React.Component {
         }
 
         let emailSignup;
-        if (global.window.config.EnableSignUpWithEmail === 'true') {
+        if (global.window.mm_config.EnableSignUpWithEmail === 'true') {
             emailSignup = (
                 <div>
                     <div className={'form-group' + errorClass}>
@@ -155,7 +154,7 @@ export default class Login extends React.Component {
                             type='submit'
                             className='btn btn-primary'
                         >
-                            Sign in
+                            {'Sign in'}
                         </button>
                     </div>
                 </div>
@@ -167,7 +166,7 @@ export default class Login extends React.Component {
                 <div>
                     {loginMessage}
                     <div className='or__container'>
-                        <span>or</span>
+                        <span>{'or'}</span>
                     </div>
                 </div>
             );
@@ -177,16 +176,48 @@ export default class Login extends React.Component {
         if (emailSignup) {
             forgotPassword = (
                 <div className='form-group'>
-                    <a href={'/' + teamName + '/reset_password'}>I forgot my password</a>
+                    <a href={'/' + teamName + '/reset_password'}>{'I forgot my password'}</a>
+                </div>
+            );
+        }
+
+        let userSignUp = null;
+        if (this.props.inviteId) {
+            userSignUp = (
+                <div>
+                    <span>{'Do not have an account? '}
+                        <a
+                            href={'/signup_user_complete/?id=' + this.props.inviteId}
+                            className='signup-team-login'
+                        >
+                            {'Create one now'}
+                        </a>
+                    </span>
+                </div>
+            );
+        }
+
+        let teamSignUp = null;
+        if (global.window.mm_config.EnableTeamCreation === 'true') {
+            teamSignUp = (
+                <div className='margin--extra'>
+                    <span>{'Want to create your own team? '}
+                        <a
+                            href='/'
+                            className='signup-team-login'
+                        >
+                            {'Sign up now'}
+                        </a>
+                    </span>
                 </div>
             );
         }
 
         return (
             <div className='signup-team__container'>
-                <h5 className='margin--less'>Sign in to:</h5>
+                <h5 className='margin--less'>{'Sign in to:'}</h5>
                 <h2 className='signup-team__name'>{teamDisplayName}</h2>
-                <h2 className='signup-team__subdomain'>on {global.window.config.SiteName}</h2>
+                <h2 className='signup-team__subdomain'>{'on '}{global.window.mm_config.SiteName}</h2>
                 <form onSubmit={this.handleSubmit}>
                     {verifiedBox}
                     <div className={'form-group' + errorClass}>
@@ -194,20 +225,12 @@ export default class Login extends React.Component {
                     </div>
                     {loginMessage}
                     {emailSignup}
+                    {userSignUp}
                     <div className='form-group margin--extra form-group--small'>
                         <span><a href='/find_team'>{'Find other teams'}</a></span>
                     </div>
                     {forgotPassword}
-                    <div className='margin--extra'>
-                        <span>{'Want to create your own team? '}
-                            <a
-                                href='/'
-                                className='signup-team-login'
-                            >
-                                Sign up now
-                            </a>
-                        </span>
-                    </div>
+                    {teamSignUp}
                 </form>
             </div>
         );
@@ -220,5 +243,6 @@ Login.defaultProps = {
 };
 Login.propTypes = {
     teamName: React.PropTypes.string,
-    teamDisplayName: React.PropTypes.string
+    teamDisplayName: React.PropTypes.string,
+    inviteId: React.PropTypes.string
 };

@@ -3,6 +3,7 @@
 
 var client = require('./client.jsx');
 var AppDispatcher = require('../dispatcher/app_dispatcher.jsx');
+var BrowserStore = require('../stores/browser_store.jsx');
 var ChannelStore = require('../stores/channel_store.jsx');
 var PostStore = require('../stores/post_store.jsx');
 var UserStore = require('../stores/user_store.jsx');
@@ -50,18 +51,18 @@ export function getChannels(force, updateLastViewed, checkVersion) {
         callTracker.getChannels = utils.getTimestamp();
 
         client.getChannels(
-            function getChannelsSuccess(data, textStatus, xhr) {
+            (data, textStatus, xhr) => {
                 callTracker.getChannels = 0;
 
                 if (checkVersion) {
                     var serverVersion = xhr.getResponseHeader('X-Version-ID');
 
-                    if (!UserStore.getLastVersion()) {
-                        UserStore.setLastVersion(serverVersion);
+                    if (!BrowserStore.getLastServerVersion()) {
+                        BrowserStore.setLastServerVersion(serverVersion);
                     }
 
-                    if (serverVersion !== UserStore.getLastVersion()) {
-                        UserStore.setLastVersion(serverVersion);
+                    if (serverVersion !== BrowserStore.getLastServerVersion()) {
+                        BrowserStore.setLastServerVersion(serverVersion);
                         window.location.href = window.location.href;
                         console.log('Detected version update refreshing the page'); //eslint-disable-line no-console
                     }
@@ -77,7 +78,7 @@ export function getChannels(force, updateLastViewed, checkVersion) {
                     members: data.members
                 });
             },
-            function getChannelsFailure(err) {
+            (err) => {
                 callTracker.getChannels = 0;
                 dispatchError(err, 'getChannels');
             }
@@ -131,7 +132,7 @@ export function getChannel(id) {
     callTracker['getChannel' + id] = utils.getTimestamp();
 
     client.getChannel(id,
-        function getChannelSuccess(data, textStatus, xhr) {
+        (data, textStatus, xhr) => {
             callTracker['getChannel' + id] = 0;
 
             if (xhr.status === 304 || !data) {
@@ -144,21 +145,21 @@ export function getChannel(id) {
                 member: data.member
             });
         },
-        function getChannelFailure(err) {
+        (err) => {
             callTracker['getChannel' + id] = 0;
             dispatchError(err, 'getChannel');
         }
     );
 }
 
-export function updateLastViewedAt() {
+export function updateLastViewedAt(force) {
     const channelId = ChannelStore.getCurrentId();
 
     if (channelId === null) {
         return;
     }
 
-    if (isCallInProgress(`updateLastViewed${channelId}`)) {
+    if (isCallInProgress(`updateLastViewed${channelId}`) && !force) {
         return;
     }
 
@@ -566,8 +567,8 @@ export function getMe() {
     }
 
     callTracker.getMe = utils.getTimestamp();
-    client.getMeSynchronous(
-        function getMeSyncSuccess(data, textStatus, xhr) {
+    client.getMe(
+        (data, textStatus, xhr) => {
             callTracker.getMe = 0;
 
             if (xhr.status === 304 || !data) {
@@ -579,7 +580,7 @@ export function getMe() {
                 me: data
             });
         },
-        function getMeSyncFailure(err) {
+        (err) => {
             callTracker.getMe = 0;
             dispatchError(err, 'getMe');
         }

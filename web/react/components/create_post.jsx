@@ -8,6 +8,7 @@ const ChannelStore = require('../stores/channel_store.jsx');
 const PostStore = require('../stores/post_store.jsx');
 const UserStore = require('../stores/user_store.jsx');
 const SocketStore = require('../stores/socket_store.jsx');
+const PreferenceStore = require('../stores/preference_store.jsx');
 const MsgTyping = require('./msg_typing.jsx');
 const Textbox = require('./textbox.jsx');
 const FileUpload = require('./file_upload.jsx');
@@ -36,8 +37,10 @@ export default class CreatePost extends React.Component {
         this.removePreview = this.removePreview.bind(this);
         this.onChange = this.onChange.bind(this);
         this.getFileCount = this.getFileCount.bind(this);
-        this.handleArrowUp = this.handleArrowUp.bind(this);
+        this.handleKeyDown = this.handleKeyDown.bind(this);
         this.handleResize = this.handleResize.bind(this);
+        this.sendMessage = this.sendMessage.bind(this);
+        this.onPreferenceChange = this.onPreferenceChange.bind(this);
 
         PostStore.clearDraftUploads();
 
@@ -51,8 +54,16 @@ export default class CreatePost extends React.Component {
             submitting: false,
             initialText: draft.messageText,
             windowWidth: Utils.windowWidth(),
-            windowHeigth: Utils.windowHeight()
+            windowHeight: Utils.windowHeight(),
+            ctrlSend: PreferenceStore.getPreference(Constants.Preferences.CATEGORY_ADVANCED_SETTINGS, 'send_on_ctrl_enter', {value: 'false'}).value
         };
+
+        PreferenceStore.addChangeListener(this.onPreferenceChange);
+    }
+    onPreferenceChange() {
+        this.setState({
+            ctrlSend: PreferenceStore.getPreference(Constants.Preferences.CATEGORY_ADVANCED_SETTINGS, 'send_on_ctrl_enter', {value: 'false'}).value
+        });
     }
     handleResize() {
         this.setState({
@@ -71,7 +82,7 @@ export default class CreatePost extends React.Component {
             return;
         }
 
-        if (prevState.windowWidth !== this.state.windowWidth || prevState.windowHeight !== this.state.windowHeigth) {
+        if (prevState.windowWidth !== this.state.windowWidth || prevState.windowHeight !== this.state.windowHeight) {
             this.resizePostHolder();
             return;
         }
@@ -122,6 +133,11 @@ export default class CreatePost extends React.Component {
                 post.message,
                 false,
                 (data) => {
+                    if (data.response === 'not implemented') {
+                        this.sendMessage(post);
+                        return;
+                    }
+
                     PostStore.storeDraft(data.channel_id, null);
                     this.setState({messageText: '', submitting: false, postError: null, previews: [], serverError: null});
 
@@ -130,72 +146,81 @@ export default class CreatePost extends React.Component {
                     }
                 },
                 (err) => {
-                    const state = {};
-                    state.serverError = err.message;
-                    state.submitting = false;
-                    this.setState(state);
+                    if (err.sendMessage) {
+                        this.sendMessage(post);
+                    } else {
+                        const state = {};
+                        state.serverError = err.message;
+                        state.submitting = false;
+                        this.setState(state);
+                    }
                 }
             );
         } else {
-            post.channel_id = this.state.channelId;
-            post.filenames = this.state.previews;
-
-            const time = Utils.getTimestamp();
-            const userId = UserStore.getCurrentId();
-            post.pending_post_id = `${userId}:${time}`;
-            post.user_id = userId;
-            post.create_at = time;
-            post.root_id = this.state.rootId;
-            post.parent_id = this.state.parentId;
-
-            const channel = ChannelStore.get(this.state.channelId);
-
-            PostStore.storePendingPost(post);
-            PostStore.storeDraft(channel.id, null);
-            this.setState({messageText: '', submitting: false, postError: null, previews: [], serverError: null});
-
-            Client.createPost(post, channel,
-                (data) => {
-                    AsyncClient.getPosts();
-
-                    const member = ChannelStore.getMember(channel.id);
-                    member.msg_count = channel.total_msg_count;
-                    member.last_viewed_at = Date.now();
-                    ChannelStore.setChannelMember(member);
-
-                    AppDispatcher.handleServerAction({
-                        type: ActionTypes.RECIEVED_POST,
-                        post: data
-                    });
-                },
-                (err) => {
-                    const state = {};
-
-                    if (err.message === 'Invalid RootId parameter') {
-                        if ($('#post_deleted').length > 0) {
-                            $('#post_deleted').modal('show');
-                        }
-                        PostStore.removePendingPost(post.pending_post_id);
-                    } else {
-                        post.state = Constants.POST_FAILED;
-                        PostStore.updatePendingPost(post);
-                    }
-
-                    state.submitting = false;
-                    this.setState(state);
-                }
-            );
+            this.sendMessage(post);
         }
     }
+    sendMessage(post) {
+        post.channel_id = this.state.channelId;
+        post.filenames = this.state.previews;
+
+        const time = Utils.getTimestamp();
+        const userId = UserStore.getCurrentId();
+        post.pending_post_id = `${userId}:${time}`;
+        post.user_id = userId;
+        post.create_at = time;
+        post.root_id = this.state.rootId;
+        post.parent_id = this.state.parentId;
+
+        const channel = ChannelStore.get(this.state.channelId);
+
+        PostStore.storePendingPost(post);
+        PostStore.storeDraft(channel.id, null);
+        this.setState({messageText: '', submitting: false, postError: null, previews: [], serverError: null});
+
+        Client.createPost(post, channel,
+            (data) => {
+                AsyncClient.getPosts();
+
+                const member = ChannelStore.getMember(channel.id);
+                member.msg_count = channel.total_msg_count;
+                member.last_viewed_at = Date.now();
+                ChannelStore.setChannelMember(member);
+
+                AppDispatcher.handleServerAction({
+                    type: ActionTypes.RECIEVED_POST,
+                    post: data
+                });
+            },
+            (err) => {
+                const state = {};
+
+                if (err.message === 'Invalid RootId parameter') {
+                    if ($('#post_deleted').length > 0) {
+                        $('#post_deleted').modal('show');
+                    }
+                    PostStore.removePendingPost(post.pending_post_id);
+                } else {
+                    post.state = Constants.POST_FAILED;
+                    PostStore.updatePendingPost(post);
+                }
+
+                state.submitting = false;
+                this.setState(state);
+            }
+        );
+    }
     postMsgKeyPress(e) {
-        if (e.which === KeyCodes.ENTER && !e.shiftKey && !e.altKey) {
-            e.preventDefault();
-            ReactDOM.findDOMNode(this.refs.textbox).blur();
-            this.handleSubmit(e);
+        if (this.state.ctrlSend === 'true' && e.ctrlKey || this.state.ctrlSend === 'false') {
+            if (e.which === KeyCodes.ENTER && !e.shiftKey && !e.altKey) {
+                e.preventDefault();
+                ReactDOM.findDOMNode(this.refs.textbox).blur();
+                this.handleSubmit(e);
+            }
         }
 
         const t = Date.now();
-        if ((t - this.lastTime) > 5000) {
+        if ((t - this.lastTime) > Constants.UPDATE_TYPING_MS) {
             SocketStore.sendMessage({channel_id: this.state.channelId, action: 'typing', props: {parent_id: ''}, state: {}});
             this.lastTime = t;
         }
@@ -208,7 +233,7 @@ export default class CreatePost extends React.Component {
         PostStore.storeCurrentDraft(draft);
     }
     resizePostHolder() {
-        const height = this.state.windowHeigth - $(ReactDOM.findDOMNode(this.refs.topDiv)).height() - 50;
+        const height = this.state.windowHeight - $(ReactDOM.findDOMNode(this.refs.topDiv)).height() - 50;
         $('.post-list-holder-by-time').css('height', `${height}px`);
         if (this.state.windowWidth > 960) {
             $('#post_textbox').focus();
@@ -240,8 +265,14 @@ export default class CreatePost extends React.Component {
         this.setState({uploadsInProgress: draft.uploadsInProgress, previews: draft.previews});
     }
     handleUploadError(err, clientId) {
+        let message = err;
+        if (message && typeof message !== 'string') {
+            // err is an AppError from the server
+            message = err.message;
+        }
+
         if (clientId === -1) {
-            this.setState({serverError: err});
+            this.setState({serverError: message});
         } else {
             const draft = PostStore.getDraft(this.state.channelId);
 
@@ -252,7 +283,7 @@ export default class CreatePost extends React.Component {
 
             PostStore.storeDraft(this.state.channelId, draft);
 
-            this.setState({uploadsInProgress: draft.uploadsInProgress, serverError: err});
+            this.setState({uploadsInProgress: draft.uploadsInProgress, serverError: message});
         }
     }
     handleTextDrop(text) {
@@ -309,7 +340,12 @@ export default class CreatePost extends React.Component {
         const draft = PostStore.getDraft(channelId);
         return draft.previews.length + draft.uploadsInProgress.length;
     }
-    handleArrowUp(e) {
+    handleKeyDown(e) {
+        if (this.state.ctrlSend === 'true' && e.keyCode === KeyCodes.ENTER && e.ctrlKey === true) {
+            this.postMsgKeyPress(e);
+            return;
+        }
+
         if (e.keyCode === KeyCodes.UP && this.state.messageText === '') {
             e.preventDefault();
 
@@ -374,7 +410,7 @@ export default class CreatePost extends React.Component {
                             <Textbox
                                 onUserInput={this.handleUserInput}
                                 onKeyPress={this.postMsgKeyPress}
-                                onKeyDown={this.handleArrowUp}
+                                onKeyDown={this.handleKeyDown}
                                 onHeightChange={this.resizePostHolder}
                                 messageText={this.state.messageText}
                                 createMessage='Write a message...'

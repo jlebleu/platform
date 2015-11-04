@@ -37,9 +37,13 @@ body {
 img {
   max-width: 100%;
   height: auto;
+  &.rounded {
+    @include border-radius(100%);
+  }
 }
 
 .popover {
+  @include border-radius(3px);
   color: #333;
   &.bottom, &.right, &.top, &.left {
     >.arrow:after {
@@ -93,8 +97,11 @@ a:focus, a:hover {
  margin: 0;
 }
 
-.text-danger {
+.text-danger, a.text-danger {
   color: #E05F5D;
+  &:hover, &:focus {
+    color: #E05F5D;
+  }
 }
 
 .btn {
@@ -111,13 +118,21 @@ a:focus, a:hover {
   &:focus {
     @include box-shadow(none);
   }
+  &.no-padding {
+    line-height: 32px;
+    padding: 0;
+  }
   &.no-resize {
     resize: none;
+  }
+  &.min-height {
+    min-height: 100px;
   }
 }
 
 .form-control[disabled], .form-control[readonly], fieldset[disabled] .form-control {
   cursor: auto;
+  background: rgba(#fff, 0.1);
 }
 
 .form-group {

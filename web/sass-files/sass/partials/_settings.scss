@@ -1,5 +1,6 @@
 @import "access-history";
 @import "activity-log";
+@import "webhooks";
 
 .user-settings {
     min-height:300px;
@@ -29,6 +30,36 @@
     li {
         list-style: none;
     }
+    label {
+        font-weight: 600;
+    }
+    .no-padding--left {
+        padding-left: 0;
+    }
+    .padding-top {
+        padding-top: 7px;
+        &.x2 {
+            padding-top: 14px;
+        }
+        &.x3 {
+            padding-top: 21px;
+        }
+    }
+    .padding-bottom {
+        padding-bottom: 7px;
+        &.x2 {
+            padding-bottom: 14px;
+        }
+        &.x3 {
+            padding-bottom: 21px;
+        }
+        .control-label {
+            font-weight: 600;
+            &.text-left {
+                text-align: left;
+            }
+        }
+    }
     .settings-table {
         display: table;
         table-layout: fixed;
@@ -36,6 +67,11 @@
         > div {
             display: table-cell;
             vertical-align: top;
+        }
+        .nav {
+            position: fixed;
+            top: 57px;
+            width: 179px;
         }
         .security-links {
             margin-right: 20px;
@@ -57,6 +93,7 @@
                 padding: 1em 0;
                 margin-bottom: 0;
                 cursor: pointer;
+                position: relative;
                 @include clearfix;
                 &:hover {
                     background: #f9f9f9;
@@ -129,10 +166,6 @@
                 }
             }
 
-            .font--small {
-                font-size: 13px;
-            }
-
             .section-describe {
                 @include opacity(0.7);
                 white-space:pre;
@@ -161,21 +194,9 @@
 
             .setting-list-item {
                 margin-top:7px;
-                .has-error {
-                    color: #a94442;
-                }
-                .padding-top {
-                    padding-top: 7px;
-                    &.x2 {
-                        padding-top: 14px;
-                    }
-                }
-                .control-label {
-                    font-weight: 600;
-                    &.text-left {
-                        text-align: left;
-                    }
-                }
+            }
+            .has-error {
+                color: #a94442;
             }
 
             .file-status {
@@ -211,6 +232,22 @@
                 a {
                     color: #111;
                     background-color: #E1E1E1;
+                    &:before {
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 5px;
+                        height: 100%;
+                        background: #000;
+                    }
+                }
+                a, a:hover, a:focus {
+                    padding-right: 10px;
+                    background-color: rgba(black, 0.1);
+                    border-radius: 0;
+                    font-weight: 400;
+                    position: relative;
                 }
             }
         }

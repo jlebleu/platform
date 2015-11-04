@@ -34,16 +34,16 @@ export default class UserSettingsIntegrationsTab extends React.Component {
         let outgoingHooksSection;
         var inputs = [];
 
-        if (global.window.config.EnableIncomingWebhooks === 'true') {
+        if (global.window.mm_config.EnableIncomingWebhooks === 'true') {
             if (this.props.activeSection === 'incoming-hooks') {
                 inputs.push(
-                    <ManageIncomingHooks />
+                    <ManageIncomingHooks key='incoming-hook-ui' />
                 );
 
                 incomingHooksSection = (
                     <SettingItemMax
                         title='Incoming Webhooks'
-                        width = 'full'
+                        width='medium'
                         inputs={inputs}
                         updateSection={(e) => {
                             this.updateSection('');
@@ -55,7 +55,7 @@ export default class UserSettingsIntegrationsTab extends React.Component {
                 incomingHooksSection = (
                     <SettingItemMin
                         title='Incoming Webhooks'
-                        width = 'full'
+                        width='medium'
                         describe='Manage your incoming webhooks (Developer feature)'
                         updateSection={() => {
                             this.updateSection('incoming-hooks');
@@ -65,15 +65,16 @@ export default class UserSettingsIntegrationsTab extends React.Component {
             }
         }
 
-        if (global.window.config.EnableOutgoingWebhooks === 'true') {
+        if (global.window.mm_config.EnableOutgoingWebhooks === 'true') {
             if (this.props.activeSection === 'outgoing-hooks') {
                 inputs.push(
-                    <ManageOutgoingHooks />
+                    <ManageOutgoingHooks key='outgoing-hook-ui' />
                 );
 
                 outgoingHooksSection = (
                     <SettingItemMax
                         title='Outgoing Webhooks'
+                        width='medium'
                         inputs={inputs}
                         updateSection={(e) => {
                             this.updateSection('');
@@ -85,6 +86,7 @@ export default class UserSettingsIntegrationsTab extends React.Component {
                 outgoingHooksSection = (
                     <SettingItemMin
                         title='Outgoing Webhooks'
+                        width='medium'
                         describe='Manage your outgoing webhooks'
                         updateSection={() => {
                             this.updateSection('outgoing-hooks');

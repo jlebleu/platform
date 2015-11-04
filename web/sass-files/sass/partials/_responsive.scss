@@ -179,6 +179,22 @@
 }
 
 @media screen and (max-width: 1140px) {
+    .inner__wrap {
+        &.move--left {
+            .file-overlay {
+                font-size: em(18px);
+                .overlay__circle {
+                    width: 300px;
+                    height: 300px;
+                    margin: -150px 0 0 -150px;
+                }
+                .overlay__files {
+                    margin: 60px auto 15px;
+                    width: 150px;
+                }
+            }
+        }
+    }
     .post {
         .post__content {
             width: 100%;
@@ -268,6 +284,9 @@
             height: auto;
         }
     }
+    .search-help-popover.visible {
+        visibility: hidden;
+    }
     .modal-direct-channels {
         .member-count {
             float: none;
@@ -277,6 +296,11 @@
     }
     .file-overlay {
         font-size: em(18px);
+        &.center-file-overlay {
+            .overlay__indent {
+                margin-left: 0;
+            }
+        }
         .overlay__circle {
             width: 300px;
             height: 300px;
@@ -355,7 +379,9 @@
             }
             .btn {
                 &.btn-primary {
-                    margin: 8px 0 0 -10px;
+                    display: block;
+                    margin: 10px 0 6px;
+                    width: 100%;
                     float: none;
                 }
             }
@@ -377,8 +403,17 @@
                     &.minimize-settings {
                         display: block;
                         .section-edit {
-                            text-align: left;
+                            position: absolute;
+                            top: 7px;
+                            right: 0;
+                            width: 50px;
+                            .fa {
+                                display: inline-block;
+                            }
                         }
+                    }
+                    .no-padding--left {
+                        padding-left: 15px;
                     }
                 }
                 .settings-links {
@@ -404,6 +439,11 @@
             }
         }
         .settings-table {
+            .nav {
+                position: relative;
+                top: auto;
+                width: 100%;
+            }
             .settings-content {
                 &.minimize-settings {
                     padding: 0;
@@ -797,6 +837,10 @@
 
     .post-comments {
         padding: 9px 21px 10px 10px !important;
+    }
+
+    .post-image__column .post__image .file-playback-controls.stop, .image-wrapper > a .file-playback-controls.stop {
+        @include opacity(1);
     }
 }
 @media screen and (max-width: 640px) {

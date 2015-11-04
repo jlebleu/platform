@@ -50,10 +50,13 @@ type TeamStore interface {
 	GetByName(name string) StoreChannel
 	GetTeamsForEmail(domain string) StoreChannel
 	GetAll() StoreChannel
+	GetAllTeamListing() StoreChannel
+	GetByInviteId(inviteId string) StoreChannel
 }
 
 type ChannelStore interface {
 	Save(channel *model.Channel) StoreChannel
+	SaveDirectChannel(channel *model.Channel, member1 *model.ChannelMember, member2 *model.ChannelMember) StoreChannel
 	Update(channel *model.Channel) StoreChannel
 	Get(id string) StoreChannel
 	Delete(channelId string, time int64) StoreChannel
@@ -74,6 +77,7 @@ type ChannelStore interface {
 	CheckPermissionsToByName(teamId string, channelName string, userId string) StoreChannel
 	UpdateLastViewedAt(channelId string, userId string) StoreChannel
 	IncrementMentionCount(channelId string, userId string) StoreChannel
+	AnalyticsTypeCount(teamId string, channelType string) StoreChannel
 	GetDirectChannel(userId1 string, userId2 string) StoreChannel
 }
 
@@ -87,6 +91,9 @@ type PostStore interface {
 	GetEtag(channelId string) StoreChannel
 	Search(teamId string, userId string, params *model.SearchParams) StoreChannel
 	GetForExport(channelId string) StoreChannel
+	AnalyticsUserCountsWithPostsByDay(teamId string) StoreChannel
+	AnalyticsPostCountsByDay(teamId string) StoreChannel
+	AnalyticsPostCount(teamId string) StoreChannel
 }
 
 type UserStore interface {
@@ -150,6 +157,7 @@ type WebhookStore interface {
 	SaveIncoming(webhook *model.IncomingWebhook) StoreChannel
 	GetIncoming(id string) StoreChannel
 	GetIncomingByUser(userId string) StoreChannel
+	GetIncomingByChannel(channelId string) StoreChannel
 	DeleteIncoming(webhookId string, time int64) StoreChannel
 	SaveOutgoing(webhook *model.OutgoingWebhook) StoreChannel
 	GetOutgoing(id string) StoreChannel

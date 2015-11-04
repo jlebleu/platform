@@ -4,8 +4,8 @@ var BrowserStore = require('../stores/browser_store.jsx');
 var TeamStore = require('../stores/team_store.jsx');
 var ErrorStore = require('../stores/error_store.jsx');
 
-export function track(category, action, label, prop, val) {
-    global.window.analytics.track(action, {category: category, label: label, property: prop, value: val});
+export function track(category, action, label, property, value) {
+    global.window.analytics.track(action, {category, label, property, value});
 }
 
 export function trackPage() {
@@ -34,7 +34,7 @@ function handleError(methodName, xhr, status, err) {
 
             if (oldError && oldError.connErrorCount) {
                 errorCount += oldError.connErrorCount;
-                connectError = 'We cannot reach the Mattermost service.  The service may be down or misconfigured.  Please contact an administrator to make sure the WebSocket port is configured properly.';
+                connectError = 'Please check connection, Mattermost unreachable. If issue persists, ask administrator to check WebSocket port.';
             }
 
             e = {message: connectError, connErrorCount: errorCount};
@@ -232,6 +232,7 @@ export function logout() {
     track('api', 'api_users_logout');
     var currentTeamUrl = TeamStore.getCurrentTeamUrl();
     BrowserStore.clear();
+    ErrorStore.storeLastError(null);
     window.location.href = currentTeamUrl + '/logout';
 }
 
@@ -327,6 +328,20 @@ export function getConfig(success, error) {
     });
 }
 
+export function getAnalytics(teamId, name, success, error) {
+    $.ajax({
+        url: '/api/v1/admin/analytics/' + teamId + '/' + name,
+        dataType: 'json',
+        contentType: 'application/json',
+        type: 'GET',
+        success,
+        error: (xhr, status, err) => {
+            var e = handleError('getAnalytics', xhr, status, err);
+            error(e);
+        }
+    });
+}
+
 export function saveConfig(config, success, error) {
     $.ajax({
         url: '/api/v1/admin/save_config',
@@ -385,10 +400,9 @@ export function getAllTeams(success, error) {
     });
 }
 
-export function getMeSynchronous(success, error) {
+export function getMe(success, error) {
     var currentUser = null;
     $.ajax({
-        async: false,
         cache: false,
         url: '/api/v1/users/me',
         dataType: 'json',
@@ -402,7 +416,7 @@ export function getMeSynchronous(success, error) {
         },
         error: function onError(xhr, status, err) {
             if (error) {
-                var e = handleError('getMeSynchronous', xhr, status, err);
+                var e = handleError('getMe', xhr, status, err);
                 error(e);
             }
         }
@@ -428,16 +442,16 @@ export function inviteMembers(data, success, error) {
     track('api', 'api_teams_invite_members');
 }
 
-export function updateTeamDisplayName(data, success, error) {
+export function updateTeam(team, success, error) {
     $.ajax({
-        url: '/api/v1/teams/update_name',
+        url: '/api/v1/teams/update',
         dataType: 'json',
         contentType: 'application/json',
         type: 'POST',
-        data: JSON.stringify(data),
+        data: JSON.stringify(team),
         success,
-        error: function onError(xhr, status, err) {
-            var e = handleError('updateTeamDisplayName', xhr, status, err);
+        error: (xhr, status, err) => {
+            var e = handleError('updateTeam', xhr, status, err);
             error(e);
         }
     });
@@ -575,21 +589,38 @@ export function updateChannel(channel, success, error) {
     track('api', 'api_channels_update');
 }
 
-export function updateChannelDesc(data, success, error) {
+export function updateChannelHeader(data, success, error) {
     $.ajax({
-        url: '/api/v1/channels/update_desc',
+        url: '/api/v1/channels/update_header',
         dataType: 'json',
         contentType: 'application/json',
         type: 'POST',
         data: JSON.stringify(data),
         success,
         error: function onError(xhr, status, err) {
-            var e = handleError('updateChannelDesc', xhr, status, err);
+            var e = handleError('updateChannelHeader', xhr, status, err);
             error(e);
         }
     });
 
-    track('api', 'api_channels_desc');
+    track('api', 'api_channels_header');
+}
+
+export function updateChannelPurpose(data, success, error) {
+    $.ajax({
+        url: '/api/v1/channels/update_purpose',
+        dataType: 'json',
+        contentType: 'application/json',
+        type: 'POST',
+        data: JSON.stringify(data),
+        success,
+        error: function onError(xhr, status, err) {
+            var e = handleError('updateChannelPurpose', xhr, status, err);
+            error(e);
+        }
+    });
+
+    track('api', 'api_channels_purpose');
 }
 
 export function updateNotifyProps(data, success, error) {

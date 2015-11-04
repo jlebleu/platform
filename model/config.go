@@ -122,6 +122,8 @@ type TeamSettings struct {
 	EnableTeamCreation        bool
 	EnableUserCreation        bool
 	RestrictCreationToDomains string
+	RestrictTeamNames         *bool
+	EnableTeamListing         *bool
 }
 
 type XucSettings struct {
@@ -174,6 +176,16 @@ func (o *Config) SetDefaults() {
 	if o.ServiceSettings.EnableSecurityFixAlert == nil {
 		o.ServiceSettings.EnableSecurityFixAlert = new(bool)
 		*o.ServiceSettings.EnableSecurityFixAlert = true
+	}
+
+	if o.TeamSettings.RestrictTeamNames == nil {
+		o.TeamSettings.RestrictTeamNames = new(bool)
+		*o.TeamSettings.RestrictTeamNames = true
+	}
+
+	if o.TeamSettings.EnableTeamListing == nil {
+		o.TeamSettings.EnableTeamListing = new(bool)
+		*o.TeamSettings.EnableTeamListing = false
 	}
 }
 

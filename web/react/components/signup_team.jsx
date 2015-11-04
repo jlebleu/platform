@@ -12,21 +12,26 @@ export default class TeamSignUp extends React.Component {
 
         this.updatePage = this.updatePage.bind(this);
 
+        if (global.window.mm_config.EnableTeamListing === 'true') {
+            this.state = {page: 'team_listing'};
+            return;
+        }
+
         var count = 0;
 
-        if (global.window.config.EnableSignUpWithEmail === 'true') {
+        if (global.window.mm_config.EnableSignUpWithEmail === 'true') {
             count = count + 1;
         }
 
-        if (global.window.config.EnableSignUpWithGitLab === 'true') {
+        if (global.window.mm_config.EnableSignUpWithGitLab === 'true') {
             count = count + 1;
         }
 
         if (count > 1) {
             this.state = {page: 'choose'};
-        } else if (global.window.config.EnableSignUpWithEmail === 'true') {
+        } else if (global.window.mm_config.EnableSignUpWithEmail === 'true') {
             this.state = {page: 'email'};
-        } else if (global.window.config.EnableSignUpWithGitLab === 'true') {
+        } else if (global.window.mm_config.EnableSignUpWithGitLab === 'true') {
             this.state = {page: 'gitlab'};
         }
     }
@@ -36,6 +41,38 @@ export default class TeamSignUp extends React.Component {
     }
 
     render() {
+        if (this.state.page === 'team_listing') {
+            return (
+                <div>
+                    <h3>{'Choose a Team'}</h3>
+                    <div className='signup-team-all'>
+                        {
+                            this.props.teams.map((team) => {
+                                return (
+                                    <div
+                                        key={'team_' + team.name}
+                                        className='signup-team-dir'
+                                    >
+                                        <a
+                                            href={'/' + team.name}
+                                        >
+                                            <div className='signup-team-dir__group'>
+                                                <span className='signup-team-dir__name'>{team.display_name}</span>
+                                                <span
+                                                    className='glyphicon glyphicon-menu-right right signup-team-dir__arrow'
+                                                    aria-hidden='true'
+                                                />
+                                            </div>
+                                        </a>
+                                    </div>
+                                );
+                            })
+                        }
+                    </div>
+                </div>
+            );
+        }
+
         if (this.state.page === 'choose') {
             return (
                 <ChoosePage
@@ -51,3 +88,8 @@ export default class TeamSignUp extends React.Component {
         }
     }
 }
+
+TeamSignUp.propTypes = {
+    teams: React.PropTypes.array
+};
+

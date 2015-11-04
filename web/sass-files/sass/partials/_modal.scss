@@ -113,11 +113,10 @@
 		text-align: center;
 		padding: 2em 1em;
 		.primary-message {
-			font-size: 1.2em;
+			font-size: 1.25em;
 		}
 		.secondary-message {
-			font-size: 1.25em;
-			color: #888;
+			@include opacity(0.8);
 			margin: 1em 0 0;
 		}
 	}
@@ -228,10 +227,23 @@
 				background: #FFF;
 				display: table-cell;
 				vertical-align: middle;
+				position: relative;
+
+				&:hover .file-playback-controls.stop {
+			        @include opacity(1);
+			    }
 			}
 			img {
 				max-width: 100%;
 				max-height: 100%;
+			}
+			.spinner.file__loading {
+				z-index: 2;
+				position: absolute;
+				left: 50%;
+				margin-left: -16px;
+				top: 50%;
+				margin-top: -16px;
 			}
 		}
 		.modal-content{
@@ -364,7 +376,7 @@
 		@include opacity(0.8);
 	}
 
-	.more-description {
+	.more-purpose {
 		@include opacity(0.7);
 	}
 

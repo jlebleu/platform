@@ -38,6 +38,10 @@ class SocketStoreClass extends EventEmitter {
             return;
         }
 
+        if (!global.window.hasOwnProperty('mm_session_token_index')) {
+            return;
+        }
+
         this.setMaxListeners(0);
 
         if (window.WebSocket && !conn) {
@@ -45,7 +49,9 @@ class SocketStoreClass extends EventEmitter {
             if (window.location.protocol === 'https:') {
                 protocol = 'wss://';
             }
-            var connUrl = protocol + location.host + '/api/v1/websocket';
+
+            var connUrl = protocol + location.host + '/api/v1/websocket?' + Utils.getSessionIndex();
+
             if (this.failCount === 0) {
                 console.log('websocket connecting to ' + connUrl); //eslint-disable-line no-console
             }
@@ -80,7 +86,7 @@ class SocketStoreClass extends EventEmitter {
 
                 this.failCount = this.failCount + 1;
 
-                ErrorStore.storeLastError({connErrorCount: this.failCount, message: 'We cannot reach the Mattermost service.  The service may be down or misconfigured.  Please contact an administrator to make sure the WebSocket port is configured properly.'});
+                ErrorStore.storeLastError({connErrorCount: this.failCount, message: 'Please check connection, Mattermost unreachable. If issue persists, ask administrator to check WebSocket port.'});
                 ErrorStore.emitChange();
             };
 
@@ -152,14 +158,14 @@ function handleNewPostEvent(msg) {
     // Update channel state
     if (ChannelStore.getCurrentId() === msg.channel_id) {
         if (window.isActive) {
-            AsyncClient.updateLastViewedAt();
+            AsyncClient.updateLastViewedAt(true);
         }
-    } else {
+    } else if (UserStore.getCurrentId() !== msg.user_id || post.type !== Constants.POST_TYPE_JOIN_LEAVE) {
         AsyncClient.getChannel(msg.channel_id);
     }
 
     // Send desktop notification
-    if (UserStore.getCurrentId() !== msg.user_id) {
+    if (UserStore.getCurrentId() !== msg.user_id || post.props.from_webhook === 'true') {
         const msgProps = msg.props;
 
         let mentions = [];
@@ -183,7 +189,9 @@ function handleNewPostEvent(msg) {
         }
 
         let username = 'Someone';
-        if (UserStore.hasProfile(msg.user_id)) {
+        if (post.props.override_username && global.window.mm_config.EnablePostUsernameOverride === 'true') {
+            username = post.props.override_username;
+        } else if (UserStore.hasProfile(msg.user_id)) {
             username = UserStore.getProfile(msg.user_id).username;
         }
 

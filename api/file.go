@@ -23,6 +23,7 @@ import (
 	"image/jpeg"
 	"io"
 	"io/ioutil"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -51,6 +52,8 @@ const (
 	RotatedCCW         = 6
 	RotatedCCWMirrored = 7
 	RotatedCW          = 8
+
+	MaxImageSize = 4096 * 2160 // 4k resolution
 )
 
 var fileInfoCache *utils.Cache = utils.NewLru(1000)
@@ -124,16 +127,26 @@ func uploadFile(c *Context, w http.ResponseWriter, r *http.Request) {
 
 		uid := model.NewId()
 
+		if model.IsFileExtImage(filepath.Ext(files[i].Filename)) {
+			imageNameList = append(imageNameList, uid+"/"+filename)
+			imageDataList = append(imageDataList, buf.Bytes())
+
+			// Decode image config first to check dimensions before loading the whole thing into memory later on
+			config, _, err := image.DecodeConfig(bytes.NewReader(buf.Bytes()))
+			if err != nil {
+				c.Err = model.NewAppError("uploadFile", "Unable to upload image file.", err.Error())
+				return
+			} else if config.Width*config.Height > MaxImageSize {
+				c.Err = model.NewAppError("uploadFile", "Unable to upload image file. File is too large.", "File exceeds max image size.")
+				return
+			}
+		}
+
 		path := "teams/" + c.Session.TeamId + "/channels/" + channelId + "/users/" + c.Session.UserId + "/" + uid + "/" + filename
 
 		if err := writeFile(buf.Bytes(), path); err != nil {
 			c.Err = err
 			return
-		}
-
-		if model.IsFileExtImage(filepath.Ext(files[i].Filename)) {
-			imageNameList = append(imageNameList, uid+"/"+filename)
-			imageDataList = append(imageDataList, buf.Bytes())
 		}
 
 		encName := utils.UrlEncode(filename)
@@ -331,9 +344,18 @@ func getFileInfo(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Cache-Control", "max-age=2592000, public")
 
+	var mimeType string
+	ext := filepath.Ext(filename)
+	if model.IsFileExtImage(ext) {
+		mimeType = model.GetImageMimeType(ext)
+	} else {
+		mimeType = mime.TypeByExtension(ext)
+	}
+
 	result := make(map[string]string)
 	result["filename"] = filename
 	result["size"] = size
+	result["mime"] = mimeType
 	w.Write([]byte(model.MapToJson(result)))
 }
 

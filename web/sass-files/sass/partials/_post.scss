@@ -54,6 +54,7 @@ body.ios {
 	height: 2em;
 	margin: 0;
 	position: relative;
+	z-index: 0;
 	&:before, &:after {
 		content: "";
 		height: 1em;
@@ -116,12 +117,24 @@ body.ios {
 	left: 0;
 	width: 100%;
 	height: 100%;
-	background-color: rgba(0, 0, 0, 0.6);
 	text-align: center;
 	color: #FFF;
 	font-size: em(20px);
 	font-weight: 600;
 	z-index: 6;
+
+	.overlay__indent {
+		background-color: rgba(0, 0, 0, 0.6);
+		position: relative;
+		height: 100%;
+		@include clearfix;
+	}
+
+	&.center-file-overlay {
+		.overlay__indent {
+			margin-left: 220px;
+		}
+	}
 
 	&.right-file-overlay {
 		font-size: em(18px);
@@ -384,9 +397,16 @@ body.ios {
 		padding: 0;
 	}
 	p {
-		margin: 0 0 5px;
+		margin: 0 0 1em;
+		line-height: 1.6em;
 		font-size: 0.97em;
 		white-space: pre-wrap;
+	}
+
+	span {
+		p:last-child {
+			margin-bottom: 0.5em;
+		}
 	}
 
 	.post-loading-gif {
@@ -452,6 +472,22 @@ body.ios {
 			text-overflow: ellipsis;
 			white-space: nowrap;
 			cursor: pointer;
+		}
+		.post-body--code {
+			font-size: .97em;
+			position:relative;
+			.post-body--code__language {
+				position: absolute;
+				right: 0;
+				background: #fff;
+				cursor: default;
+				padding: 0.3em 0.5em 0.1em;
+				border-bottom-left-radius: 4px;
+				@include opacity(.3);
+			}
+			code {
+				white-space: pre;
+			}
 		}
 	}
 	.create-reply-form-wrap {
@@ -556,9 +592,10 @@ body.ios {
 }
 
 .bot-indicator {
-	background-color: lightgrey;
-	border-radius:2px;
-	padding-left:2px;
-	padding-right:2px;
-	font-family:"Courier New"
+	font-family: inherit;
+	font-size: 11px;
+	padding: 2px 4px;
+	border-radius: 2px;
+	font-weight: 600;
+	margin: 0 0 0 -4px;
 }

@@ -19,6 +19,7 @@ export default class TeamSettingsModal extends React.Component {
     componentDidMount() {
         $('body').on('click', '.modal-back', function handleBackClick() {
             $(this).closest('.modal-dialog').removeClass('display--content');
+            $(this).closest('.modal-dialog').find('.settings-table .nav li.active').removeClass('active');
         });
         $('body').on('click', '.modal-header .close', () => {
             setTimeout(() => {
@@ -81,7 +82,6 @@ export default class TeamSettingsModal extends React.Component {
                                         activeTab={this.state.activeTab}
                                         activeSection={this.state.activeSection}
                                         updateSection={this.updateSection}
-                                        teamDisplayName={this.props.teamDisplayName}
                                     />
                                 </div>
                             </div>
@@ -94,5 +94,4 @@ export default class TeamSettingsModal extends React.Component {
 }
 
 TeamSettingsModal.propTypes = {
-    teamDisplayName: React.PropTypes.string.isRequired
 };

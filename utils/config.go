@@ -26,7 +26,7 @@ const (
 var Cfg *model.Config = &model.Config{}
 var CfgLastModified int64 = 0
 var CfgFileName string = ""
-var ClientProperties map[string]string = map[string]string{}
+var ClientCfg map[string]string = map[string]string{}
 var SanitizeOptions map[string]bool = map[string]bool{}
 
 func FindConfigFile(fileName string) string {
@@ -159,9 +159,16 @@ func LoadConfig(fileName string) {
 	configureLog(&config.LogSettings)
 	TestConnection(&config)
 
+	if config.FileSettings.DriverName == model.IMAGE_DRIVER_LOCAL {
+		dir := config.FileSettings.Directory
+		if len(dir) > 0 && dir[len(dir)-1:] != "/" {
+			config.FileSettings.Directory += "/"
+		}
+	}
+
 	Cfg = &config
 	SanitizeOptions = getSanitizeOptions(Cfg)
-	ClientProperties = getClientProperties(Cfg)
+	ClientCfg = getClientConfig(Cfg)
 }
 
 func getSanitizeOptions(c *model.Config) map[string]bool {
@@ -172,7 +179,7 @@ func getSanitizeOptions(c *model.Config) map[string]bool {
 	return options
 }
 
-func getClientProperties(c *model.Config) map[string]string {
+func getClientConfig(c *model.Config) map[string]string {
 	props := make(map[string]string)
 
 	props["Version"] = model.CurrentVersion
@@ -182,6 +189,8 @@ func getClientProperties(c *model.Config) map[string]string {
 
 	props["SiteName"] = c.TeamSettings.SiteName
 	props["EnableTeamCreation"] = strconv.FormatBool(c.TeamSettings.EnableTeamCreation)
+	props["RestrictTeamNames"] = strconv.FormatBool(*c.TeamSettings.RestrictTeamNames)
+	props["EnableTeamListing"] = strconv.FormatBool(*c.TeamSettings.EnableTeamListing)
 
 	props["EnableOAuthServiceProvider"] = strconv.FormatBool(c.ServiceSettings.EnableOAuthServiceProvider)
 

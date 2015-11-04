@@ -58,6 +58,7 @@ export default class NavbarDropdown extends React.Component {
         TeamStore.addChangeListener(this.onListenerChange);
 
         $(ReactDOM.findDOMNode(this.refs.dropdown)).on('hide.bs.dropdown', () => {
+            $('.sidebar--left .dropdown-menu').scrollTop(0);
             this.blockToggle = true;
             setTimeout(() => {
                 this.blockToggle = false;
@@ -111,7 +112,7 @@ export default class NavbarDropdown extends React.Component {
                             data-toggle='modal'
                             data-target='#get_link'
                             data-title='Team Invite'
-                            data-value={Utils.getWindowLocationOrigin() + '/signup_user_complete/?id=' + currentUser.team_id}
+                            data-value={Utils.getWindowLocationOrigin() + '/signup_user_complete/?id=' + TeamStore.getCurrent().invite_id}
                         >
                             {'Get Team Invite Link'}
                         </a>
@@ -152,7 +153,7 @@ export default class NavbarDropdown extends React.Component {
             sysAdminLink = (
                 <li>
                     <a
-                        href='/admin_console'
+                        href={'/admin_console?' + Utils.getSessionIndex()}
                     >
                         {'System Console'}
                     </a>
@@ -178,7 +179,7 @@ export default class NavbarDropdown extends React.Component {
             });
         }
 
-        if (global.window.config.EnableTeamCreation === 'true') {
+        if (global.window.mm_config.EnableTeamCreation === 'true') {
             teams.push(
                 <li key='newTeam_li'>
                     <a

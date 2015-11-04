@@ -73,6 +73,8 @@ func NewSqlStore() Store {
 	}
 
 	schemaVersion := sqlStore.GetCurrentSchemaVersion()
+	isSchemaVersion07 := false // REMOVE AFTER 1.2 SHIP see PLT-828
+	isSchemaVersion10 := false // REMOVE AFTER 1.2 SHIP see PLT-828
 
 	// If the version is already set then we are potentially in an 'upgrade needed' state
 	if schemaVersion != "" {
@@ -81,12 +83,15 @@ func NewSqlStore() Store {
 			// If we are upgrading from the previous version then print a warning and continue
 
 			// Special case
-			isSchemaVersion07 := false
 			if schemaVersion == "0.7.1" || schemaVersion == "0.7.0" {
 				isSchemaVersion07 = true
 			}
 
-			if model.IsPreviousVersion(schemaVersion) || isSchemaVersion07 {
+			if schemaVersion == "1.0.0" {
+				isSchemaVersion10 = true
+			}
+
+			if model.IsPreviousVersion(schemaVersion) || isSchemaVersion07 || isSchemaVersion10 {
 				l4g.Warn("The database schema version of " + schemaVersion + " appears to be out of date")
 				l4g.Warn("Attempting to upgrade the database schema version to " + model.CurrentVersion)
 			} else {
@@ -98,7 +103,7 @@ func NewSqlStore() Store {
 		}
 	}
 
-	// REMOVE in 1.2
+	// REMOVE AFTER 1.2 SHIP see PLT-828
 	if sqlStore.DoesTableExist("Sessions") {
 		if sqlStore.DoesColumnExist("Sessions", "AltId") {
 			sqlStore.GetMaster().Exec("DROP TABLE IF EXISTS Sessions")
@@ -140,7 +145,7 @@ func NewSqlStore() Store {
 	sqlStore.webhook.(*SqlWebhookStore).CreateIndexesIfNotExists()
 	sqlStore.preference.(*SqlPreferenceStore).CreateIndexesIfNotExists()
 
-	if model.IsPreviousVersion(schemaVersion) {
+	if model.IsPreviousVersion(schemaVersion) || isSchemaVersion07 || isSchemaVersion10 {
 		sqlStore.system.Update(&model.System{Name: "Version", Value: model.CurrentVersion})
 		l4g.Warn("The database schema has been upgraded to version " + model.CurrentVersion)
 	}
@@ -359,27 +364,26 @@ func (ss SqlStore) RemoveColumnIfExists(tableName string, columnName string) boo
 	return true
 }
 
-// func (ss SqlStore) RenameColumnIfExists(tableName string, oldColumnName string, newColumnName string, colType string) bool {
+func (ss SqlStore) RenameColumnIfExists(tableName string, oldColumnName string, newColumnName string, colType string) bool {
+	if !ss.DoesColumnExist(tableName, oldColumnName) {
+		return false
+	}
 
-// 	// XXX TODO FIXME this should be removed after 0.6.0
-// 	if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_POSTGRES {
-// 		return false
-// 	}
+	var err error
+	if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_MYSQL {
+		_, err = ss.GetMaster().Exec("ALTER TABLE " + tableName + " CHANGE " + oldColumnName + " " + newColumnName + " " + colType)
+	} else if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_POSTGRES {
+		_, err = ss.GetMaster().Exec("ALTER TABLE " + tableName + " RENAME COLUMN " + oldColumnName + " TO " + newColumnName)
+	}
 
-// 	if !ss.DoesColumnExist(tableName, oldColumnName) {
-// 		return false
-// 	}
+	if err != nil {
+		l4g.Critical("Failed to rename column %v", err)
+		time.Sleep(time.Second)
+		panic("Failed to drop column " + err.Error())
+	}
 
-// 	_, err := ss.GetMaster().Exec("ALTER TABLE " + tableName + " CHANGE " + oldColumnName + " " + newColumnName + " " + colType)
-
-// 	if err != nil {
-// 		l4g.Critical("Failed to rename column %v", err)
-// 		time.Sleep(time.Second)
-// 		panic("Failed to drop column " + err.Error())
-// 	}
-
-// 	return true
-// }
+	return true
+}
 
 func (ss SqlStore) CreateIndexIfNotExists(indexName string, tableName string, columnName string) {
 	ss.createIndexIfNotExists(indexName, tableName, columnName, INDEX_TYPE_DEFAULT)

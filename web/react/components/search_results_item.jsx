@@ -1,7 +1,7 @@
 // Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
-var PostStore = require('../stores/post_store.jsx');
+var SearchStore = require('../stores/search_store.jsx');
 var ChannelStore = require('../stores/channel_store.jsx');
 var UserStore = require('../stores/user_store.jsx');
 var UserProfile = require('./user_profile.jsx');
@@ -32,7 +32,7 @@ export default class SearchResultsItem extends React.Component {
                 AppDispatcher.handleServerAction({
                     type: ActionTypes.RECIEVED_POST_SELECTED,
                     post_list: data,
-                    from_search: PostStore.getSearchTerm()
+                    from_search: SearchStore.getSearchTerm()
                 });
 
                 AppDispatcher.handleServerAction({
@@ -77,7 +77,7 @@ export default class SearchResultsItem extends React.Component {
                 <div className='post-profile-img__container'>
                     <img
                         className='post-profile-img'
-                        src={'/api/v1/users/' + this.props.post.user_id + '/image?time=' + timestamp}
+                        src={'/api/v1/users/' + this.props.post.user_id + '/image?time=' + timestamp + '&' + utils.getSessionIndex()}
                         height='36'
                         width='36'
                     />

@@ -8,6 +8,7 @@ var PreferenceStore = require('../stores/preference_store.jsx');
 var TeamStore = require('../stores/team_store.jsx');
 var Constants = require('../utils/constants.jsx');
 var ActionTypes = Constants.ActionTypes;
+var Client = require('./client.jsx');
 var AsyncClient = require('./async_client.jsx');
 var client = require('./client.jsx');
 var Autolinker = require('autolinker');
@@ -20,6 +21,7 @@ export function isEmail(email) {
 
 export function cleanUpUrlable(input) {
     var cleaned = input.trim().replace(/-/g, ' ').replace(/[^\w\s]/gi, '').toLowerCase().replace(/\s/g, '-');
+    cleaned = cleaned.replace(/-{2,}/, '-');
     cleaned = cleaned.replace(/^\-+/, '');
     cleaned = cleaned.replace(/\-+$/, '');
     return cleaned;
@@ -118,7 +120,7 @@ export function notifyMe(title, body, channel) {
             }
 
             if (permission === 'granted') {
-                var notification = new Notification(title, {body: body, tag: body, icon: '/static/images/icon50x50.gif'});
+                var notification = new Notification(title, {body: body, tag: body, icon: '/static/images/icon50x50.png'});
                 notification.onclick = function onClick() {
                     window.focus();
                     if (channel) {
@@ -209,11 +211,15 @@ export function displayDateTime(ticks) {
     }
 
     interval = Math.floor(seconds / 60);
-    if (interval > 1) {
+    if (interval >= 2) {
         return interval + ' minutes ago';
     }
 
-    return '1 minute ago';
+    if (interval >= 1) {
+        return '1 minute ago';
+    }
+
+    return 'just now';
 }
 
 export function displayCommentDateTime(ticks) {
@@ -225,46 +231,62 @@ export function getTimestamp() {
     return Date.now();
 }
 
-function testUrlMatch(text) {
-    var urlMatcher = new Autolinker.matchParser.MatchParser({
+// extracts links not styled by Markdown
+export function extractLinks(text) {
+    const urlMatcher = new Autolinker.matchParser.MatchParser({
         urls: true,
         emails: false,
         twitter: false,
         phone: false,
         hashtag: false
     });
-    var result = [];
-    function replaceFn(match) {
-        var linkData = {};
-        var matchText = match.getMatchedText();
+    const links = [];
+    let replaceText = text;
 
-        linkData.text = matchText;
-        if (matchText.trim().indexOf('http') === 0) {
-            linkData.link = matchText;
-        } else {
-            linkData.link = 'http://' + matchText;
+    // pull out the Markdown code blocks
+    const codeBlocks = [];
+    const splitText = replaceText.split('`'); // also handles ```
+    for (let i = 1; i < splitText.length; i += 2) {
+        if (splitText[i].trim() !== '') {
+            codeBlocks.push(splitText[i]);
+        }
+    }
+
+    function replaceFn(match) {
+        let link = '';
+        const matchText = match.getMatchedText();
+        const tempText = replaceText;
+
+        const start = replaceText.indexOf(matchText);
+        const end = start + matchText.length;
+
+        replaceText = replaceText.substring(0, start) + replaceText.substring(end);
+
+        // if it's a Markdown link, just skip it
+        if (start > 1) {
+            if (tempText.charAt(start - 2) === ']' && tempText.charAt(start - 1) === '(' && tempText.charAt(end) === ')') {
+                return;
+            }
         }
 
-        result.push(linkData);
+        // if it's in a Markdown code block, skip it
+        for (const i in codeBlocks) {
+            if (codeBlocks[i].indexOf(matchText) === 0) {
+                codeBlocks[i] = codeBlocks[i].replace(matchText, '');
+                return;
+            }
+        }
+
+        if (matchText.trim().indexOf('http') === 0) {
+            link = matchText;
+        } else {
+            link = 'http://' + matchText;
+        }
+
+        links.push(link);
     }
     urlMatcher.replace(text, replaceFn, this);
-    return result;
-}
-
-export function extractLinks(text) {
-    var repRegex = new RegExp('<br>', 'g');
-    var matches = testUrlMatch(text.replace(repRegex, '\n'));
-
-    if (!matches.length) {
-        return {links: null, text: text};
-    }
-
-    var links = [];
-    for (var i = 0; i < matches.length; i++) {
-        links.push(matches[i].link);
-    }
-
-    return {links: links, text: text};
+    return {links, text};
 }
 
 export function escapeRegExp(string) {
@@ -402,6 +424,11 @@ export function toTitleCase(str) {
 }
 
 export function applyTheme(theme) {
+    if (!theme.codeTheme) {
+        theme.codeTheme = Constants.DEFAULT_CODE_THEME;
+    }
+    updateCodeTheme(theme.codeTheme);
+
     if (theme.sidebarBg) {
         changeCss('.sidebar--left, .settings-modal .settings-table .settings-links, .sidebar--menu', 'background:' + theme.sidebarBg, 1);
     }
@@ -425,16 +452,15 @@ export function applyTheme(theme) {
         changeCss('@media(max-width: 768px){.settings-modal .settings-table .nav>li:hover a', 'background:' + theme.sidebarTextHoverBg, 1);
     }
 
-    if (theme.sidebarTextActiveBg) {
-        changeCss('.sidebar--left .nav-pills__container li.active a, .sidebar--left .nav-pills__container li.active a:hover, .sidebar--left .nav-pills__container li.active a:focus, .settings-modal .nav-pills>li.active a, .settings-modal .nav-pills>li.active a:hover, .settings-modal .nav-pills>li.active a:active', 'background:' + theme.sidebarTextActiveBg, 1);
+    if (theme.sidebarTextActiveBorder) {
+        changeCss('.sidebar--left .nav li.active a:before, .settings-modal .nav-pills>li.active a:before', 'background:' + theme.sidebarTextActiveBorder, 1);
     }
 
     if (theme.sidebarTextActiveColor) {
         changeCss('.sidebar--left .nav-pills__container li.active a, .sidebar--left .nav-pills__container li.active a:hover, .sidebar--left .nav-pills__container li.active a:focus, .settings-modal .nav-pills>li.active a, .settings-modal .nav-pills>li.active a:hover, .settings-modal .nav-pills>li.active a:active', 'color:' + theme.sidebarTextActiveColor, 2);
-    }
-
-    if (theme.sidebarTextActiveBg === theme.onlineIndicator) {
-        changeCss('.sidebar--left .nav-pills__container li.active a .status .online--icon', 'fill:' + theme.sidebarTextActiveColor, 1);
+        changeCss('.sidebar--left .nav li.active a, .sidebar--left .nav li.active a:hover, .sidebar--left .nav li.active a:focus', 'background:' + changeOpacity(theme.sidebarTextActiveColor, 0.1), 1);
+        changeCss('.search-help-popover .search-autocomplete__item:hover', 'background:' + changeOpacity(theme.sidebarTextActiveColor, 0.05), 1);
+        changeCss('.search-help-popover .search-autocomplete__item.selected', 'background:' + changeOpacity(theme.sidebarTextActiveColor, 0.15), 1);
     }
 
     if (theme.sidebarHeaderBg) {
@@ -498,7 +524,7 @@ export function applyTheme(theme) {
         changeCss('.markdown__table tbody tr:nth-child(2n)', 'background:' + changeOpacity(theme.centerChannelColor, 0.07), 1);
         changeCss('.channel-header__info>div.dropdown .header-dropdown__icon', 'color:' + changeOpacity(theme.centerChannelColor, 0.8), 1);
         changeCss('.channel-header #member_popover', 'color:' + changeOpacity(theme.centerChannelColor, 0.8), 1);
-        changeCss('.custom-textarea, .custom-textarea:focus, .preview-container .preview-div, .post-image__column .post-image__details, .sidebar--right .sidebar-right__body, .markdown__table th, .markdown__table td, .command-box, .modal .modal-content, .settings-modal .settings-table .settings-content .divider-light, .dropdown-menu, .modal .modal-header, .popover, .mentions--top .mentions-box', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.2), 1);
+        changeCss('.custom-textarea, .custom-textarea:focus, .preview-container .preview-div, .post-image__column .post-image__details, .sidebar--right .sidebar-right__body, .markdown__table th, .markdown__table td, .command-box, .modal .modal-content, .settings-modal .settings-table .settings-content .divider-light, .webhooks__container, .dropdown-menu, .modal .modal-header, .popover, .mentions--top .mentions-box', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.2), 1);
         changeCss('.popover.bottom>.arrow', 'border-bottom-color:' + changeOpacity(theme.centerChannelColor, 0.25), 1);
         changeCss('.popover.right>.arrow', 'border-right-color:' + changeOpacity(theme.centerChannelColor, 0.25), 1);
         changeCss('.popover.left>.arrow', 'border-left-color:' + changeOpacity(theme.centerChannelColor, 0.25), 1);
@@ -513,7 +539,7 @@ export function applyTheme(theme) {
         changeCss('@media(max-width: 768px){.search-bar__container .search__form .search-bar', 'background:' + changeOpacity(theme.centerChannelColor, 0.2) + '; color: inherit;', 1);
         changeCss('.input-group-addon, .search-bar__container .search__form, .form-control', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.2), 1);
         changeCss('.form-control:focus', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.3), 1);
-        changeCss('.channel-intro .channel-intro__content', 'background:' + changeOpacity(theme.centerChannelColor, 0.05), 1);
+        changeCss('.channel-intro .channel-intro__content, .webhooks__container', 'background:' + changeOpacity(theme.centerChannelColor, 0.05), 1);
         changeCss('.date-separator .separator__text', 'color:' + theme.centerChannelColor, 2);
         changeCss('.date-separator .separator__hr, .modal-footer, .modal .custom-textarea, .post-right__container .post.post--root hr, .search-item-container', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.2), 1);
         changeCss('.modal .custom-textarea:focus', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.3), 1);
@@ -525,7 +551,7 @@ export function applyTheme(theme) {
         changeCss('@media(max-width: 1800px){.inner__wrap.move--left .post.post--comment.same--root', 'border-color:' + changeOpacity(theme.centerChannelColor, 0.07), 2);
         changeCss('.post:hover, .modal .more-table tbody>tr:hover td, .sidebar--right .sidebar--right__header, .settings-modal .settings-table .settings-content .section-min:hover', 'background:' + changeOpacity(theme.centerChannelColor, 0.07), 1);
         changeCss('.date-separator.hovered--before:after, .date-separator.hovered--after:before, .new-separator.hovered--after:before, .new-separator.hovered--before:after', 'background:' + changeOpacity(theme.centerChannelColor, 0.07), 1);
-        changeCss('.command-name:hover, .mentions-name:hover, .mentions-focus, .dropdown-menu>li>a:focus, .dropdown-menu>li>a:hover', 'background:' + changeOpacity(theme.centerChannelColor, 0.15), 1);
+        changeCss('.command-name:hover, .mentions-name:hover, .mentions-focus, .dropdown-menu>li>a:focus, .dropdown-menu>li>a:hover, .bot-indicator', 'background:' + changeOpacity(theme.centerChannelColor, 0.15), 1);
         changeCss('code', 'background:' + changeOpacity(theme.centerChannelColor, 0.1), 1);
         changeCss('.post.current--user:hover .post-body ', 'background: none;', 1);
         changeCss('.sidebar--right', 'color:' + theme.centerChannelColor, 2);
@@ -544,6 +570,7 @@ export function applyTheme(theme) {
     if (theme.buttonBg) {
         changeCss('.btn.btn-primary', 'background:' + theme.buttonBg, 1);
         changeCss('.btn.btn-primary:hover, .btn.btn-primary:active, .btn.btn-primary:focus', 'background:' + changeColor(theme.buttonBg, -0.25), 1);
+        changeCss('.file-playback-controls', 'color:' + changeColor(theme.buttonBg, -0.25), 1);
     }
 
     if (theme.buttonColor) {
@@ -588,6 +615,27 @@ export function rgb2hex(rgbIn) {
         return ('0' + parseInt(x, 10).toString(16)).slice(-2);
     }
     return '#' + hex(rgb[1]) + hex(rgb[2]) + hex(rgb[3]);
+}
+
+export function updateCodeTheme(theme) {
+    const path = '/static/css/highlight/' + theme + '.css';
+    const $link = $('link.code_theme');
+    if (path !== $link.attr('href')) {
+        changeCss('code.hljs', 'visibility: hidden');
+        var xmlHTTP = new XMLHttpRequest();
+        xmlHTTP.open('GET', path, true);
+        xmlHTTP.onload = function onLoad() {
+            $link.attr('href', path);
+            if (isBrowserFirefox()) {
+                $link.one('load', () => {
+                    changeCss('code.hljs', 'visibility: visible');
+                });
+            } else {
+                changeCss('code.hljs', 'visibility: visible');
+            }
+        };
+        xmlHTTP.send();
+    }
 }
 
 export function placeCaretAtEnd(el) {
@@ -872,7 +920,7 @@ export function getFileUrl(filename) {
     if (url.indexOf('/api/v1/files/get') !== -1) {
         url = filename.split('/api/v1/files/get')[1];
     }
-    url = getWindowLocationOrigin() + '/api/v1/files/get' + url;
+    url = getWindowLocationOrigin() + '/api/v1/files/get' + url + '?' + getSessionIndex();
 
     return url;
 }
@@ -881,6 +929,14 @@ export function getFileUrl(filename) {
 export function getFileName(path) {
     var split = path.split('/');
     return split[split.length - 1];
+}
+
+export function getSessionIndex() {
+    if (global.window.mm_session_token_index >= 0) {
+        return 'session_token_index=' + global.window.mm_session_token_index;
+    }
+
+    return '';
 }
 
 // Generates a RFC-4122 version 4 compliant globally unique identifier.
@@ -975,4 +1031,45 @@ export function windowWidth() {
 
 export function windowHeight() {
     return $(window).height();
+}
+
+export function openDirectChannelToUser(user, successCb, errorCb) {
+    const channelName = this.getDirectChannelName(UserStore.getCurrentId(), user.id);
+    let channel = ChannelStore.getByName(channelName);
+
+    const preference = PreferenceStore.setPreference(Constants.Preferences.CATEGORY_DIRECT_CHANNEL_SHOW, user.id, 'true');
+    AsyncClient.savePreferences([preference]);
+
+    if (channel) {
+        if ($.isFunction(successCb)) {
+            successCb(channel, true);
+        }
+    } else {
+        channel = {
+            name: channelName,
+            last_post_at: 0,
+            total_msg_count: 0,
+            type: 'D',
+            display_name: user.username,
+            teammate_id: user.id,
+            status: UserStore.getStatus(user.id)
+        };
+
+        Client.createDirectChannel(
+            channel,
+            user.id,
+            (data) => {
+                AsyncClient.getChannel(data.id);
+                if ($.isFunction(successCb)) {
+                    successCb(data, false);
+                }
+            },
+            () => {
+                window.location.href = TeamStore.getCurrentTeamUrl() + '/channels/' + channelName;
+                if ($.isFunction(errorCb)) {
+                    errorCb();
+                }
+            }
+        );
+    }
 }

@@ -4,6 +4,7 @@
 var utils = require('../utils/utils.jsx');
 var Client = require('../utils/client.jsx');
 var UserStore = require('../stores/user_store.jsx');
+var TeamStore = require('../stores/team_store.jsx');
 var ConfirmModal = require('./confirm_modal.jsx');
 
 export default class InviteMemberModal extends React.Component {
@@ -21,7 +22,7 @@ export default class InviteMemberModal extends React.Component {
             emailErrors: {},
             firstNameErrors: {},
             lastNameErrors: {},
-            emailEnabled: global.window.config.SendEmailNotifications === 'true'
+            emailEnabled: global.window.mm_config.SendEmailNotifications === 'true'
         };
     }
 
@@ -260,6 +261,12 @@ export default class InviteMemberModal extends React.Component {
 
             var content = null;
             var sendButton = null;
+
+            var sendButtonLabel = 'Send Invitation';
+            if (this.state.inviteIds.length > 1) {
+                sendButtonLabel = 'Send Invitations';
+            }
+
             if (this.state.emailEnabled) {
                 content = (
                     <div>
@@ -281,12 +288,12 @@ export default class InviteMemberModal extends React.Component {
                             onClick={this.handleSubmit}
                             type='button'
                             className='btn btn-primary'
-                        >Send Invitations</button>
+                        >{sendButtonLabel}</button>
                     );
             } else {
                 var teamInviteLink = null;
                 if (currentUser && this.props.teamType === 'O') {
-                    var linkUrl = utils.getWindowLocationOrigin() + '/signup_user_complete/?id=' + currentUser.team_id;
+                    var linkUrl = utils.getWindowLocationOrigin() + '/signup_user_complete/?id=' + TeamStore.getCurrent().invite_id;
                     var link =
                         (
                             <a

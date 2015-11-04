@@ -8,8 +8,6 @@ const Markdown = require('./markdown.jsx');
 const UserStore = require('../stores/user_store.jsx');
 const Utils = require('./utils.jsx');
 
-const marked = require('marked');
-
 // Performs formatting of user posts including highlighting mentions and search terms and converting urls, hashtags, and
 // @mentions to links by taking a user's message and returning a string of formatted html. Also takes a number of options
 // as part of the second parameter:
@@ -22,11 +20,8 @@ export function formatText(text, options = {}) {
     let output;
 
     if (!('markdown' in options) || options.markdown) {
-        // the markdown renderer will call doFormatText as necessary so just call marked
-        output = marked(text, {
-            renderer: new Markdown.MattermostMarkdownRenderer(null, options),
-            sanitize: true
-        });
+        // the markdown renderer will call doFormatText as necessary
+        output = Markdown.format(text, options);
     } else {
         output = sanitizeHtml(text);
         output = doFormatText(output, options);
@@ -47,8 +42,8 @@ export function doFormatText(text, options) {
     const tokens = new Map();
 
     // replace important words and phrases with tokens
-    output = autolinkUrls(output, tokens);
     output = autolinkAtMentions(output, tokens);
+    output = autolinkEmails(output, tokens);
     output = autolinkHashtags(output, tokens);
 
     if (!('emoticons' in options) || options.emoticon) {
@@ -69,6 +64,22 @@ export function doFormatText(text, options) {
     return output;
 }
 
+export function doFormatEmoticons(text) {
+    const tokens = new Map();
+
+    let output = Emoticons.handleEmoticons(text, tokens);
+    output = replaceTokens(output, tokens);
+
+    return output;
+}
+
+export function doFormatMentions(text) {
+    const tokens = new Map();
+    let output = autolinkAtMentions(text, tokens);
+    output = replaceTokens(output, tokens);
+    return output;
+}
+
 export function sanitizeHtml(text) {
     let output = text;
 
@@ -82,27 +93,21 @@ export function sanitizeHtml(text) {
     return output;
 }
 
-function autolinkUrls(text, tokens) {
-    function replaceUrlWithToken(autolinker, match) {
+// Convert emails into tokens
+function autolinkEmails(text, tokens) {
+    function replaceEmailWithToken(autolinker, match) {
         const linkText = match.getMatchedText();
         let url = linkText;
 
         if (match.getType() === 'email') {
             url = `mailto:${url}`;
-        } else if (!(/^(mailto|https?|ftp)/.test(url))) {
-            url = `http://${url}`;
         }
 
         const index = tokens.size;
-        const alias = `MM_LINK${index}`;
-
-        var target = 'target="_blank"';
-        if (url.lastIndexOf(Utils.getTeamURLFromAddressBar(), 0) === 0) {
-            target = '';
-        }
+        const alias = `MM_EMAIL${index}`;
 
         tokens.set(alias, {
-            value: `<a class="theme" ${target} href="${url}">${linkText}</a>`,
+            value: `<a class="theme" href="${url}">${linkText}</a>`,
             originalText: linkText
         });
 
@@ -111,38 +116,73 @@ function autolinkUrls(text, tokens) {
 
     // we can't just use a static autolinker because we need to set replaceFn
     const autolinker = new Autolinker({
-        urls: true,
+        urls: false,
         email: true,
         phone: false,
         twitter: false,
         hashtag: false,
-        replaceFn: replaceUrlWithToken
+        replaceFn: replaceEmailWithToken
     });
 
     return autolinker.link(text);
 }
 
 function autolinkAtMentions(text, tokens) {
-    let output = text;
+    // Return true if provided character is punctuation
+    function isPunctuation(character) {
+        const re = /[\u2000-\u206F\u2E00-\u2E7F\\'!"#$%&()*+,\-.\/:;<=>?@\[\]^_`{|}~]/g;
+        return re.test(character);
+    }
+
+    // Test if provided text needs to be highlighted, special mention or current user
+    function mentionExists(u) {
+        return (Constants.SPECIAL_MENTIONS.indexOf(u) !== -1 || UserStore.getProfileByUsername(u));
+    }
+
+    function addToken(username, mention, extraText) {
+        const index = tokens.size;
+        const alias = `MM_ATMENTION${index}`;
+
+        tokens.set(alias, {
+            value: `<a class='mention-link' href='#' data-mention='${username}'>${mention}</a>`,
+            originalText: mention,
+            extraText
+        });
+        return alias;
+    }
 
     function replaceAtMentionWithToken(fullMatch, prefix, mention, username) {
-        const usernameLower = username.toLowerCase();
-        if (Constants.SPECIAL_MENTIONS.indexOf(usernameLower) !== -1 || UserStore.getProfileByUsername(usernameLower)) {
-            const index = tokens.size;
-            const alias = `MM_ATMENTION${index}`;
+        let usernameLower = username.toLowerCase();
 
-            tokens.set(alias, {
-                value: `<a class='mention-link' href='#' data-mention='${usernameLower}'>${mention}</a>`,
-                originalText: mention
-            });
-
+        if (mentionExists(usernameLower)) {
+            // Exact match
+            const alias = addToken(usernameLower, mention, '');
             return prefix + alias;
+        }
+
+        // Not an exact match, attempt to truncate any punctuation to see if we can find a user
+        const originalUsername = usernameLower;
+
+        for (let c = usernameLower.length; c > 0; c--) {
+            if (isPunctuation(usernameLower[c - 1])) {
+                usernameLower = usernameLower.substring(0, c - 1);
+
+                if (mentionExists(usernameLower)) {
+                    const extraText = originalUsername.substr(c - 1);
+                    const alias = addToken(usernameLower, '@' + usernameLower, extraText);
+                    return prefix + alias;
+                }
+            } else {
+                // If the last character is not punctuation, no point in going any further
+                break;
+            }
         }
 
         return fullMatch;
     }
 
-    output = output.replace(/(^|\s)(@([a-z0-9.\-_]*[a-z0-9]))/gi, replaceAtMentionWithToken);
+    let output = text;
+    output = output.replace(/(^|\s)(@([a-z0-9.\-_]*))/gi, replaceAtMentionWithToken);
 
     return output;
 }
@@ -160,10 +200,9 @@ function highlightCurrentMentions(text, tokens) {
             const newAlias = `MM_SELFMENTION${index}`;
 
             newTokens.set(newAlias, {
-                value: `<span class='mention-highlight'>${alias}</span>`,
+                value: `<span class='mention-highlight'>${alias}</span>` + token.extraText,
                 originalText: token.originalText
             });
-
             output = output.replace(alias, newAlias);
         }
     }
@@ -237,7 +276,7 @@ function highlightSearchTerm(text, tokens, searchTerm) {
 
     var newTokens = new Map();
     for (const [alias, token] of tokens) {
-        if (token.originalText === searchTerm) {
+        if (token.originalText.indexOf(searchTerm.replace(/\*$/, '')) > -1) {
             const index = tokens.size + newTokens.size;
             const newAlias = `MM_SEARCHTERM${index}`;
 
@@ -267,7 +306,7 @@ function highlightSearchTerm(text, tokens, searchTerm) {
         return prefix + alias;
     }
 
-    return output.replace(new RegExp(`(^|\\W)(${searchTerm})\\b`, 'gi'), replaceSearchTermWithToken);
+    return output.replace(new RegExp(`()(${searchTerm})`, 'gi'), replaceSearchTermWithToken);
 }
 
 function replaceTokens(text, tokens) {

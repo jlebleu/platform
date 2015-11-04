@@ -93,6 +93,7 @@ export default class RhsComment extends React.Component {
                         role='menuitem'
                         data-toggle='modal'
                         data-target='#edit_post'
+                        data-refocusid='#reply_textbox'
                         data-title='Comment'
                         data-message={post.message}
                         data-postid={post.id}
@@ -199,7 +200,7 @@ export default class RhsComment extends React.Component {
                 <div className='post-profile-img__container'>
                     <img
                         className='post-profile-img'
-                        src={'/api/v1/users/' + post.user_id + '/image?time=' + timestamp}
+                        src={'/api/v1/users/' + post.user_id + '/image?time=' + timestamp + '&' + Utils.getSessionIndex()}
                         height='36'
                         width='36'
                     />

@@ -22,7 +22,8 @@ func InitChannel(r *mux.Router) {
 	sr.Handle("/create", ApiUserRequired(createChannel)).Methods("POST")
 	sr.Handle("/create_direct", ApiUserRequired(createDirectChannel)).Methods("POST")
 	sr.Handle("/update", ApiUserRequired(updateChannel)).Methods("POST")
-	sr.Handle("/update_desc", ApiUserRequired(updateChannelDesc)).Methods("POST")
+	sr.Handle("/update_header", ApiUserRequired(updateChannelHeader)).Methods("POST")
+	sr.Handle("/update_purpose", ApiUserRequired(updateChannelPurpose)).Methods("POST")
 	sr.Handle("/update_notify_props", ApiUserRequired(updateNotifyProps)).Methods("POST")
 	sr.Handle("/{id:[A-Za-z0-9]+}/", ApiUserRequiredActivity(getChannel, false)).Methods("GET")
 	sr.Handle("/{id:[A-Za-z0-9]+}/extra_info", ApiUserRequired(getChannelExtraInfo)).Methods("GET")
@@ -124,23 +125,28 @@ func CreateDirectChannel(c *Context, otherUserId string) (*model.Channel, *model
 	channel.Name = model.GetDMNameFromIds(otherUserId, c.Session.UserId)
 
 	channel.TeamId = c.Session.TeamId
-	channel.Description = ""
+	channel.Header = ""
 	channel.Type = model.CHANNEL_DIRECT
 
 	if uresult := <-uc; uresult.Err != nil {
 		return nil, model.NewAppError("CreateDirectChannel", "Invalid other user id ", otherUserId)
 	}
 
-	if sc, err := CreateChannel(c, channel, true); err != nil {
-		return nil, err
+	cm1 := &model.ChannelMember{
+		UserId:      c.Session.UserId,
+		Roles:       model.CHANNEL_ROLE_ADMIN,
+		NotifyProps: model.GetDefaultChannelNotifyProps(),
+	}
+	cm2 := &model.ChannelMember{
+		UserId:      otherUserId,
+		Roles:       "",
+		NotifyProps: model.GetDefaultChannelNotifyProps(),
+	}
+
+	if result := <-Srv.Store.Channel().SaveDirectChannel(channel, cm1, cm2); result.Err != nil {
+		return nil, result.Err
 	} else {
-		cm := &model.ChannelMember{ChannelId: sc.Id, UserId: otherUserId, Roles: "", NotifyProps: model.GetDefaultChannelNotifyProps()}
-
-		if cmresult := <-Srv.Store.Channel().SaveMember(cm); cmresult.Err != nil {
-			return nil, cmresult.Err
-		}
-
-		return sc, nil
+		return result.Data.(*model.Channel), nil
 	}
 }
 
@@ -204,7 +210,8 @@ func updateChannel(c *Context, w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		oldChannel.Description = channel.Description
+		oldChannel.Header = channel.Header
+		oldChannel.Purpose = channel.Purpose
 
 		if len(channel.DisplayName) > 0 {
 			oldChannel.DisplayName = channel.DisplayName
@@ -228,18 +235,18 @@ func updateChannel(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func updateChannelDesc(c *Context, w http.ResponseWriter, r *http.Request) {
+func updateChannelHeader(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	props := model.MapFromJson(r.Body)
 	channelId := props["channel_id"]
 	if len(channelId) != 26 {
-		c.SetInvalidParam("updateChannelDesc", "channel_id")
+		c.SetInvalidParam("updateChannelHeader", "channel_id")
 		return
 	}
 
-	channelDesc := props["channel_description"]
-	if len(channelDesc) > 1024 {
-		c.SetInvalidParam("updateChannelDesc", "channel_description")
+	channelHeader := props["channel_header"]
+	if len(channelHeader) > 1024 {
+		c.SetInvalidParam("updateChannelHeader", "channel_header")
 		return
 	}
 
@@ -256,11 +263,54 @@ func updateChannelDesc(c *Context, w http.ResponseWriter, r *http.Request) {
 		channel := cresult.Data.(*model.Channel)
 		// Don't need to do anything channel member, just wanted to confirm it exists
 
-		if !c.HasPermissionsToTeam(channel.TeamId, "updateChannelDesc") {
+		if !c.HasPermissionsToTeam(channel.TeamId, "updateChannelHeader") {
 			return
 		}
 
-		channel.Description = channelDesc
+		channel.Header = channelHeader
+
+		if ucresult := <-Srv.Store.Channel().Update(channel); ucresult.Err != nil {
+			c.Err = ucresult.Err
+			return
+		} else {
+			c.LogAudit("name=" + channel.Name)
+			w.Write([]byte(channel.ToJson()))
+		}
+	}
+}
+
+func updateChannelPurpose(c *Context, w http.ResponseWriter, r *http.Request) {
+	props := model.MapFromJson(r.Body)
+	channelId := props["channel_id"]
+	if len(channelId) != 26 {
+		c.SetInvalidParam("updateChannelPurpose", "channel_id")
+		return
+	}
+
+	channelPurpose := props["channel_purpose"]
+	if len(channelPurpose) > 1024 {
+		c.SetInvalidParam("updateChannelPurpose", "channel_purpose")
+		return
+	}
+
+	sc := Srv.Store.Channel().Get(channelId)
+	cmc := Srv.Store.Channel().GetMember(channelId, c.Session.UserId)
+
+	if cresult := <-sc; cresult.Err != nil {
+		c.Err = cresult.Err
+		return
+	} else if cmcresult := <-cmc; cmcresult.Err != nil {
+		c.Err = cmcresult.Err
+		return
+	} else {
+		channel := cresult.Data.(*model.Channel)
+		// Don't need to do anything channel member, just wanted to confirm it exists
+
+		if !c.HasPermissionsToTeam(channel.TeamId, "updateChannelPurpose") {
+			return
+		}
+
+		channel.Purpose = channelPurpose
 
 		if ucresult := <-Srv.Store.Channel().Update(channel); ucresult.Err != nil {
 			c.Err = ucresult.Err
@@ -503,6 +553,8 @@ func deleteChannel(c *Context, w http.ResponseWriter, r *http.Request) {
 	sc := Srv.Store.Channel().Get(id)
 	scm := Srv.Store.Channel().GetMember(id, c.Session.UserId)
 	uc := Srv.Store.User().Get(c.Session.UserId)
+	ihc := Srv.Store.Webhook().GetIncomingByChannel(id)
+	ohc := Srv.Store.Webhook().GetOutgoingByChannel(id)
 
 	if cresult := <-sc; cresult.Err != nil {
 		c.Err = cresult.Err
@@ -513,10 +565,18 @@ func deleteChannel(c *Context, w http.ResponseWriter, r *http.Request) {
 	} else if scmresult := <-scm; scmresult.Err != nil {
 		c.Err = scmresult.Err
 		return
+	} else if ihcresult := <-ihc; ihcresult.Err != nil {
+		c.Err = ihcresult.Err
+		return
+	} else if ohcresult := <-ohc; ohcresult.Err != nil {
+		c.Err = ohcresult.Err
+		return
 	} else {
 		channel := cresult.Data.(*model.Channel)
 		user := uresult.Data.(*model.User)
 		channelMember := scmresult.Data.(model.ChannelMember)
+		incomingHooks := ihcresult.Data.([]*model.IncomingWebhook)
+		outgoingHooks := ohcresult.Data.([]*model.OutgoingWebhook)
 
 		if !c.HasPermissionsToTeam(channel.TeamId, "deleteChannel") {
 			return
@@ -538,6 +598,23 @@ func deleteChannel(c *Context, w http.ResponseWriter, r *http.Request) {
 			c.Err = model.NewAppError("deleteChannel", "Cannot delete the default channel "+model.DEFAULT_CHANNEL, "")
 			c.Err.StatusCode = http.StatusForbidden
 			return
+		}
+
+		now := model.GetMillis()
+		for _, hook := range incomingHooks {
+			go func() {
+				if result := <-Srv.Store.Webhook().DeleteIncoming(hook.Id, now); result.Err != nil {
+					l4g.Error("Encountered error deleting incoming webhook, id=" + hook.Id)
+				}
+			}()
+		}
+
+		for _, hook := range outgoingHooks {
+			go func() {
+				if result := <-Srv.Store.Webhook().DeleteOutgoing(hook.Id, now); result.Err != nil {
+					l4g.Error("Encountered error deleting outgoing webhook, id=" + hook.Id)
+				}
+			}()
 		}
 
 		if dresult := <-Srv.Store.Channel().Delete(channel.Id, model.GetMillis()); dresult.Err != nil {
