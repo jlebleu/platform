@@ -231,6 +231,7 @@ export function resetPassword(data, success, error) {
 export function logout() {
     track('api', 'api_users_logout');
     var currentTeamUrl = TeamStore.getCurrentTeamUrl();
+    BrowserStore.signalLogout();
     BrowserStore.clear();
     ErrorStore.storeLastError(null);
     window.location.href = currentTeamUrl + '/logout';
@@ -1069,12 +1070,13 @@ export function exportTeam(success, error) {
     });
 }
 
-export function getStatuses(success, error) {
+export function getStatuses(ids, success, error) {
     $.ajax({
         url: '/api/v1/users/status',
         dataType: 'json',
         contentType: 'application/json',
-        type: 'GET',
+        type: 'POST',
+        data: JSON.stringify(ids),
         success,
         error: function onError(xhr, status, err) {
             var e = handleError('getStatuses', xhr, status, err);
@@ -1269,29 +1271,5 @@ export function regenOutgoingHookToken(data, success, error) {
             var e = handleError('regenOutgoingHookToken', xhr, status, err);
             error(e);
         }
-    });
-}
-
-export function dialByUsername(srcUsername, dstUsername) {
-    $.ajax({
-        url: '/api/v1/cti/dialByUsername',
-        dataType: 'json',
-        type: 'POST',
-        data: JSON.stringify({
-            src_user_name: srcUsername,
-            dst_user_name: dstUsername
-        })
-    });
-}
-
-export function dial(userName, number) {
-    $.ajax({
-        url: '/api/v1/cti/dial',
-        dataType: 'json',
-        type: 'POST',
-        data: JSON.stringify({
-            user_name: userName,
-            number: number
-        })
     });
 }

@@ -7,27 +7,21 @@ var UserStore = require('../stores/user_store.jsx');
 var TeamStore = require('../stores/team_store.jsx');
 
 var AboutBuildModal = require('./about_build_modal.jsx');
+var InviteMemberModal = require('./invite_member_modal.jsx');
+var UserSettingsModal = require('./user_settings/user_settings_modal.jsx');
 
 var Constants = require('../utils/constants.jsx');
 
 function getStateFromStores() {
-    let teams = [];
-    let teamsObject = UserStore.getTeams();
-    for (let teamId in teamsObject) {
+    const teams = [];
+    const teamsObject = UserStore.getTeams();
+    for (const teamId in teamsObject) {
         if (teamsObject.hasOwnProperty(teamId)) {
             teams.push(teamsObject[teamId]);
         }
     }
-    teams.sort(function sortByDisplayName(teamA, teamB) {
-        let teamADisplayName = teamA.display_name.toLowerCase();
-        let teamBDisplayName = teamB.display_name.toLowerCase();
-        if (teamADisplayName < teamBDisplayName) {
-            return -1;
-        } else if (teamADisplayName > teamBDisplayName) {
-            return 1;
-        }
-        return 0;
-    });
+
+    teams.sort(Utils.sortByDisplayName);
     return {teams};
 }
 
@@ -41,7 +35,10 @@ export default class NavbarDropdown extends React.Component {
         this.onListenerChange = this.onListenerChange.bind(this);
         this.aboutModalDismissed = this.aboutModalDismissed.bind(this);
 
-        this.state = getStateFromStores();
+        const state = getStateFromStores();
+        state.showUserSettingsModal = false;
+        state.showAboutModal = false;
+        this.state = state;
     }
     handleLogoutClick(e) {
         e.preventDefault();
@@ -96,15 +93,14 @@ export default class NavbarDropdown extends React.Component {
                 <li>
                     <a
                         href='#'
-                        data-toggle='modal'
-                        data-target='#invite_member'
+                        onClick={InviteMemberModal.show}
                     >
                         {'Invite New Member'}
                     </a>
                 </li>
             );
 
-            if (this.props.teamType === 'O') {
+            if (this.props.teamType === Constants.OPEN_TEAM) {
                 teamLink = (
                     <li>
                         <a
@@ -218,8 +214,7 @@ export default class NavbarDropdown extends React.Component {
                         <li>
                             <a
                                 href='#'
-                                data-toggle='modal'
-                                data-target='#user_settings'
+                                onClick={() => this.setState({showUserSettingsModal: true})}
                             >
                                 {'Account Settings'}
                             </a>
@@ -264,6 +259,10 @@ export default class NavbarDropdown extends React.Component {
                                 {'About Mattermost'}
                             </a>
                         </li>
+                        <UserSettingsModal
+                            show={this.state.showUserSettingsModal}
+                            onModalDismissed={() => this.setState({showUserSettingsModal: false})}
+                        />
                         <AboutBuildModal
                             show={this.state.showAboutModal}
                             onModalDismissed={this.aboutModalDismissed}

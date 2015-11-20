@@ -16,7 +16,8 @@
 }
 
 .bad-connection {
-	background-color: rgb(255, 255, 172) !important;
+	background: #ffffac !important;
+	color: #D04444 !important;
 }
 
 .textarea-div {
@@ -182,12 +183,16 @@ body.ios {
 }
 
 #post-list {
+	flex: 1 1 auto;
+	position: relative;
+	overflow-y: hidden;
 	.post-list-holder-by-time {
 		background: #fff;
 		overflow-y: scroll;
 		width: 100%;
 		padding: 1em 0 0;
-		position: relative;
+		position: absolute;
+		height: 100%;
 		-webkit-overflow-scrolling: touch;
 		&::-webkit-scrollbar {
 			width: 0px !important;
@@ -208,6 +213,20 @@ body.ios {
 		.post-list__content {
 			display: table-cell;
 			vertical-align: bottom;
+			div {
+				&:last-child {
+					.post {
+						.post-header {
+							.post-header-col.post-header__reply {
+								.dropdown-menu {
+									top: auto;
+									bottom: 25px;
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 	.more-messages-text {
@@ -383,16 +402,6 @@ body.ios {
 			}
 		}
 	}
-	&.post--last {
-		.post-header {
-			.post-header-col.post-header__reply {
-				.dropdown-menu {
-					top: auto;
-					bottom: 25px;
-				}
-			}
-		}
-	}
 	.post-create-footer {
 		padding: 0;
 	}
@@ -441,7 +450,10 @@ body.ios {
 		&.post-profile-img__container {
 			float: left;
 			.post-profile-img {
+				width: 36px;
+				height: 36px;
 				margin-right: 10px;
+				vertical-align: inherit;
 				@include border-radius(50px);
 			}
 		}
@@ -598,4 +610,82 @@ body.ios {
 	border-radius: 2px;
 	font-weight: 600;
 	margin: 0 0 0 -4px;
+}
+
+.attachment {
+    .attachment__content {
+        border-width: 1px;
+        border-style: solid;
+        border-radius: 4px;
+        padding: 2px 5px;
+        margin: 0 0 5px 0;
+    }
+    .attachment__thumb-pretext {
+        border: 0 none;
+        background: transparent;
+    }
+    .attachment__container {
+        border-left-width: 4px;
+        border-left-style: solid;
+        padding: 2px 0 2px 10px;
+        &.attachment__container--good {
+            border-left-color: #00C100;
+        }
+        &.attachment__container--warning {
+            border-left-color: #DEDE01;
+        }
+        &.attachment__container--danger {
+            border-left-color: #E40303;
+        }
+    }
+    .attachment__body {
+        float: left;
+        width: 80%;
+        padding-right: 5px;
+        &.attachment__body--no_thumb {
+            width: 100%;
+        }
+    }
+    .attachment__text p:last-of-type {
+        display: inline-block;
+    }
+    .attachment__thumb-pretext {
+        margin-left: 5px;
+    }
+    .attachment__title {
+        margin: 5px 0;
+        padding: 0;
+        line-height: 16px;
+        font-size: 16px;
+        a {
+            font-size: 16px;
+        }
+    }
+    .attachment__author-icon {
+        @include border-radius(50px);
+        margin-right: 5px;
+        width: 14px;
+        height: 14px;
+    }
+    .attachment__image {
+        max-width: 100%;
+        margin-bottom: 1em;
+    }
+    .attachment__thumb-container {
+        width: 20%;
+        float: right;
+        img {
+            max-height: 75px;
+            max-width: 100%;
+        }
+    }
+    .attachment___fields {
+        width: 100%;
+        .attachment___field-caption {
+            font-weight: 700;
+        }
+        .attachment___field p {
+            margin: 0;
+        }
+    }
 }

@@ -3,10 +3,9 @@
 
 var UserStore = require('../stores/user_store.jsx');
 var utils = require('../utils/utils.jsx');
+var TimeSince = require('./time_since.jsx');
 
 var Constants = require('../utils/constants.jsx');
-var Tooltip = ReactBootstrap.Tooltip;
-var OverlayTrigger = ReactBootstrap.OverlayTrigger;
 
 export default class PostInfo extends React.Component {
     constructor(props) {
@@ -126,7 +125,7 @@ export default class PostInfo extends React.Component {
             lastCommentClass = ' comment-icon__container__show';
         }
 
-        if (this.props.commentCount >= 1 && post.state !== Constants.POST_FAILED && post.state !== Constants.POST_LOADING) {
+        if (this.props.commentCount >= 1 && post.state !== Constants.POST_FAILED && post.state !== Constants.POST_LOADING && post.state !== Constants.POST_DELETED) {
             comments = (
                 <a
                     href='#'
@@ -144,21 +143,12 @@ export default class PostInfo extends React.Component {
 
         var dropdown = this.createDropdown();
 
-        let tooltip = <Tooltip id={post.id + 'tooltip'}>{`${utils.displayDate(post.create_at)} at ${utils.displayTime(post.create_at)}`}</Tooltip>;
-
         return (
             <ul className='post-header post-info'>
                 <li className='post-header-col'>
-                    <OverlayTrigger
-                        delayShow={500}
-                        container={this}
-                        placement='top'
-                        overlay={tooltip}
-                    >
-                        <time className='post-profile-time'>
-                            {utils.displayDateTime(post.create_at)}
-                        </time>
-                    </OverlayTrigger>
+                    <TimeSince
+                        eventTime={post.create_at}
+                    />
                 </li>
                 <li className='post-header-col post-header__reply'>
                     <div className='dropdown'>

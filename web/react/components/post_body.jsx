@@ -7,6 +7,7 @@ const Utils = require('../utils/utils.jsx');
 const Constants = require('../utils/constants.jsx');
 const TextFormatting = require('../utils/text_formatting.jsx');
 const twemoji = require('twemoji');
+const PostBodyAdditionalContent = require('./post_body_additional_content.jsx');
 
 export default class PostBody extends React.Component {
     constructor(props) {
@@ -15,6 +16,7 @@ export default class PostBody extends React.Component {
         this.receivedYoutubeData = false;
         this.isGifLoading = false;
 
+        this.handleUserChange = this.handleUserChange.bind(this);
         this.parseEmojis = this.parseEmojis.bind(this);
         this.createEmbed = this.createEmbed.bind(this);
         this.createGifEmbed = this.createGifEmbed.bind(this);
@@ -22,7 +24,13 @@ export default class PostBody extends React.Component {
         this.createYoutubeEmbed = this.createYoutubeEmbed.bind(this);
 
         const linkData = Utils.extractLinks(this.props.post.message);
-        this.state = {links: linkData.links, message: linkData.text};
+        const profiles = UserStore.getProfiles();
+
+        this.state = {
+            links: linkData.links,
+            message: linkData.text,
+            hasUserProfiles: profiles && Object.keys(profiles).length > 1
+        };
     }
 
     getAllChildNodes(nodeIn) {
@@ -46,11 +54,24 @@ export default class PostBody extends React.Component {
 
     componentDidMount() {
         this.parseEmojis();
+
+        UserStore.addChangeListener(this.handleUserChange);
     }
 
     componentDidUpdate() {
         this.parseEmojis();
-        this.props.resize();
+    }
+
+    componentWillUnmount() {
+        UserStore.removeChangeListener(this.handleUserChange);
+    }
+
+    handleUserChange() {
+        if (!this.state.hasProfiles) {
+            const profiles = UserStore.getProfiles();
+
+            this.setState({hasProfiles: profiles && Object.keys(profiles).length > 1});
+        }
     }
 
     componentWillReceiveProps(nextProps) {
@@ -78,12 +99,12 @@ export default class PostBody extends React.Component {
         this.isGifLoading = true;
 
         const gif = new Image();
-        gif.src = src;
         gif.onload = (
             () => {
                 this.setState({gifLoaded: true});
             }
         );
+        gif.src = src;
     }
 
     createGifEmbed(link) {
@@ -93,7 +114,12 @@ export default class PostBody extends React.Component {
 
         if (!this.state.gifLoaded) {
             this.loadGif(link);
-            return null;
+            return (
+                <img
+                    className='gif-div placeholder'
+                    height='500px'
+                />
+            );
         }
 
         return (
@@ -327,6 +353,9 @@ export default class PostBody extends React.Component {
                         dangerouslySetInnerHTML={{__html: TextFormatting.formatText(this.state.message)}}
                     />
                 </div>
+                <PostBodyAdditionalContent
+                    post={post}
+                />
                 {fileAttachmentHolder}
                 {embed}
             </div>
@@ -338,6 +367,5 @@ PostBody.propTypes = {
     post: React.PropTypes.object.isRequired,
     parentPost: React.PropTypes.object,
     retryPost: React.PropTypes.func.isRequired,
-    handleCommentClick: React.PropTypes.func.isRequired,
-    resize: React.PropTypes.func.isRequired
+    handleCommentClick: React.PropTypes.func.isRequired
 };

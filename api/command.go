@@ -24,6 +24,7 @@ var (
 		"loadTestCommand": "/loadtest",
 		"echoCommand":     "/echo",
 		"shrugCommand":    "/shrug",
+		"meCommand":       "/me",
 	}
 	commands = []commandHandler{
 		logoutCommand,
@@ -31,6 +32,7 @@ var (
 		loadTestCommand,
 		echoCommand,
 		shrugCommand,
+		meCommand,
 	}
 	commandNotImplementedErr = model.NewAppError("checkCommand", "Command not implemented", "")
 )
@@ -189,6 +191,34 @@ func echoCommand(c *Context, command *model.Command) bool {
 
 	} else if strings.Index(cmd, command.Command) == 0 {
 		command.AddSuggestion(&model.SuggestCommand{Suggestion: cmd, Description: "Echo back text from your account, /echo \"message\" [delay in seconds]"})
+	}
+
+	return false
+}
+
+func meCommand(c *Context, command *model.Command) bool {
+	cmd := cmds["meCommand"]
+
+	if !command.Suggest && strings.Index(command.Command, cmd) == 0 {
+		message := ""
+
+		parameters := strings.SplitN(command.Command, " ", 2)
+		if len(parameters) > 1 {
+			message += "*" + parameters[1] + "*"
+		}
+
+		post := &model.Post{}
+		post.Message = message
+		post.ChannelId = command.ChannelId
+		if _, err := CreatePost(c, post, false); err != nil {
+			l4g.Error("Unable to create /me post post, err=%v", err)
+			return false
+		}
+		command.Response = model.RESP_EXECUTED
+		return true
+
+	} else if strings.Index(cmd, command.Command) == 0 {
+		command.AddSuggestion(&model.SuggestCommand{Suggestion: cmd, Description: "Do an action, /me [message]"})
 	}
 
 	return false
@@ -381,11 +411,11 @@ func loadTestSetupCommand(c *Context, command *model.Command) bool {
 
 		if doTeams {
 			if err := CreateBasicUser(client); err != nil {
-				l4g.Error("Failed to create testing enviroment")
+				l4g.Error("Failed to create testing environment")
 				return true
 			}
 			client.LoginByEmail(BTEST_TEAM_NAME, BTEST_USER_EMAIL, BTEST_USER_PASSWORD)
-			enviroment, err := CreateTestEnviromentWithTeams(
+			environment, err := CreateTestEnvironmentWithTeams(
 				client,
 				utils.Range{numTeams, numTeams},
 				utils.Range{numChannels, numChannels},
@@ -393,18 +423,18 @@ func loadTestSetupCommand(c *Context, command *model.Command) bool {
 				utils.Range{numPosts, numPosts},
 				doFuzz)
 			if err != true {
-				l4g.Error("Failed to create testing enviroment")
+				l4g.Error("Failed to create testing environment")
 				return true
 			} else {
-				l4g.Info("Testing enviroment created")
-				for i := 0; i < len(enviroment.Teams); i++ {
-					l4g.Info("Team Created: " + enviroment.Teams[i].Name)
-					l4g.Info("\t User to login: " + enviroment.Enviroments[i].Users[0].Email + ", " + USER_PASSWORD)
+				l4g.Info("Testing environment created")
+				for i := 0; i < len(environment.Teams); i++ {
+					l4g.Info("Team Created: " + environment.Teams[i].Name)
+					l4g.Info("\t User to login: " + environment.Environments[i].Users[0].Email + ", " + USER_PASSWORD)
 				}
 			}
 		} else {
 			client.MockSession(c.Session.Token)
-			CreateTestEnviromentInTeam(
+			CreateTestEnvironmentInTeam(
 				client,
 				c.Session.TeamId,
 				utils.Range{numChannels, numChannels},
@@ -416,7 +446,7 @@ func loadTestSetupCommand(c *Context, command *model.Command) bool {
 	} else if strings.Index(cmd, command.Command) == 0 {
 		command.AddSuggestion(&model.SuggestCommand{
 			Suggestion:  cmd,
-			Description: "Creates a testing enviroment in current team. [teams] [fuzz] <Num Channels> <Num Users> <NumPosts>"})
+			Description: "Creates a testing environment in current team. [teams] [fuzz] <Num Channels> <Num Users> <NumPosts>"})
 	}
 
 	return false

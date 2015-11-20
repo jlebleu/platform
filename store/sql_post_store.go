@@ -9,8 +9,10 @@ import (
 	"strconv"
 	"strings"
 
+	l4g "code.google.com/p/log4go"
 	"github.com/mattermost/platform/model"
 	"github.com/mattermost/platform/utils"
+	"time"
 )
 
 type SqlPostStore struct {
@@ -30,7 +32,7 @@ func NewSqlPostStore(sqlStore *SqlStore) PostStore {
 		table.ColMap("Message").SetMaxSize(4000)
 		table.ColMap("Type").SetMaxSize(26)
 		table.ColMap("Hashtags").SetMaxSize(1000)
-		table.ColMap("Props").SetMaxSize(4000)
+		table.ColMap("Props")
 		table.ColMap("Filenames").SetMaxSize(4000)
 	}
 
@@ -38,6 +40,21 @@ func NewSqlPostStore(sqlStore *SqlStore) PostStore {
 }
 
 func (s SqlPostStore) UpgradeSchemaIfNeeded() {
+	colType := s.GetColumnDataType("Posts", "Props")
+	if colType != "text" {
+
+		query := "ALTER TABLE Posts MODIFY COLUMN Props TEXT"
+		if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_POSTGRES {
+			query = "ALTER TABLE Posts ALTER COLUMN Props TYPE text"
+		}
+
+		_, err := s.GetMaster().Exec(query)
+		if err != nil {
+			l4g.Critical("Failed to alter column Posts.Props to TEXT: " + err.Error())
+			time.Sleep(time.Second)
+			panic("Failed to alter column Posts.Props to TEXT: " + err.Error())
+		}
+	}
 }
 
 func (s SqlPostStore) CreateIndexesIfNotExists() {
@@ -332,6 +349,104 @@ func (s SqlPostStore) GetPostsSince(channelId string, time int64) StoreChannel {
 	return storeChannel
 }
 
+func (s SqlPostStore) GetPostsBefore(channelId string, postId string, numPosts int, offset int) StoreChannel {
+	return s.getPostsAround(channelId, postId, numPosts, offset, true)
+}
+
+func (s SqlPostStore) GetPostsAfter(channelId string, postId string, numPosts int, offset int) StoreChannel {
+	return s.getPostsAround(channelId, postId, numPosts, offset, false)
+}
+
+func (s SqlPostStore) getPostsAround(channelId string, postId string, numPosts int, offset int, before bool) StoreChannel {
+	storeChannel := make(StoreChannel)
+
+	go func() {
+		result := StoreResult{}
+
+		var direction string
+		var sort string
+		if before {
+			direction = "<"
+			sort = "DESC"
+		} else {
+			direction = ">"
+			sort = "ASC"
+		}
+
+		var posts []*model.Post
+		var parents []*model.Post
+		_, err1 := s.GetReplica().Select(&posts,
+			`(SELECT
+			    *
+			FROM
+			    Posts
+			WHERE
+				(CreateAt `+direction+` (SELECT CreateAt FROM Posts WHERE Id = :PostId)
+			        AND ChannelId = :ChannelId
+					AND DeleteAt = 0)
+			ORDER BY CreateAt `+sort+`
+			LIMIT :NumPosts
+			OFFSET :Offset)`,
+			map[string]interface{}{"ChannelId": channelId, "PostId": postId, "NumPosts": numPosts, "Offset": offset})
+		_, err2 := s.GetReplica().Select(&parents,
+			`(SELECT
+			    *
+			FROM
+			    Posts
+			WHERE
+			    Id
+			IN
+			    (SELECT * FROM (SELECT
+			        RootId
+			    FROM
+			        Posts
+			    WHERE
+					(CreateAt `+direction+` (SELECT CreateAt FROM Posts WHERE Id = :PostId)
+						AND ChannelId = :ChannelId
+						AND DeleteAt = 0)
+					ORDER BY CreateAt `+sort+`
+					LIMIT :NumPosts
+					OFFSET :Offset)
+			    temp_tab))
+			ORDER BY CreateAt DESC`,
+			map[string]interface{}{"ChannelId": channelId, "PostId": postId, "NumPosts": numPosts, "Offset": offset})
+
+		if err1 != nil {
+			result.Err = model.NewAppError("SqlPostStore.GetPostContext", "We couldn't get the posts for the channel", "channelId="+channelId+err1.Error())
+		} else if err2 != nil {
+			result.Err = model.NewAppError("SqlPostStore.GetPostContext", "We couldn't get the parent posts for the channel", "channelId="+channelId+err2.Error())
+		} else {
+
+			list := &model.PostList{Order: make([]string, 0, len(posts))}
+
+			// We need to flip the order if we selected backwards
+			if before {
+				for _, p := range posts {
+					list.AddPost(p)
+					list.AddOrder(p.Id)
+				}
+			} else {
+				l := len(posts)
+				for i := range posts {
+					list.AddPost(posts[l-i-1])
+					list.AddOrder(posts[l-i-1].Id)
+				}
+			}
+
+			for _, p := range parents {
+				list.AddPost(p)
+			}
+
+			result.Data = list
+		}
+
+		storeChannel <- result
+		close(storeChannel)
+	}()
+
+	return storeChannel
+}
+
 func (s SqlPostStore) getRootPosts(channelId string, offset int, limit int) StoreChannel {
 	storeChannel := make(StoreChannel)
 
@@ -443,13 +558,6 @@ func (s SqlPostStore) Search(teamId string, userId string, params *model.SearchP
 
 		var posts []*model.Post
 
-		if utils.Cfg.SqlSettings.DriverName == model.DATABASE_DRIVER_POSTGRES {
-			// Parse text for wildcards
-			if wildcard, err := regexp.Compile("\\*($| )"); err == nil {
-				terms = wildcard.ReplaceAllLiteralString(terms, "* ")
-			}
-		}
-
 		searchQuery := `
 			SELECT
 				*
@@ -548,7 +656,7 @@ func (s SqlPostStore) Search(teamId string, userId string, params *model.SearchP
 
 		_, err := s.GetReplica().Select(&posts, searchQuery, queryParams)
 		if err != nil {
-			result.Err = model.NewAppError("SqlPostStore.Search", "We encounted an error while searching for posts", "teamId="+teamId+", err="+err.Error())
+			result.Err = model.NewAppError("SqlPostStore.Search", "We encountered an error while searching for posts", "teamId="+teamId+", err="+err.Error())
 		}
 
 		list := &model.PostList{Order: make([]string, 0, len(posts))}

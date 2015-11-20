@@ -52,7 +52,7 @@ func InitUser(r *mux.Router) {
 	sr.Handle("/{teamname:[A-Za-z0-9]+}/update_phone_status", ApiAppHandler(updatePhoneStatus)).Methods("POST")
 
 	sr.Handle("/me", ApiAppHandler(getMe)).Methods("GET")
-	sr.Handle("/status", ApiUserRequiredActivity(getStatuses, false)).Methods("GET")
+	sr.Handle("/status", ApiUserRequiredActivity(getStatuses, false)).Methods("POST")
 	sr.Handle("/profiles", ApiUserRequired(getProfiles)).Methods("GET")
 	sr.Handle("/profiles/{id:[A-Za-z0-9]+}", ApiUserRequired(getProfiles)).Methods("GET")
 	sr.Handle("/{id:[A-Za-z0-9]+}", ApiUserRequired(getUser)).Methods("GET")
@@ -182,6 +182,8 @@ func createUser(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	hash := r.URL.Query().Get("h")
 
+	sendWelcomeEmail := true
+
 	if IsVerifyHashRequired(user, team, hash) {
 		data := r.URL.Query().Get("d")
 		props := model.MapFromJson(strings.NewReader(data))
@@ -204,15 +206,20 @@ func createUser(c *Context, w http.ResponseWriter, r *http.Request) {
 
 		user.Email = props["email"]
 		user.EmailVerified = true
+		sendWelcomeEmail = false
 	}
 
-	if len(user.AuthData) > 0 && len(user.AuthService) > 0 {
+	if user.IsSSOUser() {
 		user.EmailVerified = true
 	}
 
 	ruser := CreateUser(c, team, user)
 	if c.Err != nil {
 		return
+	}
+
+	if sendWelcomeEmail {
+		sendWelcomeEmailAndForget(ruser.Id, ruser.Email, team.Name, team.DisplayName, c.GetSiteURL(), c.GetTeamURLFromTeam(team), ruser.EmailVerified)
 	}
 
 	w.Write([]byte(ruser.ToJson()))
@@ -293,14 +300,17 @@ func CreateUser(c *Context, team *model.Team, user *model.User) *model.User {
 			l4g.Error("Encountered an issue joining default channels user_id=%s, team_id=%s, err=%v", ruser.Id, ruser.TeamId, err)
 		}
 
-		sendWelcomeEmailAndForget(ruser.Id, ruser.Email, team.Name, team.DisplayName, c.GetSiteURL(), c.GetTeamURLFromTeam(team), user.EmailVerified)
-
 		addDirectChannelsAndForget(ruser)
 
 		if user.EmailVerified {
 			if cresult := <-Srv.Store.User().VerifyEmail(ruser.Id); cresult.Err != nil {
 				l4g.Error("Failed to set email verified err=%v", cresult.Err)
 			}
+		}
+
+		pref := model.Preference{UserId: ruser.Id, Category: model.PREFERENCE_CATEGORY_TUTORIAL_STEPS, Name: ruser.Id, Value: "0"}
+		if presult := <-Srv.Store.Preference().Save(&model.Preferences{pref}); presult.Err != nil {
+			l4g.Error("Encountered error saving tutorial preference, err=%v", presult.Err.Message)
 		}
 
 		ruser.Sanitize(map[string]bool{})
@@ -1578,16 +1588,31 @@ func updateUserNotify(c *Context, w http.ResponseWriter, r *http.Request) {
 }
 
 func getStatuses(c *Context, w http.ResponseWriter, r *http.Request) {
+	userIds := model.ArrayFromJson(r.Body)
+	if len(userIds) == 0 {
+		c.SetInvalidParam("getStatuses", "userIds")
+		return
+	}
 
 	if result := <-Srv.Store.User().GetProfiles(c.Session.TeamId); result.Err != nil {
 		c.Err = result.Err
 		return
 	} else {
-
 		profiles := result.Data.(map[string]*model.User)
 
 		statuses := map[string]string{}
 		for _, profile := range profiles {
+			found := false
+			for _, uid := range userIds {
+				if uid == profile.Id {
+					found = true
+				}
+			}
+
+			if !found {
+				continue
+			}
+
 			if profile.IsOffline() {
 				statuses[profile.Id] = model.USER_OFFLINE
 			} else if profile.IsAway() {

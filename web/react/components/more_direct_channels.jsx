@@ -50,6 +50,10 @@ export default class MoreDirectChannels extends React.Component {
     handleFilterChange() {
         const filter = ReactDOM.findDOMNode(this.refs.filter).value;
 
+        if ($(window).width() > 768) {
+            $(ReactDOM.findDOMNode(this.refs.userList)).scrollTop(0);
+        }
+
         if (filter !== this.state.filter) {
             this.setState({filter});
         }
@@ -206,7 +210,7 @@ export default class MoreDirectChannels extends React.Component {
 
         return (
             <Modal
-                className='modal-direct-channels'
+                dialogClassName='more-modal'
                 show={this.props.show}
                 onHide={this.handleHide}
             >

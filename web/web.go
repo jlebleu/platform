@@ -132,7 +132,7 @@ func watchAndParseTemplates() {
 	}
 }
 
-var browsersNotSupported string = "MSIE/8;MSIE/9;Internet Explorer/8;Internet Explorer/9"
+var browsersNotSupported string = "MSIE/8;MSIE/9;MSIE/10;Internet Explorer/8;Internet Explorer/9;Internet Explorer/10;Safari/7;Safari/8"
 
 func CheckBrowserCompatability(c *api.Context, r *http.Request) bool {
 	ua := user_agent.New(r.UserAgent())
@@ -143,7 +143,7 @@ func CheckBrowserCompatability(c *api.Context, r *http.Request) bool {
 		version := strings.Split(browser, "/")
 
 		if strings.HasPrefix(bname, version[0]) && strings.HasPrefix(bversion, version[1]) {
-			c.Err = model.NewAppError("CheckBrowserCompatability", "Your current browser is not supported, please upgrade to one of the following browsers: Google Chrome 21 or higher, Internet Explorer 10 or higher, FireFox 14 or higher", "")
+			c.Err = model.NewAppError("CheckBrowserCompatability", "Your current browser is not supported, please upgrade to one of the following browsers: Google Chrome 21 or higher, Internet Explorer 11 or higher, FireFox 14 or higher, Safari 9 or higher", "")
 			return false
 		}
 	}
@@ -170,7 +170,7 @@ func root(c *api.Context, w http.ResponseWriter, r *http.Request) {
 				page.Props[team.Name] = team.DisplayName
 			}
 
-			if len(teams) == 1 && *utils.Cfg.TeamSettings.EnableTeamListing {
+			if len(teams) == 1 && *utils.Cfg.TeamSettings.EnableTeamListing && !utils.Cfg.TeamSettings.EnableTeamCreation {
 				http.Redirect(w, r, c.GetSiteURL()+"/"+teams[0].Name, http.StatusTemporaryRedirect)
 				return
 			}
@@ -983,13 +983,28 @@ func incomingWebhook(c *api.Context, w http.ResponseWriter, r *http.Request) {
 		parsedRequest = model.IncomingWebhookRequestFromJson(strings.NewReader(r.FormValue("payload")))
 	}
 
+	if parsedRequest == nil {
+		c.Err = model.NewAppError("incomingWebhook", "Unable to parse incoming data", "")
+		return
+	}
+
 	text := parsedRequest.Text
-	if len(text) == 0 {
+	if len(text) == 0 && parsedRequest.Attachments == nil {
 		c.Err = model.NewAppError("incomingWebhook", "No text specified", "")
 		return
 	}
 
 	channelName := parsedRequest.ChannelName
+	webhookType := parsedRequest.Type
+
+	//attachments is in here for slack compatibility
+	if parsedRequest.Attachments != nil {
+		if len(parsedRequest.Props) == 0 {
+			parsedRequest.Props = make(model.StringInterface)
+		}
+		parsedRequest.Props["attachments"] = parsedRequest.Attachments
+		webhookType = model.POST_SLACK_ATTACHMENT
+	}
 
 	var hook *model.IncomingWebhook
 	if result := <-hchan; result.Err != nil {
@@ -1039,7 +1054,7 @@ func incomingWebhook(c *api.Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := api.CreateWebhookPost(c, channel.Id, text, overrideUsername, overrideIconUrl); err != nil {
+	if _, err := api.CreateWebhookPost(c, channel.Id, text, overrideUsername, overrideIconUrl, parsedRequest.Props, webhookType); err != nil {
 		c.Err = err
 		return
 	}

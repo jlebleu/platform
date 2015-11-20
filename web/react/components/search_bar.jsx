@@ -90,14 +90,10 @@ export default class SearchBar extends React.Component {
 
         this.refs.autocomplete.handleInputChange(e.target, term);
     }
-    handleMouseInput(e) {
-        e.preventDefault();
-    }
     handleUserBlur() {
         this.setState({focused: false});
     }
-    handleUserFocus(e) {
-        e.target.select();
+    handleUserFocus() {
         $('.search-bar__container').addClass('focused');
 
         this.setState({focused: true});
@@ -106,14 +102,8 @@ export default class SearchBar extends React.Component {
         if (terms.length) {
             this.setState({isSearching: true});
 
-            // append * if not present
-            let searchTerms = terms;
-            if (searchTerms.search(/\*\s*$/) === -1) {
-                searchTerms = searchTerms + '*';
-            }
-
             client.search(
-                searchTerms,
+                terms,
                 (data) => {
                     this.setState({isSearching: false});
                     if (utils.isMobile()) {
@@ -185,6 +175,7 @@ export default class SearchBar extends React.Component {
                     className='search__form relative-div'
                     onSubmit={this.handleSubmit}
                     style={{overflow: 'visible'}}
+                    autoComplete='off'
                 >
                     <span className='glyphicon glyphicon-search sidebar__search-icon' />
                     <input
@@ -197,7 +188,6 @@ export default class SearchBar extends React.Component {
                         onBlur={this.handleUserBlur}
                         onChange={this.handleUserInput}
                         onKeyDown={this.handleKeyDown}
-                        onMouseUp={this.handleMouseInput}
                     />
                     {isSearching}
                     <SearchAutocomplete

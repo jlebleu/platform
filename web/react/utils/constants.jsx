@@ -39,7 +39,8 @@ module.exports = {
         RECIEVED_LOGS: null,
         RECIEVED_ALL_TEAMS: null,
 
-        TOGGLE_IMPORT_THEME_MODAL: null
+        TOGGLE_IMPORT_THEME_MODAL: null,
+        TOGGLE_INVITE_MEMBER_MODAL: null
     }),
 
     PayloadSources: keyMirror({
@@ -127,6 +128,7 @@ module.exports = {
     MAX_DMS: 20,
     DM_CHANNEL: 'D',
     OPEN_CHANNEL: 'O',
+    PRIVATE_CHANNEL: 'P',
     INVITE_TEAM: 'I',
     OPEN_TEAM: 'O',
     MAX_POST_LEN: 4000,
@@ -161,7 +163,8 @@ module.exports = {
             buttonBg: '#2389d7',
             buttonColor: '#FFFFFF',
             mentionHighlightBg: '#fff2bb',
-            mentionHighlightLink: '#2f81b7'
+            mentionHighlightLink: '#2f81b7',
+            codeTheme: 'github'
         },
         organization: {
             type: 'Organization',
@@ -183,7 +186,8 @@ module.exports = {
             buttonBg: '#1dacfc',
             buttonColor: '#FFFFFF',
             mentionHighlightBg: '#fff2bb',
-            mentionHighlightLink: '#2f81b7'
+            mentionHighlightLink: '#2f81b7',
+            codeTheme: 'github'
         },
         mattermostDark: {
             type: 'Mattermost Dark',
@@ -205,7 +209,8 @@ module.exports = {
             buttonBg: '#4CBBA4',
             buttonColor: '#FFFFFF',
             mentionHighlightBg: '#984063',
-            mentionHighlightLink: '#A4FFEB'
+            mentionHighlightLink: '#A4FFEB',
+            codeTheme: 'solarized_dark'
         },
         windows10: {
             type: 'Windows Dark',
@@ -227,7 +232,8 @@ module.exports = {
             buttonBg: '#0177e7',
             buttonColor: '#FFFFFF',
             mentionHighlightBg: '#784098',
-            mentionHighlightLink: '#A4FFEB'
+            mentionHighlightLink: '#A4FFEB',
+            codeTheme: 'monokai'
         }
     },
     THEME_ELEMENTS: [
@@ -306,19 +312,42 @@ module.exports = {
         {
             id: 'mentionHighlightLink',
             uiName: 'Mention Highlight Link'
+        },
+        {
+            id: 'codeTheme',
+            uiName: 'Code Theme',
+            themes: [
+                {
+                    id: 'solarized_dark',
+                    uiName: 'Solarized Dark'
+                },
+                {
+                    id: 'solarized_light',
+                    uiName: 'Solarized Light'
+                },
+                {
+                    id: 'github',
+                    uiName: 'GitHub'
+                },
+                {
+                    id: 'monokai',
+                    uiName: 'Monokai'
+                }
+            ]
         }
     ],
-    CODE_THEMES: {
-        github: 'GitHub',
-        solarized_light: 'Solarized light',
-        monokai: 'Monokai',
-        solarized_dark: 'Solarized Dark'
-    },
     DEFAULT_CODE_THEME: 'github',
     Preferences: {
         CATEGORY_DIRECT_CHANNEL_SHOW: 'direct_channel_show',
         CATEGORY_DISPLAY_SETTINGS: 'display_settings',
-        CATEGORY_ADVANCED_SETTINGS: 'advanced_settings'
+        CATEGORY_ADVANCED_SETTINGS: 'advanced_settings',
+        TUTORIAL_STEP: 'tutorial_step'
+    },
+    TutorialSteps: {
+        INTRO_SCREENS: 0,
+        POST_POPOVER: 1,
+        CHANNEL_POPOVER: 2,
+        MENU_POPOVER: 3
     },
     KeyCodes: {
         UP: 38,
@@ -354,5 +383,13 @@ module.exports = {
         ruby: 'Ruby',
         java: 'Java',
         ini: 'ini'
+    },
+    PostsViewJumpTypes: {
+        BOTTOM: 1,
+        POST: 2,
+        SIDEBAR_OPEN: 3
+    },
+    NotificationPrefs: {
+        MENTION: 'mention'
     }
 };

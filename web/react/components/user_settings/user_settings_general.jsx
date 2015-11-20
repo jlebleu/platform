@@ -32,7 +32,6 @@ export default class UserSettingsGeneralTab extends React.Component {
         this.updatePicture = this.updatePicture.bind(this);
         this.updateSection = this.updateSection.bind(this);
 
-        this.handleClose = this.handleClose.bind(this);
         this.setupInitialState = this.setupInitialState.bind(this);
 
         this.state = this.setupInitialState(props);
@@ -209,20 +208,6 @@ export default class UserSettingsGeneralTab extends React.Component {
         this.setState(assign({}, this.setupInitialState(this.props), {emailChangeInProgress: emailChangeInProgress, clientError: '', serverError: '', emailError: ''}));
         this.submitActive = false;
         this.props.updateSection(section);
-    }
-    handleClose() {
-        $(ReactDOM.findDOMNode(this)).find('.form-control').each(function clearForms() {
-            this.value = '';
-        });
-
-        this.setState(assign({}, this.setupInitialState(this.props), {clientError: null, serverError: null, emailError: null}));
-        this.props.updateSection('');
-    }
-    componentDidMount() {
-        $('#user_settings').on('hidden.bs.modal', this.handleClose);
-    }
-    componentWillUnmount() {
-        $('#user_settings').off('hidden.bs.modal', this.handleClose);
     }
     setupInitialState(props) {
         var user = props.user;
@@ -466,44 +451,60 @@ export default class UserSettingsGeneralTab extends React.Component {
                 }
             }
 
-            inputs.push(
-                <div key='emailSetting'>
-                    <div className='form-group'>
-                        <label className='col-sm-5 control-label'>{'Primary Email'}</label>
-                        <div className='col-sm-7'>
-                            <input
-                                className='form-control'
-                                type='text'
-                                onChange={this.updateEmail}
-                                value={this.state.email}
-                            />
-                        </div>
-                    </div>
-                </div>
-            );
+            let submit = null;
 
-            inputs.push(
-                <div key='confirmEmailSetting'>
-                    <div className='form-group'>
-                        <label className='col-sm-5 control-label'>{'Confirm Email'}</label>
-                        <div className='col-sm-7'>
-                            <input
-                                className='form-control'
-                                type='text'
-                                onChange={this.updateConfirmEmail}
-                                value={this.state.confirmEmail}
-                            />
+            if (this.props.user.auth_service === '') {
+                inputs.push(
+                    <div key='emailSetting'>
+                        <div className='form-group'>
+                            <label className='col-sm-5 control-label'>{'Primary Email'}</label>
+                            <div className='col-sm-7'>
+                                <input
+                                    className='form-control'
+                                    type='text'
+                                    onChange={this.updateEmail}
+                                    value={this.state.email}
+                                />
+                            </div>
                         </div>
                     </div>
-                    {helpText}
-                </div>
-            );
+                );
+
+                inputs.push(
+                    <div key='confirmEmailSetting'>
+                        <div className='form-group'>
+                            <label className='col-sm-5 control-label'>{'Confirm Email'}</label>
+                            <div className='col-sm-7'>
+                                <input
+                                    className='form-control'
+                                    type='text'
+                                    onChange={this.updateConfirmEmail}
+                                    value={this.state.confirmEmail}
+                                />
+                            </div>
+                        </div>
+                        {helpText}
+                    </div>
+                );
+
+                submit = this.submitEmail;
+            } else {
+                inputs.push(
+                    <div
+                        key='oauthEmailInfo'
+                        className='form-group'
+                    >
+                        <div className='setting-list__hint'>{'Log in occurs through GitLab. Email cannot be updated.'}</div>
+                        {helpText}
+                    </div>
+                );
+            }
 
             emailSection = (
                 <SettingItemMax
                     title='Email'
                     inputs={inputs}
-                    submit={this.submitEmail}
+                    submit={submit}
                     server_error={serverError}
                     client_error={emailError}
                     updateSection={function clearSection(e) {
@@ -514,15 +515,19 @@ export default class UserSettingsGeneralTab extends React.Component {
             );
         } else {
             let describe = '';
-            if (this.state.emailChangeInProgress) {
-                const newEmail = UserStore.getCurrentUser().email;
-                if (newEmail) {
-                    describe = 'New Address: ' + newEmail + '\nCheck your email to verify the above address.';
+            if (this.props.user.auth_service === '') {
+                if (this.state.emailChangeInProgress) {
+                    const newEmail = UserStore.getCurrentUser().email;
+                    if (newEmail) {
+                        describe = 'New Address: ' + newEmail + '\nCheck your email to verify the above address.';
+                    } else {
+                        describe = 'Check your email to verify your new address';
+                    }
                 } else {
-                    describe = 'Check your email to verify your new address';
+                    describe = UserStore.getCurrentUser().email;
                 }
             } else {
-                describe = UserStore.getCurrentUser().email;
+                describe = 'Log in done through GitLab';
             }
 
             emailSection = (
@@ -579,6 +584,7 @@ export default class UserSettingsGeneralTab extends React.Component {
                         className='close'
                         data-dismiss='modal'
                         aria-label='Close'
+                        onClick={this.props.closeModal}
                     >
                         <span aria-hidden='true'>{'×'}</span>
                     </button>
@@ -586,7 +592,10 @@ export default class UserSettingsGeneralTab extends React.Component {
                         className='modal-title'
                         ref='title'
                     >
-                        <i className='modal-back'></i>
+                        <i
+                            className='modal-back'
+                            onClick={this.props.collapseModal}
+                        />
                         {'General Settings'}
                     </h4>
                 </div>
@@ -613,5 +622,7 @@ UserSettingsGeneralTab.propTypes = {
     user: React.PropTypes.object,
     updateSection: React.PropTypes.func,
     updateTab: React.PropTypes.func,
-    activeSection: React.PropTypes.string
+    activeSection: React.PropTypes.string,
+    closeModal: React.PropTypes.func.isRequired,
+    collapseModal: React.PropTypes.func.isRequired
 };

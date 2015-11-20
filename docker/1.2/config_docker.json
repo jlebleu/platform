@@ -6,14 +6,20 @@
         "GoogleDeveloperKey": "",
         "EnableOAuthServiceProvider": false,
         "EnableIncomingWebhooks": false,
-        "EnableTesting": false
+        "EnableOutgoingWebhooks": false,
+        "EnablePostUsernameOverride": false,
+        "EnablePostIconOverride": false,
+        "EnableTesting": false,
+        "EnableSecurityFixAlert": true
     },
     "TeamSettings": {
         "SiteName": "Mattermost",
         "MaxUsersPerTeam": 50,
         "EnableTeamCreation": true,
         "EnableUserCreation": true,
-        "RestrictCreationToDomains": ""
+        "RestrictCreationToDomains": "",
+        "RestrictTeamNames": true,
+        "EnableTeamListing": false
     },
     "SqlSettings": {
         "DriverName": "mysql",

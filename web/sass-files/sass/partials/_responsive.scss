@@ -100,7 +100,7 @@
     .date-separator, .new-separator {
         &.hovered--comment {
             &:before, &:after {
-                background: none;
+                background: none !important;
             }
         }
     }
@@ -179,6 +179,15 @@
 }
 
 @media screen and (max-width: 1140px) {
+    .tip-overlay {
+        &.tip-overlay--chat {
+            margin: -10px 0 0 -10px;
+            .arrow {
+                right: 15px;
+                left: auto;
+            }
+        }
+    }
     .inner__wrap {
         &.move--left {
             .file-overlay {
@@ -266,6 +275,26 @@
     }
 }
 @media screen and (max-width: 768px) {
+    .form-control {
+        &.min-height {
+            min-height: 100px;
+        }
+    }
+    .gif-div {
+        max-width: 100%;
+    }
+    .tip-div {
+        left: 15px;
+        right: auto;
+    }
+    .tip-overlay {
+        &.tip-overlay--chat {
+            margin-left: 10px;
+            .arrow {
+                left: 32px;
+            }
+        }
+    }
     .file-details__container {
         display: block;
         .file-details__preview {
@@ -439,7 +468,7 @@
             }
         }
         .settings-table {
-            .nav {
+            .nav, .nav.absolute {
                 position: relative;
                 top: auto;
                 width: 100%;
@@ -482,7 +511,6 @@
             padding-bottom: 10px;
             display: table;
             width: 100%;
-            table-layout: fixed;
             .post-body__cell {
                 display: table-cell;
                 padding-left: 45px;
@@ -616,46 +644,6 @@
                 background: rgba(black, 0.2);
                 @include border-radius(3px);
                 color: inherit;
-            }
-        }
-    }
-    .dialer__container {
-        padding: 0;
-        height: 45px;
-        background: $primary-color;
-        color: #fff;
-        &.focused {
-            .sidebar__collapse {
-                @include translateX(-45px);
-            }
-            .dialer__form {
-                @include translateX(-45px);
-                padding-left: 55px;
-                padding-right: 24px;
-            }
-            .search__clear {
-                @include translateX(0px);
-            }
-        }
-        .dialer__form {
-            border: none;
-            @include translateX(0px);
-            padding: 7px 20px 0 49px;
-            height: 45px;
-            position: relative;
-            @include single-transition(all, 0.2s, linear);
-            .form-control {
-                border: none;
-                padding: 0 10px 0 31px;
-                background: rgba(black, 0.2);
-                @include border-radius(3px);
-                color: #fff;
-            }
-            input[type=text] {
-                @include input-placeholder {
-                    color: #fff;
-                    color: rgba(#fff, 0.5);
-                }
             }
         }
     }
@@ -803,7 +791,7 @@
         .channel__wrap & {
             padding-top: 45px;
         }
-        .channel-header {
+        #channel-header {
             display: none;
         }
     }
