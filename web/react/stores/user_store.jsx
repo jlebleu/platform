@@ -62,7 +62,7 @@ class UserStoreClass extends EventEmitter {
         this.profileCache = null;
         this.emitPhoneStatusesChange = this.emitPhoneStatusesChange.bind(this);
         this.addPhoneStatusesChangeListener = this.addPhoneStatusesChangeListener.bind(this);
-        this.removePhoneStatusesChangeListener = this.removePhoneStatusesChangeListener(this);
+        this.removePhoneStatusesChangeListener = this.removePhoneStatusesChangeListener.bind(this);
     }
 
     emitChange(userId) {
