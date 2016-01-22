@@ -13,6 +13,7 @@ var CHANGE_EVENT_SESSIONS = 'change_sessions';
 var CHANGE_EVENT_AUDITS = 'change_audits';
 var CHANGE_EVENT_TEAMS = 'change_teams';
 var CHANGE_EVENT_STATUSES = 'change_statuses';
+var CHANGE_EVENT_PHONE_STATUSES = 'change_phone_statuses';
 
 class UserStoreClass extends EventEmitter {
     constructor() {
@@ -58,6 +59,14 @@ class UserStoreClass extends EventEmitter {
         this.setStatus = this.setStatus.bind(this);
         this.getStatuses = this.getStatuses.bind(this);
         this.getStatus = this.getStatus.bind(this);
+
+        this.setPhoneStatus = this.setPhoneStatus.bind(this);
+        this.setPhoneStatuses = this.setPhoneStatuses.bind(this);
+        this.getPhoneStatuses = this.getPhoneStatuses.bind(this);
+        this.getPhoneStatus = this.getPhoneStatus.bind(this);
+        this.emitPhoneStatusesChange = this.emitPhoneStatusesChange.bind(this);
+        this.addPhoneStatusesChangeListener = this.addPhoneStatusesChangeListener.bind(this);
+        this.removePhoneStatusesChangeListener = this.removePhoneStatusesChangeListener.bind(this);
 
         this.profileCache = null;
     }
@@ -120,6 +129,18 @@ class UserStoreClass extends EventEmitter {
 
     removeStatusesChangeListener(callback) {
         this.removeListener(CHANGE_EVENT_STATUSES, callback);
+    }
+
+    emitPhoneStatusesChange() {
+        this.emit(CHANGE_EVENT_PHONE_STATUSES);
+    }
+
+    addPhoneStatusesChangeListener(callback) {
+        this.on(CHANGE_EVENT_PHONE_STATUSES, callback);
+    }
+
+    removePhoneStatusesChangeListener(callback) {
+        this.removeListener(CHANGE_EVENT_PHONE_STATUSES, callback);
     }
 
     getCurrentUser() {
@@ -313,6 +334,25 @@ class UserStoreClass extends EventEmitter {
     getStatus(id) {
         return this.getStatuses()[id];
     }
+
+    setPhoneStatus(userId, phoneStatus) {
+        var phoneStatuses = this.getPhoneStatuses();
+        phoneStatuses[userId] = phoneStatus;
+        this.setPhoneStatuses(phoneStatuses);
+    }
+
+    setPhoneStatuses(phoneStatuses) {
+        BrowserStore.setItem('phonestatuses', phoneStatuses);
+    }
+
+    getPhoneStatuses() {
+        return BrowserStore.getItem('phonestatuses', {});
+    }
+
+    getPhoneStatus(id) {
+        return this.getPhoneStatuses()[id];
+    }
+
 }
 
 var UserStore = new UserStoreClass();
@@ -345,6 +385,13 @@ UserStore.dispatchToken = AppDispatcher.register((payload) => {
     case ActionTypes.RECIEVED_STATUSES:
         UserStore.pSetStatuses(action.statuses);
         UserStore.emitStatusesChange();
+        break;
+    case ActionTypes.RECIEVED_MSG:
+        if (action.msg.action === 'user_phone_status') {
+            console.log('user_phone_status');
+            UserStore.setPhoneStatus(action.msg.user_id, action.msg.props.status);
+            UserStore.emitPhoneStatusesChange();
+        }
         break;
     default:
     }

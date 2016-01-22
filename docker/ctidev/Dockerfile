@@ -16,8 +16,5 @@ ADD ./docker/ctidev/mattermost-entry.sh /
 RUN chmod +x /mattermost-entry.sh
 ENTRYPOINT /mattermost-entry.sh
 
-# Create default storage directory
-RUN mkdir /mattermost/data
-
 # Ports
 EXPOSE 80
