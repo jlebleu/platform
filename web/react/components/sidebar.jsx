@@ -382,7 +382,7 @@ export default class Sidebar extends React.Component {
                     dangerouslySetInnerHTML={{__html: statusIcon}}
                 />
             );
-           var phoneStatusIcon = Constants.PHONE_OFFLINE_SVG;
+            var phoneStatusIcon = Constants.PHONE_OFFLINE_SVG;
             if (channel.phoneStatus === '0') {
                 phoneStatusIcon = Constants.PHONE_AVAIL_SVG;
             } else if (channel.phoneStatus === '8') {

@@ -13,6 +13,7 @@ const CHANGE_EVENT_SESSIONS = 'change_sessions';
 const CHANGE_EVENT_AUDITS = 'change_audits';
 const CHANGE_EVENT_TEAMS = 'change_teams';
 const CHANGE_EVENT_STATUSES = 'change_statuses';
+const CHANGE_EVENT_PHONE_STATUSES = 'change_phonoe_statuses';
 
 class UserStoreClass extends EventEmitter {
     constructor() {
