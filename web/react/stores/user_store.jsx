@@ -388,7 +388,6 @@ UserStore.dispatchToken = AppDispatcher.register((payload) => {
         break;
     case ActionTypes.RECIEVED_MSG:
         if (action.msg.action === 'user_phone_status') {
-            console.log('user_phone_status');
             UserStore.setPhoneStatus(action.msg.user_id, action.msg.props.status);
             UserStore.emitPhoneStatusesChange();
         }

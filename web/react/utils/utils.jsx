@@ -1091,7 +1091,8 @@ export function openDirectChannelToUser(user, successCb, errorCb) {
             type: 'D',
             display_name: user.username,
             teammate_id: user.id,
-            status: UserStore.getStatus(user.id)
+            status: UserStore.getStatus(user.id),
+            phoneStatus: UserStore.getPhoneStatus(user.id)
         };
 
         Client.createDirectChannel(

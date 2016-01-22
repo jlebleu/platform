@@ -131,6 +131,7 @@ export default class Sidebar extends React.Component {
                 dm.display_name = Utils.displayUsername(teammate.id);
                 dm.teammate_id = teammate.id;
                 dm.status = UserStore.getStatus(teammate.id);
+                dm.phoneStatus = UserStore.getPhoneStatus(teammate.id);
 
                 visibleDirectChannels.push(dm);
 
