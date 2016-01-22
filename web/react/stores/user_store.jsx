@@ -338,6 +338,25 @@ class UserStoreClass extends EventEmitter {
     getStatus(id) {
         return this.getStatuses()[id];
     }
+
+    setPhoneStatus(userId, phoneStatus) {
+        var phoneStatuses = this.getPhoneStatuses();
+        phoneStatuses[userId] = phoneStatus;
+        this.setPhoneStatuses(phoneStatuses);
+    }
+
+    setPhoneStatuses(phoneStatuses) {
+        BrowserStore.setItem('phonestatuses', phoneStatuses);
+    }
+
+    getPhoneStatuses() {
+        return BrowserStore.getItem('phonestatuses', {});
+    }
+
+    getPhoneStatus(id) {
+        return this.getPhoneStatuses()[id];
+    }
+
 }
 
 var UserStore = new UserStoreClass();
