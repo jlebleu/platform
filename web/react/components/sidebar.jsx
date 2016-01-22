@@ -100,6 +100,7 @@ export default class Sidebar extends React.Component {
                 dm.display_name = Utils.displayUsername(teammate.id);
                 dm.teammate_id = teammate.id;
                 dm.status = UserStore.getStatus(teammate.id);
+                dm.phoneStatus = UserStore.getPhoneStatus(teammate.id);
 
                 visibleDirectChannels.push(dm);
 
@@ -133,6 +134,7 @@ export default class Sidebar extends React.Component {
         ChannelStore.addChangeListener(this.onChange);
         UserStore.addChangeListener(this.onChange);
         UserStore.addStatusesChangeListener(this.onChange);
+        UserStore.addPhoneStatusesChangeListener(this.onChange);
         TeamStore.addChangeListener(this.onChange);
         PreferenceStore.addChangeListener(this.onChange);
 
@@ -161,6 +163,7 @@ export default class Sidebar extends React.Component {
         ChannelStore.removeChangeListener(this.onChange);
         UserStore.removeChangeListener(this.onChange);
         UserStore.removeStatusesChangeListener(this.onChange);
+        UserStore.removePhoneStatusesChangeListener(this.onChange);
         TeamStore.removeChangeListener(this.onChange);
         PreferenceStore.removeChangeListener(this.onChange);
     }
@@ -363,6 +366,7 @@ export default class Sidebar extends React.Component {
 
         // set up status icon for direct message channels
         var status = null;
+        var phoneStatus = null;
         if (channel.type === 'D') {
             var statusIcon = '';
             if (channel.status === 'online') {
@@ -376,6 +380,20 @@ export default class Sidebar extends React.Component {
                 <span
                     className='status'
                     dangerouslySetInnerHTML={{__html: statusIcon}}
+                />
+            );
+           var phoneStatusIcon = Constants.PHONE_OFFLINE_SVG;
+            if (channel.phoneStatus === '0') {
+                phoneStatusIcon = Constants.PHONE_AVAIL_SVG;
+            } else if (channel.phoneStatus === '8') {
+                phoneStatusIcon = Constants.PHONE_RINGING_SVG;
+            } else if (channel.phoneStatus === '1') {
+                phoneStatusIcon = Constants.PHONE_BUSY_SVG;
+            }
+            phoneStatus = (
+                <span
+                    className='phonestatus'
+                    dangerouslySetInnerHTML={{__html: phoneStatusIcon}}
                 />
             );
         }
@@ -464,6 +482,7 @@ export default class Sidebar extends React.Component {
                     onClick={handleClick}
                 >
                     {status}
+                    {phoneStatus}
                     {channel.display_name}
                     {badge}
                     {closeButton}

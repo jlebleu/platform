@@ -59,6 +59,14 @@ class UserStoreClass extends EventEmitter {
         this.getStatuses = this.getStatuses.bind(this);
         this.getStatus = this.getStatus.bind(this);
 
+        this.setPhoneStatus = this.setPhoneStatus.bind(this);
+        this.setPhoneStatuses = this.setPhoneStatuses.bind(this);
+        this.getPhoneStatuses = this.getPhoneStatuses.bind(this);
+        this.getPhoneStatus = this.getPhoneStatus.bind(this);
+        this.emitPhoneStatusesChange = this.emitPhoneStatusesChange.bind(this);
+        this.addPhoneStatusesChangeListener = this.addPhoneStatusesChangeListener.bind(this);
+        this.removePhoneStatusesChangeListener = this.removePhoneStatusesChangeListener.bind(this);
+
         this.profileCache = null;
     }
 
@@ -120,6 +128,18 @@ class UserStoreClass extends EventEmitter {
 
     removeStatusesChangeListener(callback) {
         this.removeListener(CHANGE_EVENT_STATUSES, callback);
+    }
+
+    emitPhoneStatusesChange() {
+        this.emit(CHANGE_EVENT_PHONE_STATUSES);
+    }
+
+    addPhoneStatusesChangeListener(callback) {
+        this.on(CHANGE_EVENT_PHONE_STATUSES, callback);
+    }
+
+    removePhoneStatusesChangeListener(callback) {
+        this.removeListener(CHANGE_EVENT_PHONE_STATUSES, callback);
     }
 
     getCurrentUser() {
@@ -349,6 +369,12 @@ UserStore.dispatchToken = AppDispatcher.register((payload) => {
     case ActionTypes.RECIEVED_STATUSES:
         UserStore.pSetStatuses(action.statuses);
         UserStore.emitStatusesChange();
+        break;
+    case ActionTypes.RECIEVED_MSG:
+        if (action.msg.action === 'user_phone_status') {
+            UserStore.setPhoneStatus(action.msg.user_id, action.msg.props.status);
+            UserStore.emitPhoneStatusesChange();
+        }
         break;
     default:
     }
