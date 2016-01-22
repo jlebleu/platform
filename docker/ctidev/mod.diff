@@ -1,0 +1,542 @@
+diff --git a/Makefile b/Makefile
+index 573036f..46ccd7e 100644
+--- a/Makefile
++++ b/Makefile
+@@ -183,7 +183,7 @@ cover: install
+ 	cd $(DIST_RESULTS) && $(GO) tool cover -html=coverage.out -o=coverage.html
+ 
+ 	rm -f $(DIST_RESULTS)/*.cover.out
+-	
++
+ clean:
+ 	rm -Rf $(DIST_ROOT)
+ 	@$(GO) clean $(GOFLAGS) -i ./...
+@@ -209,11 +209,11 @@ clean:
+ run: install
+ 	mkdir -p web/static/js
+ 
+-	@echo starting react processor	
++	@echo starting react processor
+ 	@cd web/react && npm start &
+ 
+ 	@echo starting go web server
+-	@$(GO) run $(GOFLAGS) mattermost.go -config=config.json &
++	@$(GO) run $(GOFLAGS) mattermost.go -config=/home/jylebleu/mattermost/config_laptop.json &
+ 
+ 	@echo starting compass watch
+ 	@cd web/sass-files && compass watch &
+@@ -308,4 +308,3 @@ docker-build: stop
+ 
+ docker-run: docker-build
+ 	docker run --name ${DOCKER_CONTAINER_NAME} -d --publish 8065:80 ${DOCKERNAME}
+-
+diff --git a/api/user.go b/api/user.go
+index 4a52cf8..f2d30c9 100644
+--- a/api/user.go
++++ b/api/user.go
+@@ -7,6 +7,7 @@ import (
+ 	"bytes"
+ 	l4g "code.google.com/p/log4go"
+ 	b64 "encoding/base64"
++	"encoding/json"
+ 	"fmt"
+ 	"github.com/disintegration/imaging"
+ 	"github.com/golang/freetype"
+@@ -56,6 +57,57 @@ func InitUser(r *mux.Router) {
+ 	sr.Handle("/{id:[A-Za-z0-9]+}/sessions", ApiUserRequired(getSessions)).Methods("GET")
+ 	sr.Handle("/{id:[A-Za-z0-9]+}/audits", ApiUserRequired(getAudits)).Methods("GET")
+ 	sr.Handle("/{id:[A-Za-z0-9]+}/image", ApiUserRequired(getProfileImage)).Methods("GET")
++	sr.Handle("/{teamname:[A-Za-z0-9]+}/update_phone_status", ApiAppHandler(updatePhoneStatus)).Methods("POST")
++}
++
++type PhoneState struct {
++	Username string `json:"username"`
++	Status   int    `json:"status"`
++}
++
++func PhoneStateFromJson(data io.Reader) *PhoneState {
++	decoder := json.NewDecoder(data)
++	var phoneState PhoneState
++	err := decoder.Decode(&phoneState)
++	if err == nil {
++		return &phoneState
++	} else {
++		return nil
++	}
++}
++
++func updatePhoneStatus(c *Context, w http.ResponseWriter, r *http.Request) {
++	var team *model.Team
++	params := mux.Vars(r)
++	teamName := params["teamname"]
++
++	l4g.Debug("updatePhonestatus team %v", teamName)
++
++	if result := <-Srv.Store.Team().GetByName(teamName); result.Err != nil {
++		c.Err = result.Err
++		l4g.Error("udpate phone status : team %v not found", teamName)
++		return
++	} else {
++		team = result.Data.(*model.Team)
++	}
++
++	phoneState := PhoneStateFromJson(r.Body)
++
++	l4g.Debug("updatePhonestatus phone state %v", phoneState.Username)
++
++	username := phoneState.Username
++	status := strconv.Itoa(phoneState.Status)
++
++	if result := <-Srv.Store.User().GetByUsername(team.Id, username); result.Err != nil {
++		c.Err = result.Err
++		return
++	} else {
++		user := result.Data.(*model.User)
++		l4g.Debug("found : %v", user)
++		message := model.NewMessage(team.Id, "", user.Id, model.ACTION_USER_PHONE_STATUS)
++		message.Add("status", status)
++		PublishAndForget(message)
++	}
+ }
+ 
+ func createUser(c *Context, w http.ResponseWriter, r *http.Request) {
+diff --git a/doc/README.md b/doc/README.md
+deleted file mode 100644
+index 7ed20fb..0000000
+--- a/doc/README.md
++++ /dev/null
+@@ -1,63 +0,0 @@
+-# Mattermost Documentation 
+-
+-## Installation 
+-
+-#### Preview Installation
+-See what Mattermost has to offer in a Docker-based preview install
+-
+-Local Machine: 
+-- [One-line Docker Install](install/Docker-Single-Container.md#one-line-docker-install)
+-- [Mac OS X install](install/Docker-Single-Container.md#mac-osx)
+-- [Ubuntu Install](install/Docker-Single-Container.md#ubuntu)
+-- [Arch Install](install/Docker-Single-Container.md#arch)
+-
+-Service Based: 
+-- [AWS Elastic Beanstalk Setup](install/Amazon-Elastic-Beanstalk.md)
+-
+-Optional:
+-- [SMTP Email Setup](install/SMTP-Email-Setup.md)
+-- [System Console Settings](install/Configuration-Settings.md)
+-
+-#### Production Installation
+-Set up Mattermost in your data center using compiled binaries
+-- [Software and Hardware Requirements](install/Requirements.md)
+-- [Production Ubuntu Setup](install/Production-Ubuntu.md)
+-- [SMTP Email Setup](install/SMTP-Email-Setup.md)
+-- [System Console Settings](install/Configuration-Settings.md)
+-- [Trouble Shooting Guide](install/Troubleshooting.md)
+-
+-Optional
+-- [Community Guide for Production Debian Setup](install/Production-Debian.md)
+-
+-#### Configuration and Management 
+-- [System Console Settings](install/Configuration-Settings.md)
+-  - [GitLab SSO Configuration](integrations/Single-Sign-On/Gitlab.md) 
+-- [Mattermost Release Numbering and Schedule](install/Release-Numbering.md)
+-
+-#### System Upgrades
+-Procedures for upgrading the Mattermost server
+-- [Mattermost Release Numbering and Schedule](install/Release-Numbering.md)
+-- [Upgrade Guide](install/Upgrade-Guide.md)
+-
+-## Developer Documentation 
+-
+-- [Code Contribution Guidelines](https://github.com/mattermost/platform/blob/master/CONTRIBUTING.md)
+-- [Developer Machine Setup](developer/Setup.md)
+-- [Mattermost Style Guide](developer/Style-Guide.md)
+-- [API Overview](developer/API.md)
+- - [Incoming Webhooks](integrations/webhooks/Incoming-Webhooks.md) 
+- - [Outgoing Webhooks](integrations/webhooks/Outgoing-Webhooks.md) 
+- - [Web Service API](developer/API-Web-Service.md)
+-
+-## Help
+-
+-_Note: End user help documentation is a new feature being completed for the v1.2 release. The materials below are work in progress._
+-
+-- User Interface
+- - [Manage Members](help/Manage-Members.md)
+- - Team Settings 
+-   - [Slack Import](help/Slack-Import.md)
+-
+-- Messaging
+- - [Mattermost Markdown Formatting](usage/Markdown.md)
+-
+diff --git a/docker/ctidev/DockerDevEnvir b/docker/ctidev/DockerDevEnvir
+new file mode 100644
+index 0000000..10de1e3
+--- /dev/null
++++ b/docker/ctidev/DockerDevEnvir
+@@ -0,0 +1,43 @@
++# Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
++# See License.txt for license information.
++FROM ubuntu:14.04
++
++# Install Dependancies
++RUN apt-get update && apt-get install -y build-essential
++RUN apt-get install -y curl
++RUN curl -sL https://deb.nodesource.com/setup | bash -
++RUN apt-get install -y nodejs
++RUN apt-get install -y ruby-full
++RUN gem install compass
++
++# Postfix
++RUN apt-get install -y postfix
++
++#
++# Install GO
++#
++
++RUN apt-get update && apt-get install -y \
++		gcc libc6-dev make git mercurial \
++		--no-install-recommends \
++	&& rm -rf /var/lib/apt/lists/*
++
++ENV GOLANG_VERSION 1.4.2
++
++RUN curl -sSL https://golang.org/dl/go$GOLANG_VERSION.src.tar.gz \
++        | tar -v -C /usr/src -xz
++
++RUN cd /usr/src/go/src && ./make.bash --no-clean 2>&1
++
++ENV PATH /usr/src/go/bin:$PATH
++
++RUN mkdir -p /go/src /go/bin && chmod -R 777 /go
++ENV GOPATH /go
++ENV PATH /go/bin:$PATH
++WORKDIR /go
++
++# Copy over files
++ADD . /go/src/github.com/mattermost/platform
++
++# Insert postfix config
++ADD ./docker/main.cf /etc/postfix/
+diff --git a/docker/ctidev/Dockerfile b/docker/ctidev/Dockerfile
+new file mode 100644
+index 0000000..ba793a9
+--- /dev/null
++++ b/docker/ctidev/Dockerfile
+@@ -0,0 +1,20 @@
++# Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
++# See License.txt for license information.
++FROM ubuntu:14.04
++
++# Copy over files
++WORKDIR /mattermost
++
++ADD ./dist/mattermost.tar.gz /
++
++# Insert postfix config
++
++ADD ./docker/ctidev/main.cf /etc/postfix/
++
++ADD ./docker/ctidev/mattermost-entry.sh /
++
++RUN chmod +x /mattermost-entry.sh
++ENTRYPOINT /mattermost-entry.sh
++
++# Ports
++EXPOSE 80
+diff --git a/docker/ctidev/README.md b/docker/ctidev/README.md
+new file mode 100644
+index 0000000..bece8b2
+--- /dev/null
++++ b/docker/ctidev/README.md
+@@ -0,0 +1,2 @@
++make dist
++docker build -t xivoxc/mattermost:ctidev1.2.1.1 -f docker/ctidev/Dockerfile .
+diff --git a/docker/ctidev/main.cf b/docker/ctidev/main.cf
+new file mode 100644
+index 0000000..ed97d37
+--- /dev/null
++++ b/docker/ctidev/main.cf
+@@ -0,0 +1,28 @@
++myorigin = mattermost.com
++myhostname = mattermost.com
++
++smtpd_banner = $myhostname ESMTP $mail_name (Ubuntu)
++biff = no
++
++append_dot_mydomain = no
++
++readme_directory = no
++
++# TLS parameters
++smtpd_tls_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
++smtpd_tls_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
++smtpd_use_tls=no
++smtp_use_tls=no
++smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
++smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
++
++smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
++alias_maps = hash:/etc/aliases
++alias_database = hash:/etc/aliases
++mydestination = localhost, localhost.localdomain, localhost
++relayhost = 
++mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
++mailbox_size_limit = 0
++recipient_delimiter = +
++inet_interfaces = all
++inet_protocols = all
+diff --git a/docker/ctidev/mattermost-entry.sh b/docker/ctidev/mattermost-entry.sh
+new file mode 100755
+index 0000000..17e4ca8
+--- /dev/null
++++ b/docker/ctidev/mattermost-entry.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++# Copyright (c) 2015 Spinpunch, Inc. All Rights Reserved.
++# See License.txt for license information.
++
++mkdir -p web/static/js
++
++# ------------------------
++
++echo starting postfix
++/etc/init.d/postfix restart
++
++echo starting platform
++cd /mattermost/bin
++./platform -config=/config/config.json
+diff --git a/model/message.go b/model/message.go
+index 2725353..9d1c7a8 100644
+--- a/model/message.go
++++ b/model/message.go
+@@ -9,14 +9,15 @@ import (
+ )
+ 
+ const (
+-	ACTION_TYPING         = "typing"
+-	ACTION_POSTED         = "posted"
+-	ACTION_POST_EDITED    = "post_edited"
+-	ACTION_POST_DELETED   = "post_deleted"
+-	ACTION_CHANNEL_VIEWED = "channel_viewed"
+-	ACTION_NEW_USER       = "new_user"
+-	ACTION_USER_ADDED     = "user_added"
+-	ACTION_USER_REMOVED   = "user_removed"
++	ACTION_TYPING            = "typing"
++	ACTION_POSTED            = "posted"
++	ACTION_POST_EDITED       = "post_edited"
++	ACTION_POST_DELETED      = "post_deleted"
++	ACTION_CHANNEL_VIEWED    = "channel_viewed"
++	ACTION_NEW_USER          = "new_user"
++	ACTION_USER_ADDED        = "user_added"
++	ACTION_USER_REMOVED      = "user_removed"
++	ACTION_USER_PHONE_STATUS = "user_phone_status"
+ )
+ 
+ type Message struct {
+diff --git a/model/version.go b/model/version.go
+index af99717..02f31ae 100644
+--- a/model/version.go
++++ b/model/version.go
+@@ -23,9 +23,9 @@ var versions = []string{
+ }
+ 
+ var CurrentVersion string = versions[0]
+-var BuildNumber = "_BUILD_NUMBER_"
+-var BuildDate = "_BUILD_DATE_"
+-var BuildHash = "_BUILD_HASH_"
++var BuildNumber = "dev"
++var BuildDate = "Thu Jan 21 15:42:53 UTC 2016"
++var BuildHash = "49a459d696fc8fee0b508990fca571fb8d2f2654"
+ 
+ func SplitVersion(version string) (int64, int64, int64) {
+ 	parts := strings.Split(version, ".")
+@@ -71,7 +71,7 @@ func GetPreviousVersion(currentVersion string) (int64, int64) {
+ }
+ 
+ func IsOfficalBuild() bool {
+-	return BuildNumber != "_BUILD_NUMBER_"
++	return BuildNumber != "dev"
+ }
+ 
+ func IsCurrentVersion(versionToCheck string) bool {
+diff --git a/web/react/components/sidebar.jsx b/web/react/components/sidebar.jsx
+index 0b1abe4..1224441 100644
+--- a/web/react/components/sidebar.jsx
++++ b/web/react/components/sidebar.jsx
+@@ -131,6 +131,7 @@ export default class Sidebar extends React.Component {
+                 dm.display_name = Utils.displayUsername(teammate.id);
+                 dm.teammate_id = teammate.id;
+                 dm.status = UserStore.getStatus(teammate.id);
++                dm.phoneStatus = UserStore.getPhoneStatus(teammate.id);
+ 
+                 visibleDirectChannels.push(dm);
+ 
+@@ -163,6 +164,7 @@ export default class Sidebar extends React.Component {
+         ChannelStore.addChangeListener(this.onChange);
+         UserStore.addChangeListener(this.onChange);
+         UserStore.addStatusesChangeListener(this.onChange);
++        UserStore.addPhoneStatusesChangeListener(this.onChange);
+         TeamStore.addChangeListener(this.onChange);
+         PreferenceStore.addChangeListener(this.onChange);
+ 
+@@ -189,6 +191,7 @@ export default class Sidebar extends React.Component {
+         ChannelStore.removeChangeListener(this.onChange);
+         UserStore.removeChangeListener(this.onChange);
+         UserStore.removeStatusesChangeListener(this.onChange);
++        UserStore.removePhoneStatusesChangeListener(this.onChange);
+         TeamStore.removeChangeListener(this.onChange);
+         PreferenceStore.removeChangeListener(this.onChange);
+     }
+@@ -400,6 +403,7 @@ export default class Sidebar extends React.Component {
+ 
+         // set up status icon for direct message channels
+         var status = null;
++        var phoneStatus = null;
+         if (channel.type === 'D') {
+             var statusIcon = '';
+             if (channel.status === 'online') {
+@@ -409,6 +413,21 @@ export default class Sidebar extends React.Component {
+             } else {
+                 statusIcon = Constants.OFFLINE_ICON_SVG;
+             }
++            var phoneStatusIcon = Constants.PHONE_OFFLINE_SVG;
++            if (channel.phoneStatus === '0') {
++                phoneStatusIcon = Constants.PHONE_AVAIL_SVG;
++            } else if (channel.phoneStatus === '8') {
++                phoneStatusIcon = Constants.PHONE_RINGING_SVG;
++            } else if (channel.phoneStatus === '1') {
++                phoneStatusIcon = Constants.PHONE_BUSY_SVG;
++            }
++            phoneStatus = (
++                <span
++                    className='phonestatus'
++                    dangerouslySetInnerHTML={{__html: phoneStatusIcon}}
++                />
++            );
++
+             status = (
+                 <span
+                     className='status'
+@@ -501,6 +520,7 @@ export default class Sidebar extends React.Component {
+                     onClick={handleClick}
+                 >
+                     {status}
++                    {phoneStatus}
+                     {channel.display_name}
+                     {badge}
+                     {closeButton}
+diff --git a/web/react/stores/user_store.jsx b/web/react/stores/user_store.jsx
+index b173c9c..9aee70a 100644
+--- a/web/react/stores/user_store.jsx
++++ b/web/react/stores/user_store.jsx
+@@ -13,6 +13,7 @@ var CHANGE_EVENT_SESSIONS = 'change_sessions';
+ var CHANGE_EVENT_AUDITS = 'change_audits';
+ var CHANGE_EVENT_TEAMS = 'change_teams';
+ var CHANGE_EVENT_STATUSES = 'change_statuses';
++var CHANGE_EVENT_PHONE_STATUSES = 'change_phone_statuses';
+ 
+ class UserStoreClass extends EventEmitter {
+     constructor() {
+@@ -59,6 +60,14 @@ class UserStoreClass extends EventEmitter {
+         this.getStatuses = this.getStatuses.bind(this);
+         this.getStatus = this.getStatus.bind(this);
+ 
++        this.setPhoneStatus = this.setPhoneStatus.bind(this);
++        this.setPhoneStatuses = this.setPhoneStatuses.bind(this);
++        this.getPhoneStatuses = this.getPhoneStatuses.bind(this);
++        this.getPhoneStatus = this.getPhoneStatus.bind(this);
++        this.emitPhoneStatusesChange = this.emitPhoneStatusesChange.bind(this);
++        this.addPhoneStatusesChangeListener = this.addPhoneStatusesChangeListener.bind(this);
++        this.removePhoneStatusesChangeListener = this.removePhoneStatusesChangeListener.bind(this);
++
+         this.profileCache = null;
+     }
+ 
+@@ -122,6 +131,18 @@ class UserStoreClass extends EventEmitter {
+         this.removeListener(CHANGE_EVENT_STATUSES, callback);
+     }
+ 
++    emitPhoneStatusesChange() {
++        this.emit(CHANGE_EVENT_PHONE_STATUSES);
++    }
++
++    addPhoneStatusesChangeListener(callback) {
++        this.on(CHANGE_EVENT_PHONE_STATUSES, callback);
++    }
++
++    removePhoneStatusesChangeListener(callback) {
++        this.removeListener(CHANGE_EVENT_PHONE_STATUSES, callback);
++    }
++
+     getCurrentUser() {
+         if (this.getProfiles()[global.window.mm_user.id] == null) {
+             this.saveProfile(global.window.mm_user);
+@@ -313,6 +334,25 @@ class UserStoreClass extends EventEmitter {
+     getStatus(id) {
+         return this.getStatuses()[id];
+     }
++
++    setPhoneStatus(userId, phoneStatus) {
++        var phoneStatuses = this.getPhoneStatuses();
++        phoneStatuses[userId] = phoneStatus;
++        this.setPhoneStatuses(phoneStatuses);
++    }
++
++    setPhoneStatuses(phoneStatuses) {
++        BrowserStore.setItem('phonestatuses', phoneStatuses);
++    }
++
++    getPhoneStatuses() {
++        return BrowserStore.getItem('phonestatuses', {});
++    }
++
++    getPhoneStatus(id) {
++        return this.getPhoneStatuses()[id];
++    }
++
+ }
+ 
+ var UserStore = new UserStoreClass();
+@@ -346,6 +386,12 @@ UserStore.dispatchToken = AppDispatcher.register((payload) => {
+         UserStore.pSetStatuses(action.statuses);
+         UserStore.emitStatusesChange();
+         break;
++    case ActionTypes.RECIEVED_MSG:
++        if (action.msg.action === 'user_phone_status') {
++            UserStore.setPhoneStatus(action.msg.user_id, action.msg.props.status);
++            UserStore.emitPhoneStatusesChange();
++        }
++        break;
+     default:
+     }
+ });
+diff --git a/web/react/utils/constants.jsx b/web/react/utils/constants.jsx
+index 58ee8e2..c474c1d 100644
+--- a/web/react/utils/constants.jsx
++++ b/web/react/utils/constants.jsx
+@@ -137,6 +137,10 @@ module.exports = {
+     OFFLINE_ICON_SVG: "<svg version='1.1' id='Layer_1' xmlns:dc='http://purl.org/dc/elements/1.1/' xmlns:cc='http://creativecommons.org/ns#' xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#' xmlns:svg='http://www.w3.org/2000/svg' xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd' xmlns:inkscape='http://www.inkscape.org/namespaces/inkscape' sodipodi:docname='TRASH_1_4.svg' inkscape:version='0.48.4 r9939' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' x='0px' y='0px' width='12px' height='12px' viewBox='0 0 12 12' enable-background='new 0 0 12 12' xml:space='preserve'><sodipodi:namedview  inkscape:cy='139.7898' inkscape:cx='26.358185' inkscape:zoom='1.18' showguides='true' showgrid='false' id='namedview6' guidetolerance='10' gridtolerance='10' objecttolerance='10' borderopacity='1' bordercolor='#666666' pagecolor='#ffffff' inkscape:current-layer='Layer_1' inkscape:window-maximized='1' inkscape:window-y='-8' inkscape:window-x='-8' inkscape:window-height='705' inkscape:window-width='1366' inkscape:guide-bbox='true' inkscape:pageshadow='2' inkscape:pageopacity='0'><sodipodi:guide  position='50.036793,85.991376' orientation='1,0' id='guide2986'></sodipodi:guide><sodipodi:guide  position='58.426196,66.216355' orientation='0,1' id='guide3047'></sodipodi:guide></sodipodi:namedview><g><g><path fill='#cccccc' d='M6.002,7.143C5.645,7.363,5.167,7.52,4.502,7.52c-2.493,0-2.5-2.02-2.5-2.02S1.029,5.607,0.775,6.004C0.41,6.577,0.15,7.716,0.049,8.545c-0.025,0.145-0.057,0.537-0.05,0.598c0.162,1.295,2.237,2.321,4.375,2.357c0.043,0.001,0.085,0.001,0.127,0.001c0.043,0,0.084,0,0.127-0.001c1.879-0.023,3.793-0.879,4.263-2h-2.89L6.002,7.143L6.002,7.143z M4.501,5.488c1.372,0,2.483-1.117,2.483-2.494c0-1.378-1.111-2.495-2.483-2.495c-1.371,0-2.481,1.117-2.481,2.495C2.02,4.371,3.13,5.488,4.501,5.488z M7.002,6.5v2h5v-2H7.002z'/></g></g></svg>",
+     MENU_ICON: "<svg version='1.1' id='Layer_1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' x='0px' y='0px'width='4px' height='16px' viewBox='0 0 8 32' enable-background='new 0 0 8 32' xml:space='preserve'> <g> <circle cx='4' cy='4.062' r='4'/> <circle cx='4' cy='16' r='4'/> <circle cx='4' cy='28' r='4'/> </g> </svg>",
+     COMMENT_ICON: "<svg version='1.1' id='Layer_2' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' x='0px' y='0px'width='15px' height='15px' viewBox='1 1.5 15 15' enable-background='new 1 1.5 15 15' xml:space='preserve'> <g> <g> <path fill='#211B1B' d='M14,1.5H3c-1.104,0-2,0.896-2,2v8c0,1.104,0.896,2,2,2h1.628l1.884,3l1.866-3H14c1.104,0,2-0.896,2-2v-8 C16,2.396,15.104,1.5,14,1.5z M15,11.5c0,0.553-0.447,1-1,1H8l-1.493,2l-1.504-1.991L5,12.5H3c-0.552,0-1-0.447-1-1v-8 c0-0.552,0.448-1,1-1h11c0.553,0,1,0.448,1,1V11.5z'/> </g> </g> </svg>",
++    PHONE_OFFLINE_SVG: "<?xml version='1.0' encoding='UTF-8' standalone='no'?><svg xmlns:dc='http://purl.org/dc/elements/1.1/' xmlns:cc='http://creativecommons.org/ns#' xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#' xmlns:svg='http://www.w3.org/2000/svg' xmlns='http://www.w3.org/2000/svg' xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd' xmlns:inkscape='http://www.inkscape.org/namespaces/inkscape' version='1.1' id='Layer_1' sodipodi:docname='phoneavail2.svg' inkscape:version='0.91 r13725' x='0px' y='0px' width='12px' height='12px' viewBox='0 0 12 12' enable-background='new 0 0 12 12' xml:space='preserve'><metadata id='metadata5334'><rdf:RDF><cc:Work rdf:about=''><dc:format>image/svg+xml</dc:format><dc:type rdf:resource='http://purl.org/dc/dcmitype/StillImage' /><dc:title></dc:title></cc:Work></rdf:RDF></metadata><defs id='defs5332' /><sodipodi:namedview inkscape:cy='4.7182315' inkscape:cx='12.881552' inkscape:zoom='26.700352' showguides='true' showgrid='false' id='namedview6' guidetolerance='10' gridtolerance='10' objecttolerance='10' borderopacity='1' bordercolor='#666666' pagecolor='#ffffff' inkscape:current-layer='Layer_1' inkscape:window-maximized='1' inkscape:window-y='24' inkscape:window-x='1600' inkscape:window-height='1056' inkscape:window-width='1920' inkscape:guide-bbox='true' inkscape:pageshadow='2' inkscape:pageopacity='0'><sodipodi:guide position='50.036793,85.991376' orientation='1,0' id='guide2986' /><sodipodi:guide position='58.426196,66.216355' orientation='0,1' id='guide3047' /></sodipodi:namedview><path class='online--icon' d='M 10.750537,8.5523604 C 10.641451,7.7258326 9.4462896,6.1122432 6.9580632,5.6072938 6.4038139,2.18586 9.1571145,4.2605127 10.786171,3.6120505 12.617745,2.882974 8.8498267,0.96677926 6.225299,0.96677926 c -2.6925709,0 -6.87831499,2.14000084 -5.1676344,2.37389744 C 3.7142364,3.7039022 6.493904,3.2615544 4.5146376,5.6071821 2.0469548,5.996919 1.2417544,7.7258326 1.132669,8.5523604 1.1045877,8.6949339 1.0711061,9.0877589 1.0797465,9.1475799 1.253635,10.438718 1.8788691,10.977222 4.1869414,11.013115 c 0.046442,9.97e-4 -1.7088513,-0.472883 1.7956525,-0.528729 2.9479026,-0.04698 1.7492101,0.417703 1.7956524,0.416705 2.2421887,-0.02593 2.8524047,-0.462373 3.0262937,-1.7535111 0.0075,-0.05982 -0.03348,-0.4446699 -0.054,-0.5952195 z' id='path5330' inkscape:connector-curvature='0' sodipodi:nodetypes='ccsssccccsccc' style='fill:#CCCCCC'  /></svg>",
++    PHONE_AVAIL_SVG: "<?xml version='1.0' encoding='UTF-8' standalone='no'?><svg xmlns:dc='http://purl.org/dc/elements/1.1/' xmlns:cc='http://creativecommons.org/ns#' xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#' xmlns:svg='http://www.w3.org/2000/svg' xmlns='http://www.w3.org/2000/svg' xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd' xmlns:inkscape='http://www.inkscape.org/namespaces/inkscape' version='1.1' id='Layer_1' sodipodi:docname='phoneavail2.svg' inkscape:version='0.91 r13725' x='0px' y='0px' width='12px' height='12px' viewBox='0 0 12 12' enable-background='new 0 0 12 12' xml:space='preserve'><metadata id='metadata5334'><rdf:RDF><cc:Work rdf:about=''><dc:format>image/svg+xml</dc:format><dc:type rdf:resource='http://purl.org/dc/dcmitype/StillImage' /><dc:title></dc:title></cc:Work></rdf:RDF></metadata><defs id='defs5332' /><sodipodi:namedview inkscape:cy='4.7182315' inkscape:cx='12.881552' inkscape:zoom='26.700352' showguides='true' showgrid='false' id='namedview6' guidetolerance='10' gridtolerance='10' objecttolerance='10' borderopacity='1' bordercolor='#666666' pagecolor='#ffffff' inkscape:current-layer='Layer_1' inkscape:window-maximized='1' inkscape:window-y='24' inkscape:window-x='1600' inkscape:window-height='1056' inkscape:window-width='1920' inkscape:guide-bbox='true' inkscape:pageshadow='2' inkscape:pageopacity='0'><sodipodi:guide position='50.036793,85.991376' orientation='1,0' id='guide2986' /><sodipodi:guide position='58.426196,66.216355' orientation='0,1' id='guide3047' /></sodipodi:namedview><path class='online--icon' d='M 10.750537,8.5523604 C 10.641451,7.7258326 9.4462896,6.1122432 6.9580632,5.6072938 6.4038139,2.18586 9.1571145,4.2605127 10.786171,3.6120505 12.617745,2.882974 8.8498267,0.96677926 6.225299,0.96677926 c -2.6925709,0 -6.87831499,2.14000084 -5.1676344,2.37389744 C 3.7142364,3.7039022 6.493904,3.2615544 4.5146376,5.6071821 2.0469548,5.996919 1.2417544,7.7258326 1.132669,8.5523604 1.1045877,8.6949339 1.0711061,9.0877589 1.0797465,9.1475799 1.253635,10.438718 1.8788691,10.977222 4.1869414,11.013115 c 0.046442,9.97e-4 -1.7088513,-0.472883 1.7956525,-0.528729 2.9479026,-0.04698 1.7492101,0.417703 1.7956524,0.416705 2.2421887,-0.02593 2.8524047,-0.462373 3.0262937,-1.7535111 0.0075,-0.05982 -0.03348,-0.4446699 -0.054,-0.5952195 z' id='path5330' inkscape:connector-curvature='0' sodipodi:nodetypes='ccsssccccsccc' style='fill:#aad400' /></svg>",
++    PHONE_RINGING_SVG: "<?xml version='1.0' encoding='UTF-8' standalone='no'?><svg xmlns:dc='http://purl.org/dc/elements/1.1/' xmlns:cc='http://creativecommons.org/ns#' xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#' xmlns:svg='http://www.w3.org/2000/svg' xmlns='http://www.w3.org/2000/svg' xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd' xmlns:inkscape='http://www.inkscape.org/namespaces/inkscape' version='1.1' id='Layer_1' sodipodi:docname='phoneavail2.svg' inkscape:version='0.91 r13725' x='0px' y='0px' width='12px' height='12px' viewBox='0 0 12 12' enable-background='new 0 0 12 12' xml:space='preserve'><metadata id='metadata5334'><rdf:RDF><cc:Work rdf:about=''><dc:format>image/svg+xml</dc:format><dc:type rdf:resource='http://purl.org/dc/dcmitype/StillImage' /><dc:title></dc:title></cc:Work></rdf:RDF></metadata><defs id='defs5332' /><sodipodi:namedview inkscape:cy='4.7182315' inkscape:cx='12.881552' inkscape:zoom='26.700352' showguides='true' showgrid='false' id='namedview6' guidetolerance='10' gridtolerance='10' objecttolerance='10' borderopacity='1' bordercolor='#666666' pagecolor='#ffffff' inkscape:current-layer='Layer_1' inkscape:window-maximized='1' inkscape:window-y='24' inkscape:window-x='1600' inkscape:window-height='1056' inkscape:window-width='1920' inkscape:guide-bbox='true' inkscape:pageshadow='2' inkscape:pageopacity='0'><sodipodi:guide position='50.036793,85.991376' orientation='1,0' id='guide2986' /><sodipodi:guide position='58.426196,66.216355' orientation='0,1' id='guide3047' /></sodipodi:namedview><path class='online--icon' d='M 10.750537,8.5523604 C 10.641451,7.7258326 9.4462896,6.1122432 6.9580632,5.6072938 6.4038139,2.18586 9.1571145,4.2605127 10.786171,3.6120505 12.617745,2.882974 8.8498267,0.96677926 6.225299,0.96677926 c -2.6925709,0 -6.87831499,2.14000084 -5.1676344,2.37389744 C 3.7142364,3.7039022 6.493904,3.2615544 4.5146376,5.6071821 2.0469548,5.996919 1.2417544,7.7258326 1.132669,8.5523604 1.1045877,8.6949339 1.0711061,9.0877589 1.0797465,9.1475799 1.253635,10.438718 1.8788691,10.977222 4.1869414,11.013115 c 0.046442,9.97e-4 -1.7088513,-0.472883 1.7956525,-0.528729 2.9479026,-0.04698 1.7492101,0.417703 1.7956524,0.416705 2.2421887,-0.02593 2.8524047,-0.462373 3.0262937,-1.7535111 0.0075,-0.05982 -0.03348,-0.4446699 -0.054,-0.5952195 z' id='path5330' inkscape:connector-curvature='0' sodipodi:nodetypes='ccsssccccsccc' style='fill:#0066FF' /></svg>",
++    PHONE_BUSY_SVG: "<?xml version='1.0' encoding='UTF-8' standalone='no'?><svg xmlns:dc='http://purl.org/dc/elements/1.1/' xmlns:cc='http://creativecommons.org/ns#' xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#' xmlns:svg='http://www.w3.org/2000/svg' xmlns='http://www.w3.org/2000/svg' xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd' xmlns:inkscape='http://www.inkscape.org/namespaces/inkscape' version='1.1' id='Layer_1' sodipodi:docname='phoneavail2.svg' inkscape:version='0.91 r13725' x='0px' y='0px' width='12px' height='12px' viewBox='0 0 12 12' enable-background='new 0 0 12 12' xml:space='preserve'><metadata id='metadata5334'><rdf:RDF><cc:Work rdf:about=''><dc:format>image/svg+xml</dc:format><dc:type rdf:resource='http://purl.org/dc/dcmitype/StillImage' /><dc:title></dc:title></cc:Work></rdf:RDF></metadata><defs id='defs5332' /><sodipodi:namedview inkscape:cy='4.7182315' inkscape:cx='12.881552' inkscape:zoom='26.700352' showguides='true' showgrid='false' id='namedview6' guidetolerance='10' gridtolerance='10' objecttolerance='10' borderopacity='1' bordercolor='#666666' pagecolor='#ffffff' inkscape:current-layer='Layer_1' inkscape:window-maximized='1' inkscape:window-y='24' inkscape:window-x='1600' inkscape:window-height='1056' inkscape:window-width='1920' inkscape:guide-bbox='true' inkscape:pageshadow='2' inkscape:pageopacity='0'><sodipodi:guide position='50.036793,85.991376' orientation='1,0' id='guide2986' /><sodipodi:guide position='58.426196,66.216355' orientation='0,1' id='guide3047' /></sodipodi:namedview><path class='online--icon' d='M 10.750537,8.5523604 C 10.641451,7.7258326 9.4462896,6.1122432 6.9580632,5.6072938 6.4038139,2.18586 9.1571145,4.2605127 10.786171,3.6120505 12.617745,2.882974 8.8498267,0.96677926 6.225299,0.96677926 c -2.6925709,0 -6.87831499,2.14000084 -5.1676344,2.37389744 C 3.7142364,3.7039022 6.493904,3.2615544 4.5146376,5.6071821 2.0469548,5.996919 1.2417544,7.7258326 1.132669,8.5523604 1.1045877,8.6949339 1.0711061,9.0877589 1.0797465,9.1475799 1.253635,10.438718 1.8788691,10.977222 4.1869414,11.013115 c 0.046442,9.97e-4 -1.7088513,-0.472883 1.7956525,-0.528729 2.9479026,-0.04698 1.7492101,0.417703 1.7956524,0.416705 2.2421887,-0.02593 2.8524047,-0.462373 3.0262937,-1.7535111 0.0075,-0.05982 -0.03348,-0.4446699 -0.054,-0.5952195 z' id='path5330' inkscape:connector-curvature='0' sodipodi:nodetypes='ccsssccccsccc' style='fill:#ff2a2a' /></svg>",
+     UPDATE_TYPING_MS: 5000,
+     THEMES: {
+         default: {
+diff --git a/web/react/utils/utils.jsx b/web/react/utils/utils.jsx
+index 38f91b3..220cdb7 100644
+--- a/web/react/utils/utils.jsx
++++ b/web/react/utils/utils.jsx
+@@ -1091,7 +1091,8 @@ export function openDirectChannelToUser(user, successCb, errorCb) {
+             type: 'D',
+             display_name: user.username,
+             teammate_id: user.id,
+-            status: UserStore.getStatus(user.id)
++            status: UserStore.getStatus(user.id),
++            phoneStatus: UserStore.getPhoneStatus(user.id)
+         };
+ 
+         Client.createDirectChannel(

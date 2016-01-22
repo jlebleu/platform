@@ -2,6 +2,8 @@
 # See License.txt for license information.
 FROM ubuntu:14.04
 
+RUN apt-get update && apt-get install -y postfix
+
 # Copy over files
 WORKDIR /mattermost
 
