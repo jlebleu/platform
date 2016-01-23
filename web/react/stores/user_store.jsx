@@ -13,7 +13,7 @@ const CHANGE_EVENT_SESSIONS = 'change_sessions';
 const CHANGE_EVENT_AUDITS = 'change_audits';
 const CHANGE_EVENT_TEAMS = 'change_teams';
 const CHANGE_EVENT_STATUSES = 'change_statuses';
-const CHANGE_EVENT_PHONE_STATUSES = 'change_phonoe_statuses';
+const CHANGE_EVENT_PHONE_STATUSES = 'change_phone_statuses';
 
 class UserStoreClass extends EventEmitter {
     constructor() {
@@ -346,11 +346,11 @@ class UserStoreClass extends EventEmitter {
     }
 
     setPhoneStatuses(phoneStatuses) {
-        BrowserStore.setItem('phonestatuses', phoneStatuses);
+        BrowserStore.setItem('phonestatuses', JSON.parse(JSON.stringify(phoneStatuses)));
     }
 
     getPhoneStatuses() {
-        return BrowserStore.getItem('phonestatuses', {});
+        return JSON.parse(JSON.stringify(BrowserStore.getItem('phonestatuses', {})));
     }
 
     getPhoneStatus(id) {

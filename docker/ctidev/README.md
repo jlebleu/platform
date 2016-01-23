@@ -5,12 +5,14 @@ apply patches
 * api/user.go
 * model/message.go
 * web/react/components/sidebar.jsx
+* web/react/stores/socket_store.jsx
 * web/react/stores/user_store.jsx
 * web/react/utils/constants.jsx
 * web/react/utils/utils.jsx
+* web/react/dispatcher/event_helpers.jsx
 
 make dist
-docker build -t xivoxc/mattermost:ctidev1.2.1.2 -f docker/ctidev/Dockerfile .
+docker build -t xivoxc/mattermost:cti1.3.0 -f docker/ctidev/Dockerfile .
 
 
 test

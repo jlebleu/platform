@@ -135,7 +135,9 @@ class SocketStoreClass extends EventEmitter {
         case SocketEvents.CHANNEL_VIEWED:
             handleChannelViewedEvent(msg);
             break;
-
+        case 'user_phone_status':
+            handlePhoneStatusEvent(msg);
+            break;
         default:
         }
     }
@@ -147,6 +149,10 @@ class SocketStoreClass extends EventEmitter {
             this.initialize();
         }
     }
+}
+
+function handlePhoneStatusEvent(msg) {
+  EventHelpers.emitPhoneStatusChanged(msg);
 }
 
 function handleNewPostEvent(msg) {

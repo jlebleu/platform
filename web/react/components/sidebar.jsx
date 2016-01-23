@@ -83,7 +83,7 @@ export default class Sidebar extends React.Component {
 
         var visibleDirectChannels = [];
         for (var i = 0; i < directChannels.length; i++) {
-            const dm = directChannels[i];
+            const dm = JSON.parse(JSON.stringify(directChannels[i]));
             const teammate = Utils.getDirectTeammate(dm.id);
             if (!teammate) {
                 continue;
@@ -147,12 +147,14 @@ export default class Sidebar extends React.Component {
             $('.nav-pills__container').perfectScrollbar();
         }
     }
+
     shouldComponentUpdate(nextProps, nextState) {
         if (!Utils.areObjectsEqual(nextState, this.state)) {
             return true;
         }
         return false;
     }
+
     componentDidUpdate() {
         this.updateTitle();
         this.updateUnreadIndicators();
