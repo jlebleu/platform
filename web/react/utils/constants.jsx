@@ -35,6 +35,7 @@ export default {
         RECIEVED_AUDITS: null,
         RECIEVED_TEAMS: null,
         RECIEVED_STATUSES: null,
+        RECIEVED_PHONE_STATUSES: null,
         RECIEVED_PREFERENCES: null,
 
         RECIEVED_MSG: null,
@@ -74,7 +75,8 @@ export default {
         NEW_USER: 'new_user',
         USER_ADDED: 'user_added',
         USER_REMOVED: 'user_removed',
-        TYPING: 'typing'
+        TYPING: 'typing',
+        PHONE_STATUS_CHANGED: 'user_phone_status'
     },
 
     //SPECIAL_MENTIONS: ['all', 'channel'],

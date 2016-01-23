@@ -135,7 +135,7 @@ class SocketStoreClass extends EventEmitter {
         case SocketEvents.CHANNEL_VIEWED:
             handleChannelViewedEvent(msg);
             break;
-        case 'user_phone_status':
+        case SocketEvents.PHONE_STATUS_CHANGED:
             handlePhoneStatusEvent(msg);
             break;
         default:

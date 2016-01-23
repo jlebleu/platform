@@ -24,7 +24,7 @@ export function emitChannelClickEvent(channel) {
 }
 export function emitPhoneStatusChanged(msg) {
   AppDispatcher.handleServerAction({
-      type: ActionTypes.RECIEVED_MSG,
+      type: ActionTypes.RECIEVED_PHONE_STATUSES,
       msg: msg
   });
 

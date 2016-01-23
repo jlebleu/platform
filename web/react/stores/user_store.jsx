@@ -390,11 +390,9 @@ UserStore.dispatchToken = AppDispatcher.register((payload) => {
         UserStore.pSetStatuses(action.statuses);
         UserStore.emitStatusesChange();
         break;
-    case ActionTypes.RECIEVED_MSG:
-        if (action.msg.action === 'user_phone_status') {
-            UserStore.setPhoneStatus(action.msg.user_id, action.msg.props.status);
-            UserStore.emitPhoneStatusesChange();
-        }
+    case ActionTypes.RECIEVED_PHONE_STATUSES:
+          UserStore.setPhoneStatus(action.msg.user_id, action.msg.props.status);
+          UserStore.emitPhoneStatusesChange();
         break;
     default:
     }
