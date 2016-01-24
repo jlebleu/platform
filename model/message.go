@@ -18,6 +18,7 @@ const (
 	ACTION_USER_ADDED         = "user_added"
 	ACTION_USER_REMOVED       = "user_removed"
 	ACTION_PREFERENCE_CHANGED = "preference_changed"
+	ACTION_USER_PHONE_STATUS  = "user_phone_status"
 )
 
 type Message struct {

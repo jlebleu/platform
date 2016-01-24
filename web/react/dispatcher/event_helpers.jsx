@@ -23,6 +23,13 @@ export function emitChannelClickEvent(channel) {
     });
 }
 
+export function emitPhoneStatusChanged(msg) {
+    AppDispatcher.handleServerAction({
+        type: ActionTypes.RECIEVED_PHONE_STATUSES,
+        msg: msg
+    });
+}
+
 export function emitPostFocusEvent(postId) {
     Client.getPostById(
         postId,

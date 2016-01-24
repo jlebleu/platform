@@ -140,6 +140,10 @@ class SocketStoreClass extends EventEmitter {
             handlePreferenceChangedEvent(msg);
             break;
 
+        case SocketEvents.PHONE_STATUS_CHANGED:
+            handlePhoneStatusEvent(msg);
+            break;
+
         default:
         }
     }
@@ -151,6 +155,10 @@ class SocketStoreClass extends EventEmitter {
             this.initialize();
         }
     }
+}
+
+function handlePhoneStatusEvent(msg) {
+    EventHelpers.emitPhoneStatusChanged(msg);
 }
 
 function handleNewPostEvent(msg) {
