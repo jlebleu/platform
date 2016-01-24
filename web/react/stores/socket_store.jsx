@@ -152,7 +152,7 @@ class SocketStoreClass extends EventEmitter {
 }
 
 function handlePhoneStatusEvent(msg) {
-  EventHelpers.emitPhoneStatusChanged(msg);
+    EventHelpers.emitPhoneStatusChanged(msg);
 }
 
 function handleNewPostEvent(msg) {
