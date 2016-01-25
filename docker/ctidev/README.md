@@ -12,7 +12,7 @@ apply patches
 * web/react/utils/utils.jsx
 
 make dist
-docker build -t xivoxc/mattermost:cti1.3.0.1 -f docker/ctidev/Dockerfile .
+docker build -t xivoxc/mattermost:cti1.3.0.2 -f docker/ctidev/Dockerfile .
 
 
 test
